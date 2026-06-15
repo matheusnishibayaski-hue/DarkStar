@@ -1,0 +1,18 @@
+services:
+  kali-tools:
+    build: .
+    container_name: kali-tools
+    hostname: kali-tools
+    restart: unless-stopped
+    # Necessário para monitor mode, airmon-ng e acesso às interfaces wireless
+    privileged: true
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - SYS_ADMIN
+    devices:
+      - /dev/bus/usb:/dev/bus/usb
+    volumes:
+      - /sys/class/net:/sys/class/net:ro
+      - /sys/devices:/sys/devices:ro

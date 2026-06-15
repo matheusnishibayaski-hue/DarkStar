@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>kali@ai — terminal</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="terminal" id="terminal">
+    <div class="term-bar">
+      <span class="term-bar-title">kali@ai — pentest terminal</span>
+      <div class="term-bar-actions">
+        <button type="button" class="term-btn" id="btn-tools" title="Selecionar ferramenta">
+          <span class="term-btn-label">tool</span>:<span id="tool-badge">auto</span>
+        </button>
+        <button type="button" class="term-btn" id="btn-history" title="Histórico de conversas">hist</button>
+        <button type="button" class="term-btn" id="btn-new" title="Novo chat">+</button>
+      </div>
+    </div>
+
+    <div class="term-screen" id="chat"></div>
+
+    <form class="term-prompt" id="form" autocomplete="off">
+      <span class="prompt-user">kali@ai</span><span class="prompt-sep">:</span><span class="prompt-path">~</span><span class="prompt-sep">$</span>
+      <input type="text" id="input" spellcheck="false" autofocus />
+    </form>
+  </div>
+
+  <!-- Painel: ferramentas -->
+  <div class="overlay" id="overlay-tools" hidden>
+    <div class="panel" role="dialog" aria-label="Ferramentas">
+      <div class="panel-head">
+        <span>// ferramenta</span>
+        <button type="button" class="panel-close" data-close="overlay-tools">esc</button>
+      </div>
+      <input type="text" class="panel-search" id="tool-search" placeholder="buscar..." spellcheck="false" />
+      <div class="panel-body" id="tool-list"></div>
+    </div>
+  </div>
+
+  <!-- Painel: histórico -->
+  <div class="overlay" id="overlay-history" hidden>
+    <div class="panel" role="dialog" aria-label="Histórico">
+      <div class="panel-head">
+        <span>// histórico</span>
+        <button type="button" class="panel-close" data-close="overlay-history">esc</button>
+      </div>
+      <div class="panel-body" id="chat-history"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
