@@ -6,14 +6,10 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# IA: "gemini" | "ollama"
-AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
-
+# Google Gemini — chave gratuita em https://aistudio.google.com/apikey
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite")
 
 KALI_CONTAINER = os.getenv("KALI_CONTAINER", "kali-tools")
 COMMAND_TIMEOUT = int(os.getenv("COMMAND_TIMEOUT", "180"))
@@ -71,7 +67,23 @@ _CORE_TOOLS = {
     "curl", "wget", "nc", "netcat", "ncat",
 }
 
-ALLOWED_TOOLS = _CORE_TOOLS | HOST_WIFI_TOOLS | WIFI_CONTAINER_TOOLS
+_EXTRA_TOOLS = {
+    # Rede / tunneling
+    "socat", "mitm6", "puredns", "mapcidr",
+    # Web / OSINT extras
+    "paramspider", "graphw00f", "uro",
+    # Windows / AD extras
+    "krbrelayx", "bloodhound-python",
+    # Automação
+    "autorecon",
+    # Shells / pós-exploração
+    "weevely",
+    # Forense / reversing
+    "radare2", "r2", "gdb", "strace", "ltrace", "yara",
+    "fls", "mmls", "icat", "fsstat", "bulk_extractor",
+}
+
+ALLOWED_TOOLS = _CORE_TOOLS | _EXTRA_TOOLS | HOST_WIFI_TOOLS | WIFI_CONTAINER_TOOLS
 
 BLOCKED_PATTERNS = [
     r"[;&|`$]",
@@ -100,15 +112,17 @@ REGRAS OBRIGATÓRIAS:
 - Se o usuário pedir algo ilegal ou contra sistemas sem autorização, recuse educadamente.
 - Alvos de laboratório público (ex: scanme.nmap.org) podem ser usados sem confirmação extra.
 
-Ferramentas disponíveis (150+):
-- Rede/recon: nmap, masscan, zmap, rustscan, naabu, massdns, dnsx, shuffledns, arp-scan, netdiscover, fierce, dnsenum, dnsrecon, dig, whois, hping3, ngrep
-- OSINT: amass, subfinder, sublist3r, theHarvester, httpx, uncover, gau, waybackurls, anew, dnsgen
-- Web: gobuster, feroxbuster, ffuf, wfuzz, dirb, dirsearch, sqlmap, nikto, katana, hakrawler, gospider, dalfox, xsstrike, arjun, jwt_tool, whatweb, wafw00f, wpscan, commix, droopescan, siege
+Ferramentas disponíveis (180+):
+- Rede/recon: nmap, masscan, zmap, rustscan, naabu, massdns, dnsx, shuffledns, puredns, mapcidr, arp-scan, netdiscover, fierce, dnsenum, dnsrecon, dig, whois, hping3, ngrep
+- OSINT: amass, subfinder, sublist3r, theHarvester, httpx, uncover, gau, waybackurls, anew, dnsgen, paramspider
+- Web: gobuster, feroxbuster, ffuf, wfuzz, dirb, dirsearch, sqlmap, nikto, katana, hakrawler, gospider, dalfox, xsstrike, arjun, jwt_tool, whatweb, wafw00f, wpscan, commix, droopescan, siege, graphw00f, uro
 - SSL/TLS: sslscan, openssl, testssl.sh, tlsx
 - Auth: hydra, john, medusa, patator, ncrack, hashcat, cewl, crunch, crowbar
-- Windows/AD: smbclient, smbmap, enum4linux, nxc, kerbrute, certipy, bloodyAD, evil-winrm, impacket-*, responder, ldapsearch, ldapdomaindump, rpcclient
+- Windows/AD: smbclient, smbmap, enum4linux, nxc, kerbrute, certipy, bloodyAD, evil-winrm, impacket-*, responder, ldapsearch, ldapdomaindump, rpcclient, krbrelayx, bloodhound-python
 - Vulns/cloud: nuclei, searchsploit, trivy, scout
-- Análise: hashid, foremost, binwalk, steghide, exiftool, tshark, tcpdump, vol
+- Análise: hashid, foremost, binwalk, steghide, exiftool, tshark, tcpdump, vol, yara, radare2, gdb, sleuthkit (fls, icat), bulk_extractor
+- Automação: autorecon
+- Pós-exploração: weevely, mitm6, socat, chisel, ligolo-ng
 - Wi-Fi (listar redes — sem dongle no Windows):
   * wlan-scan — lista redes visíveis, BSSIDs e sinal (usa placa Wi-Fi nativa do Windows via netsh)
   * wlan-interfaces — mostra adaptador Wi-Fi do PC
@@ -175,11 +189,16 @@ TOOL_CATEGORIES = [
     {
         "id": "forense",
         "name": "Forense",
-        "tools": ["tshark", "tcpdump", "binwalk", "foremost", "vol"],
+        "tools": ["tshark", "tcpdump", "binwalk", "foremost", "vol", "yara", "radare2", "fls", "bulk_extractor"],
+    },
+    {
+        "id": "auto",
+        "name": "Automação",
+        "tools": ["autorecon", "nuclei", "nmap"],
     },
     {
         "id": "utils",
         "name": "Utilitários",
-        "tools": ["curl", "wget", "nc", "snmpwalk"],
+        "tools": ["curl", "wget", "nc", "snmpwalk", "socat", "mitm6"],
     },
 ]

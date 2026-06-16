@@ -1,22 +1,19 @@
-import json
+import time
+
 from dataclasses import dataclass, field
 
-import httpx
 from google import genai
 from google.genai import types
 
 from backend.config import (
-    AI_PROVIDER,
     GEMINI_API_KEY,
+    GEMINI_FALLBACK_MODEL,
     GEMINI_MODEL,
     MAX_TOOL_ITERATIONS,
-    OLLAMA_BASE_URL,
-    OLLAMA_MODEL,
     SYSTEM_PROMPT,
 )
 from backend.executor.kali import execute_in_kali
 from backend.executor.result import format_result_for_llm
-from backend.tools.definitions import KALI_TOOL_DEFINITION
 
 
 @dataclass
@@ -78,6 +75,47 @@ def _parse_function_args(fc) -> dict:
     return {}
 
 
+def _is_quota_error(error: str) -> bool:
+    return "429" in error or "RESOURCE_EXHAUSTED" in error
+
+
+def _gemini_error_message(error: str) -> str:
+    if "API_KEY_INVALID" in error or "API key not valid" in error.lower():
+        return "Chave Gemini inválida. Gere uma nova em https://aistudio.google.com/apikey"
+    if _is_quota_error(error):
+        return (
+            "Cota do Gemini esgotada para este modelo/chave.\n\n"
+            "O que fazer:\n"
+            "• No .env, use GEMINI_MODEL=gemini-2.5-flash-lite (mais cota no plano gratuito)\n"
+            "• Gere sua própria chave em https://aistudio.google.com/apikey (não compartilhe)\n"
+            "• Aguarde alguns minutos se enviou muitas mensagens seguidas\n"
+            "• Cada comando no chat gera 2–6 chamadas à API (ferramentas + resposta)"
+        )
+    return f"Erro ao chamar Gemini: {error}"
+
+
+def _generate_content(client, model: str, contents, config):
+    models = [model]
+    if GEMINI_FALLBACK_MODEL not in models:
+        models.append(GEMINI_FALLBACK_MODEL)
+
+    last_error = None
+    for attempt, current_model in enumerate(models):
+        try:
+            return client.models.generate_content(
+                model=current_model,
+                contents=contents,
+                config=config,
+            )
+        except Exception as e:
+            last_error = e
+            if not _is_quota_error(str(e)) or attempt >= len(models) - 1:
+                raise
+            time.sleep(2)
+
+    raise last_error  # type: ignore[misc]
+
+
 def _run_gemini(history: list[dict], user_message: str) -> ChatResponse:
     if not GEMINI_API_KEY:
         return ChatResponse(
@@ -117,11 +155,7 @@ def _run_gemini(history: list[dict], user_message: str) -> ChatResponse:
         nudged = False
 
         for _ in range(MAX_TOOL_ITERATIONS):
-            response = client.models.generate_content(
-                model=GEMINI_MODEL,
-                contents=contents,
-                config=config,
-            )
+            response = _generate_content(client, GEMINI_MODEL, contents, config)
 
             function_calls = response.function_calls or []
 
@@ -164,102 +198,14 @@ def _run_gemini(history: list[dict], user_message: str) -> ChatResponse:
 
             contents.append(types.Content(role="user", parts=response_parts))
 
-        final = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=contents,
-            config=config,
-        )
+        final = _generate_content(client, GEMINI_MODEL, contents, config)
         text = final.text or "Limite de iterações de ferramentas atingido."
         return ChatResponse(message=text, tool_executions=executions)
 
     except Exception as e:
-        error = str(e)
-        if "API_KEY_INVALID" in error or "API key not valid" in error.lower():
-            return ChatResponse(
-                message="Chave Gemini inválida. Gere uma nova em https://aistudio.google.com/apikey"
-            )
-        if "429" in error or "RESOURCE_EXHAUSTED" in error:
-            return ChatResponse(
-                message="Limite de requisições do Gemini atingido. Aguarde alguns minutos e tente novamente."
-            )
-        return ChatResponse(message=f"Erro ao chamar Gemini: {error}")
-
-
-def _run_ollama(history: list[dict], user_message: str) -> ChatResponse:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    for msg in history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
-    messages.append({"role": "user", "content": user_message})
-    executions: list[ToolExecution] = []
-
-    for _ in range(MAX_TOOL_ITERATIONS):
-        payload = {
-            "model": OLLAMA_MODEL,
-            "messages": messages,
-            "tools": [KALI_TOOL_DEFINITION],
-            "stream": False,
-        }
-
-        try:
-            resp = httpx.post(
-                f"{OLLAMA_BASE_URL}/api/chat",
-                json=payload,
-                timeout=120.0,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-        except httpx.ConnectError:
-            return ChatResponse(
-                message=(
-                    f"Não foi possível conectar ao Ollama em {OLLAMA_BASE_URL}. "
-                    "Inicie o Ollama ou use AI_PROVIDER=gemini com GEMINI_API_KEY."
-                )
-            )
-        except Exception as e:
-            return ChatResponse(message=f"Erro ao chamar Ollama: {e}")
-
-        msg = data.get("message", {})
-        tool_calls = msg.get("tool_calls", [])
-
-        if tool_calls:
-            messages.append(msg)
-
-            for tool_call in tool_calls:
-                fn = tool_call.get("function", {})
-                args = fn.get("arguments", {})
-                if isinstance(args, str):
-                    args = json.loads(args)
-
-                result = execute_in_kali(args["command"], args.get("reason", ""))
-                executions.append(ToolExecution(
-                    command=result.command,
-                    reason=result.reason,
-                    stdout=result.stdout,
-                    stderr=result.stderr,
-                    exit_code=result.exit_code,
-                    success=result.success,
-                    blocked=result.blocked,
-                ))
-
-                messages.append({
-                    "role": "tool",
-                    "content": format_result_for_llm(result),
-                })
-            continue
-
-        return ChatResponse(
-            message=msg.get("content", "Sem resposta da IA."),
-            tool_executions=executions,
-        )
-
-    return ChatResponse(
-        message="Limite de iterações de ferramentas atingido.",
-        tool_executions=executions,
-    )
+        return ChatResponse(message=_gemini_error_message(str(e)))
 
 
 def chat(history: list[dict], user_message: str, preferred_tool: str | None = None) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
-    if AI_PROVIDER == "ollama":
-        return _run_ollama(history, user_message)
     return _run_gemini(history, user_message)

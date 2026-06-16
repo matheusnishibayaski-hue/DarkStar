@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -143,6 +143,17 @@ def api_chat(req: ChatRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">'
+        '<rect width="32" height="32" rx="4" fill="#0d1117"/>'
+        '<text x="16" y="22" text-anchor="middle" font-family="monospace" '
+        'font-size="14" fill="#3fb950">$</text></svg>'
+    )
+    return Response(content=svg, media_type="image/svg+xml")
 
 
 @app.get("/")
