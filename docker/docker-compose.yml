@@ -8,7 +8,7 @@ services:
     privileged: true
     network_mode: host
     # Perfil restrito (sem Wi-Fi): comente privileged + network_mode: host,
-    # use rede bridge e remova SYS_ADMIN — ver SECURITY.md
+    # use rede bridge e remova SYS_ADMIN — ver README (Segurança e hardening)
     cap_add:
       - NET_ADMIN
       - NET_RAW

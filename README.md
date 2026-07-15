@@ -11,7 +11,7 @@ Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://o
 ## Sumário
 
 - [Início rápido](#início-rápido)
-- [Escopo v1.0](#escopo-v10)
+- [Escopo v1.1](#escopo-v11)
 - [Funcionalidades](#funcionalidades)
 - [Arquitetura](#arquitetura)
 - [Estrutura do repositório](#estrutura-do-repositório)
@@ -19,8 +19,10 @@ Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://o
 - [Configuração](#configuração)
 - [Interface](#interface)
 - [Modos de uso](#modos-de-uso)
+- [Playbooks](#playbooks)
 - [IA, modelos e economia de tokens](#ia-modelos-e-economia-de-tokens)
 - [Motor de execução](#motor-de-execução)
+- [Segurança e hardening](#segurança-e-hardening)
 - [Dados persistidos](#dados-persistidos)
 - [API REST](#api-rest)
 - [Solução de problemas](#solução-de-problemas)
@@ -80,8 +82,11 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 | **Dashboards** | Parser Nmap (tabela portas) e Nuclei/vulns (cards por severidade) |
 | **Smart Healing** | Até `MAX_HEALING_ATTEMPTS` retentativas automáticas após falha de comando |
 | **Recon DB** | Memória local por alvo (`backend/recon/`), TTL configurável, contexto injetado em chats futuros |
-| **Intel** | Painel `/sys/intel`: aba **recon** (tabela expansível, busca, ordenação) + aba **threats** (mapa Kaspersky) |
-| **File manager** | Artefatos em `/tools/output` (volume Docker); listar e baixar via UI e `GET /api/files` |
+| **Intel** | Painel `/sys/intel`: **recon**, **threats**, **timeline** (execuções da sessão), **audit** (trilha JSONL) |
+| **File manager** | Artefatos em `/tools/output` (volume Docker); listar, filtrar por alvo e baixar via UI e `GET /api/files` |
+| **Playbooks** | Presets `recon-web` e `port-scan` — execução sequencial via API ou Auto-Pilot |
+| **Auditoria** | Log append-only em `backend/audit/`; consulta `GET /api/audit` e aba **audit** no Intel |
+| **Onboarding** | Guia de 3 passos na primeira visita (health, escopo, primeiro scan) |
 | **Auto-Pilot** | Alvo + objetivo → loop autônomo de ferramentas + relatório `.md` |
 | **Cancel** | Botão **cancel** interrompe chat stream e Auto-Pilot; mata processo Docker ativo |
 | **Relatórios** | Botão **report** ou fim do Auto-Pilot → Markdown estruturado |
@@ -104,7 +109,7 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Backend FastAPI (backend/main.py → routes/)                │
-│  auth · system · chat · autonomous · files                │
+│  auth · system · chat · autonomous · files · audit · playbooks │
 │  middleware: rate limit + API token guard                   │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
@@ -142,19 +147,23 @@ Chat IA Kali/
 │   ├── main.py              # Entry FastAPI (~60 linhas)
 │   ├── config.py            # .env, whitelist, prompts
 │   ├── schemas.py · deps.py · middleware.py
-│   ├── routes/              # auth, system, chat, autonomous, files
-│   ├── security/            # sessions, rate_limit, missions, scope
+│   ├── routes/              # auth, system, chat, autonomous, files, audit, playbooks
+│   ├── security/            # sessions, rate_limit, missions, scope, audit
+│   ├── playbooks/           # recon-web.yaml, port-scan.yaml, loader.py
 │   ├── ai/                  # agent, autopilot, healing, sse
 │   ├── executor/            # kali, logs, summarize, recon_db, files_store, …
+│   ├── audit/               # eventos JSONL (gitignored)
 │   ├── data/                # sessões (gitignored)
 │   └── logs/ · recon/ · outputs/   # gitignored (outputs = volume Kali)
 ├── frontend/
 │   ├── index.html · styles.css
-│   └── js/                  # main, chat, intel, files, audio, markdown, …
+│   └── js/                  # main, chat, intel, files, audio, onboarding, timeline, …
 ├── docker/                  # Dockerfile, compose (+ volume outputs)
-├── tests/                   # 34 testes + auth_patch helper
+├── e2e/                     # Playwright smoke tests
+├── tests/                   # 44+ testes + auth_patch helper
 ├── scripts/docker-check.ps1 # Docker com timeout (Windows)
 ├── start.bat · start.sh
+├── package.json             # ESLint + Playwright (dev)
 ├── requirements.txt · requirements-lock.txt
 └── .env.example
 ```
@@ -224,8 +233,9 @@ Copie `.env.example` → `.env`. Variáveis principais:
 | `MAX_HISTORY_MESSAGES` | `10` | Mensagens enviadas à IA |
 | `OUTPUT_TOKEN_LIMIT` | `3000` | Limite antes de resumir output |
 | `RECON_TTL_DAYS` | `30` | Expiração cache recon |
-| `ALLOWED_TARGETS` | vazio | Scope lock: lista de alvos permitidos (vazio = sem restrição) |
+| `ALLOWED_TARGETS` | vazio | Scope lock: lista de alvos permitidos (vazio = sem restrição + aviso na UI) |
 | `OUTPUTS_DIR` | `backend/outputs` | Pasta host dos artefatos (montada em `/tools/output` no Kali) |
+| `MAX_FILE_DOWNLOAD_MB` | `50` | Limite de download no file manager |
 | `SESSION_TTL_HOURS` | `24` | TTL cookie de sessão |
 | `RATE_LIMIT_REQUESTS` | `30` | Requisições por janela |
 | `RATE_LIMIT_WINDOW_SEC` | `60` | Janela rate limit |
@@ -248,15 +258,18 @@ Interface estilo terminal fosforescente (`kali@pentest:~$`), scanlines, boot seq
 | Prompt | Entrada + seletor de modelo `llm:` (tiers Economia / Equilibrado / Raciocínio) |
 | Status bar | `docker:` · `kali:` · relógio · status · **`snd:on`/`snd:off`** |
 | Health banner | Aviso dismissível quando Docker ou container Kali estão offline |
+| Scope banner | Aviso persistente quando `ALLOWED_TARGETS` está vazio |
 
 ### Painel Intel (`intel` · `Alt+I`)
 
-Painel unificado **`/sys/intel`** com duas abas:
+Painel unificado **`/sys/intel`** com quatro abas:
 
 | Aba | Função |
 |-----|--------|
-| **recon** | Tabela retro de alvos em cache (`GET /api/recon`). Clique na linha → card expansível com portas, CVEs e achados. Busca, ordenação, **usar no prompt** e **re-scan**. |
-| **threats** (`Alt+C`) | Mapa global de ciberameaças ([Kaspersky Cybermap](https://cybermap.kaspersky.com/pt)) embutido. Modos **live** (legenda + mapa) e **globe** (mapa expandido). Botão ↗ abre o mapa completo. |
+| **recon** | Tabela retro de alvos em cache (`GET /api/recon`). Card expansível com portas, CVEs e achados. Busca, ordenação, **usar no prompt**, **re-scan** e **artefatos** (abre Files filtrado). |
+| **threats** (`Alt+C`) | Mapa global [Kaspersky Cybermap](https://cybermap.kaspersky.com/pt). Modos **live** e **globe**. |
+| **timeline** | Linha do tempo das execuções da sessão ativa — comando, status, link para log e artefatos. |
+| **audit** | Últimos eventos da trilha de auditoria (`GET /api/audit`) com link para logs de execução. |
 
 ### Painel Files (`files` · `Alt+F`)
 
@@ -312,17 +325,17 @@ Durante chat ou Auto-Pilot, o botão **cancel** envia `AbortController` no clien
 
 ### Auto-Pilot
 
-1. `Alt+P` → informe **alvo** e **objetivo**
+1. `Alt+P` → informe **alvo** e **objetivo** (ou escolha um **playbook** + alvo)
 2. Agente roda loop (`autopilot.py`) até objetivo, limite de rodadas ou cancel
 3. Relatório Markdown baixado automaticamente ao concluir
 
-**Endpoint:** `POST /api/autonomous/stream` (SSE) ou `POST /api/autonomous` (JSON).
+**Endpoint:** `POST /api/autonomous/stream` (SSE) ou `POST /api/autonomous` (JSON). Playbooks também no painel Auto-Pilot — ver [Playbooks](#playbooks).
 
 ### Relatório de sessão
 
 Botão **report** → `POST /api/generate-report` com histórico e execuções da sessão → download `relatorio-pentest.md`.
 
-Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Mitigação → Anexo logs.
+Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Recon cacheado → Artefatos → Mitigação → Anexo logs.
 
 ### Exemplos práticos
 
@@ -333,6 +346,29 @@ Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Mitigação �
 | *"Subdomínios de example.com"* | `subfinder` / `amass` |
 | **pilot** + alvo lab | Missão autônoma + relatório |
 | Tier **Economia** | Modelo mais barato (Flash-Lite / DeepSeek V3.2) |
+
+---
+
+## Playbooks
+
+Presets em `backend/playbooks/*.yaml` (schema em `playbook.schema.json` — **não** é Ansible). Disponíveis no Auto-Pilot ou via API.
+
+| ID | Descrição |
+|----|-----------|
+| `recon-web` | `subfinder` → `httpx` no alvo |
+| `port-scan` | `nmap -sV -oA /tools/output/nmap-{alvo}` |
+
+Placeholders nos YAML:
+
+| Placeholder | Uso |
+|-------------|-----|
+| `{target}` | Alvo original (domínio/IP) |
+| `{target_safe}` | Nome sanitizado para arquivos em `/tools/output/` |
+
+```bash
+GET /api/playbooks
+POST /api/playbooks/port-scan/run   # body: { "target": "scanme.nmap.org" }
+```
 
 ---
 
@@ -398,6 +434,53 @@ Categorias na UI: Rede, OSINT, Web, SSL, Senhas, AD, Wi-Fi, Vuln, Forense, Autom
 
 ---
 
+## Segurança e hardening
+
+### Checklist rápido
+
+- [ ] `.env` nunca commitado (`OPENROUTER_API_KEY`, `CHAT_API_TOKEN`)
+- [ ] `ALLOWED_TARGETS` definido para alvos autorizados (recomendado mesmo em lab)
+- [ ] `CHAT_API_TOKEN` ativo se exposto além de localhost
+- [ ] Rotacionar token após compartilhar ambiente
+- [ ] Revisar trilha em `backend/audit/` ou `GET /api/audit`
+- [ ] Artefatos sensíveis em `backend/outputs/` fora de backups públicos
+
+### Escopo (`ALLOWED_TARGETS`)
+
+- **Vazio:** sem restrição — UI exibe banner de aviso (modo lab).
+- **Preenchido:** comandos, Auto-Pilot e playbooks só aceitam alvos na lista.
+
+```env
+ALLOWED_TARGETS=scanme.nmap.org,10.0.0.0/24,lab.local
+```
+
+### Auditoria
+
+Cada execução gera evento append-only em `backend/audit/events-YYYY-MM-DD.jsonl`:
+
+- timestamp, ferramenta, comando, alvos, status, `mission_id`, `log_file_id`
+- segredos redigidos automaticamente
+
+### File manager
+
+- Anti path-traversal (`files_store.py`)
+- Whitelist de extensões
+- Limite de download: `MAX_FILE_DOWNLOAD_MB` (padrão 50)
+
+### Docker — perfis
+
+**Padrão (Wi-Fi):** `privileged`, `network_mode: host`, caps `NET_ADMIN`/`NET_RAW`/`SYS_ADMIN` — use só em lab dedicado.
+
+**Restrito (sem Wi-Fi):** comente `privileged` e `network_mode: host` no `docker-compose.yml`, use rede bridge e remova `SYS_ADMIN` se possível. Reinicie o container após alterar.
+
+### Autenticação
+
+- `CHAT_API_TOKEN` protege `/api/*` (exceto health, client-config, login)
+- Sessões HttpOnly com TTL (`SESSION_TTL_HOURS`)
+- Rate limit: `RATE_LIMIT_REQUESTS` / `RATE_LIMIT_WINDOW_SEC`
+
+---
+
 ## Dados persistidos
 
 | Caminho | Conteúdo | Versionado |
@@ -405,6 +488,7 @@ Categorias na UI: Rede, OSINT, Web, SSL, Senhas, AD, Wi-Fi, Vuln, Forense, Autom
 | `backend/logs/{id}.log` | Output completo de cada execução | Não |
 | `backend/recon/{alvo}.json` | Portas, CVEs, achados por alvo | Não |
 | `backend/outputs/` | Artefatos de ferramentas (`/tools/output` no Kali) | Não |
+| `backend/audit/` | Trilha de auditoria (JSONL por dia) | Não |
 | `backend/data/sessions.json` | Sessões auth HttpOnly | Não |
 | `localStorage` (browser) | Conversas, modelo e preferência de som | N/A |
 
@@ -473,9 +557,11 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "docker": true,
   "kali_container": true,
+  "scope_lock_enabled": false,
+  "scope_warning": true,
   "wifi_ready": true
 }
 ```
@@ -505,10 +591,19 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 
 ## Testes e validação
 
-### Automatizados (44+ testes)
+### Automatizados (44+ testes unitários)
 
 ```bash
 python -m unittest discover -s tests -v
+```
+
+### E2E (Playwright)
+
+```bash
+npm install
+npx playwright install chromium
+# Com servidor rodando em 127.0.0.1:8000:
+npx playwright test -c e2e/playwright.config.js
 ```
 
 | Arquivo | Cobertura |
@@ -544,47 +639,34 @@ CI: `.github/workflows/tests.yml` — unitários + E2E Playwright + integração
 | Release estável | **1.1.0** |
 | API | `/api/health` → `"version": "1.1.0"` |
 | Testes | 44+ unit · 3 E2E |
-| Segurança | Ver [SECURITY.md](SECURITY.md) |
+| Documentação | Este README |
 
 ```bash
 git tag -a v1.1.0 -m "Chat IA Kali 1.1.0"
 git push origin main --tags
 ```
 
-**Não versionar:** `.env`, `venv/`, `backend/data/`, `backend/logs/`, `backend/recon/`, `backend/audit/`, `backend/outputs/*`
+**Não versionar:** `.env`, `venv/`, `node_modules/`, `backend/data/`, `backend/logs/`, `backend/recon/`, `backend/audit/`, `backend/outputs/*`, `test-results/`
 
 ---
 
 ## Changelog
 
-Ver [CHANGELOG.md](CHANGELOG.md) para histórico completo.
-
 ### 1.1.0 — Release operacional (2026-07-15)
 
-| Área | Adição |
-|------|--------|
-| **Segurança** | Auditoria JSONL (`GET /api/audit`), aviso de escopo, `SECURITY.md`, limite download files |
-| **Utilidade** | Timeline de missão, playbooks `recon-web`/`port-scan`, relatório com recon + artefatos |
-| **UX** | Onboarding 60s, abas audit/timeline no Intel, playbooks no Auto-Pilot |
-| **Engenharia** | E2E Playwright no CI, ESLint, `frontend/js/api/routes.js` |
+**Segurança:** auditoria JSONL (`GET /api/audit`), aviso de escopo aberto, limite download files, seção de hardening neste README.
 
-### Pós-1.0.0 — UI CRT e painéis (2026-07)
+**Utilidade:** timeline de missão, playbooks `recon-web`/`port-scan`, relatório com recon + artefatos, ligação recon ↔ files.
 
-Melhorias de interface e operação local (ainda sobre base **1.0.0**):
+**UX:** onboarding 60s, abas audit/timeline no Intel, playbooks no Auto-Pilot, toolbar mobile.
 
-| Área | Adição |
-|------|--------|
-| **Layout** | Tema terminal CRT (`kali@pentest`), boot sequence, scanlines, prompt estilo shell |
-| **UX** | Markdown nas respostas; banner health Docker/Kali; seletor de modelos `llm:` com tiers |
-| **Intel** | Painel `/sys/intel`: recon (tabela expansível, busca, ordenação) + threats (Kaspersky Cybermap) |
-| **Files** | File manager `/tools/output`, API `GET /api/files`, volume Docker `backend/outputs` |
-| **Áudio** | Sons CRT via Web Audio API (`audio.js`), toggle `snd:on`/`snd:off` |
-| **Segurança** | Scope lock `ALLOWED_TARGETS` no `.env` |
-| **Testes** | +5 (recon API, files API, scope lock) → **34** total |
+**Engenharia:** E2E Playwright no CI, ESLint, `frontend/js/api/routes.js`, testes audit/playbooks/OpenAPI.
 
 ### 1.0.0 — Release estável (2026-07-15)
 
-Versão pública consolidada após ciclo interno v2→v3. Ferramenta local single-user pronta para uso contínuo: chat stream, Auto-Pilot, cancel, auth sessão, 29 testes, `start.bat` + `start.sh`.
+Chat com execução real Kali via Docker, Auto-Pilot, Intel, file manager, sons CRT, scope lock opcional, 29 testes iniciais.
+
+**Pós-1.0.0 — UI CRT e painéis (2026-07):** tema terminal, Markdown, health banner, seletor `llm:`, Intel (recon + threats), file manager, sons CRT, scope lock — 34 testes na base 1.0.
 
 ### Histórico resumido (desenvolvimento)
 
