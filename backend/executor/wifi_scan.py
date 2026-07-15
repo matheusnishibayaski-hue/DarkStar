@@ -18,7 +18,7 @@ def _run_netsh(args: list[str], timeout: int = 45) -> subprocess.CompletedProces
     )
 
 
-def _scan_windows(command: str, reason: str) -> ExecutionResult:
+def _scan_windows(command: str, reason: str, log_id: str | None = None) -> ExecutionResult:
     binary = command.strip().split()[0].split("/")[-1]
     sections: list[str] = []
 
@@ -44,7 +44,7 @@ def _scan_windows(command: str, reason: str) -> ExecutionResult:
             ok = networks.returncode == 0
 
         stdout = "\n\n".join(sections)
-        log_id = save_execution_log(command, reason, stdout[:50000], "")
+        saved_id = save_execution_log(command, reason, stdout[:50000], "", log_id=log_id)
         return ExecutionResult(
             command=command,
             reason=reason,
@@ -52,7 +52,7 @@ def _scan_windows(command: str, reason: str) -> ExecutionResult:
             stderr="",
             exit_code=0 if ok else 1,
             success=ok,
-            log_file_id=log_id,
+            log_file_id=saved_id,
             tool=binary,
         )
     except FileNotFoundError:
@@ -84,7 +84,7 @@ def _scan_windows(command: str, reason: str) -> ExecutionResult:
         )
 
 
-def _scan_linux(command: str, reason: str) -> ExecutionResult:
+def _scan_linux(command: str, reason: str, log_id: str | None = None) -> ExecutionResult:
     binary = command.strip().split()[0].split("/")[-1]
     cmds: list[list[str]] = []
 
@@ -119,7 +119,7 @@ def _scan_linux(command: str, reason: str) -> ExecutionResult:
 
     stdout = "\n\n".join(sections)[:50000]
     stderr = "\n".join(errors)[:10000]
-    log_id = save_execution_log(command, reason, stdout, stderr)
+    saved_id = save_execution_log(command, reason, stdout, stderr, log_id=log_id)
     return ExecutionResult(
         command=command,
         reason=reason,
@@ -127,15 +127,15 @@ def _scan_linux(command: str, reason: str) -> ExecutionResult:
         stderr=stderr,
         exit_code=0 if ok else 1,
         success=ok,
-        log_file_id=log_id,
+        log_file_id=saved_id,
         tool=binary,
     )
 
 
-def execute_host_wifi(command: str, reason: str) -> ExecutionResult:
+def execute_host_wifi(command: str, reason: str, log_id: str | None = None) -> ExecutionResult:
     if sys.platform == "win32":
-        return _scan_windows(command, reason)
-    return _scan_linux(command, reason)
+        return _scan_windows(command, reason, log_id=log_id)
+    return _scan_linux(command, reason, log_id=log_id)
 
 
 def windows_wifi_health() -> tuple[bool, list[str], str]:

@@ -1,6 +1,9 @@
 import json
+import threading
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator
+from dataclasses import asdict, dataclass, field
+from queue import Queue
 
 from openai import OpenAI
 
@@ -15,6 +18,8 @@ from backend.ai.agent import (
     _record_execution,
     generate_report,
 )
+from backend.ai.healing import healing_prompt, should_attempt_healing
+from backend.ai.sse import format_sse
 from backend.config import (
     AUTONOMOUS_SYSTEM_PROMPT,
     GEMINI_MODEL,
@@ -23,7 +28,9 @@ from backend.config import (
     MAX_TOOL_ITERATIONS,
     OPENROUTER_API_KEY,
 )
-from backend.models_catalog import resolve_model
+from backend.executor.recon_db import build_recon_context, normalize_target
+
+EmitFn = Callable[[str, dict], None]
 
 FINISH_MISSION_TOOL = {
     "type": "function",
@@ -85,6 +92,8 @@ def _run_autonomous_cycle(
     model_to_use: str,
     fallback_model: str,
     max_tool_calls: int,
+    recon_targets: list[str] | None = None,
+    emit: EmitFn | None = None,
 ) -> tuple[str, bool, bool, str]:
     """
     Uma rodada do auto-pilot.
@@ -92,6 +101,7 @@ def _run_autonomous_cycle(
     """
     tool_calls_budget = max_tool_calls
     nudged = False
+    healing_attempts = 0
 
     while tool_calls_budget > 0:
         try:
@@ -152,13 +162,27 @@ def _run_autonomous_cycle(
                     command = ""
                     reason = "Falha ao decodificar argumentos."
 
-                result_text = _record_execution(command, reason, executions)
+                result_text = _record_execution(
+                    command,
+                    reason,
+                    executions,
+                    recon_targets=recon_targets,
+                    emit=emit,
+                )
                 tool_calls_budget -= 1
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": result_text,
                 })
+
+                last = executions[-1]
+                if should_attempt_healing(last, healing_attempts):
+                    healing_attempts += 1
+                    messages.append({
+                        "role": "user",
+                        "content": healing_prompt(last),
+                    })
 
                 if tool_calls_budget <= 0:
                     messages.append({
@@ -178,6 +202,7 @@ def run_autonomous(
     objective: str,
     model: str | None = None,
     fallback_model: str | None = None,
+    emit: EmitFn | None = None,
 ) -> AutonomousResponse:
     if not OPENROUTER_API_KEY:
         return AutonomousResponse(
@@ -197,7 +222,11 @@ def run_autonomous(
         )
 
     client = _create_client()
+    recon_target = normalize_target(target)
+    recon_context = build_recon_context([recon_target])
     system = AUTONOMOUS_SYSTEM_PROMPT.format(target=target, objective=objective)
+    if recon_context:
+        system = f"{system}\n\n{recon_context}"
     messages: list[dict] = [{"role": "system", "content": system}]
 
     executions: list[ToolExecution] = []
@@ -207,6 +236,9 @@ def run_autonomous(
     stopped_reason = "max_rounds"
     rounds_completed = 0
     remaining_tools = MAX_AUTONOMOUS_TOOLS
+
+    if emit:
+        emit("mission_start", {"target": target, "objective": objective})
 
     for round_idx in range(MAX_AUTONOMOUS_ROUNDS):
         if remaining_tools <= 0:
@@ -232,9 +264,18 @@ def run_autonomous(
 
         messages.append({"role": "user", "content": kickoff})
 
+        if emit:
+            emit("round_start", {
+                "round": round_idx + 1,
+                "max_rounds": MAX_AUTONOMOUS_ROUNDS,
+                "tools_executed": len(executions),
+            })
+
         try:
             text, finished, met, model_to_use = _run_autonomous_cycle(
                 client, messages, executions, model_to_use, fallback_to_use, per_round,
+                recon_targets=[recon_target],
+                emit=emit,
             )
         except RuntimeError as e:
             return AutonomousResponse(
@@ -305,3 +346,54 @@ def run_autonomous(
         stopped_reason=stopped_reason,
         tools_executed=len(executions),
     )
+
+
+def _execution_dict(e: ToolExecution) -> dict:
+    return {
+        "command": e.command,
+        "reason": e.reason,
+        "stdout": e.stdout,
+        "stderr": e.stderr,
+        "exit_code": e.exit_code,
+        "success": e.success,
+        "blocked": e.blocked,
+        "log_file_id": e.log_file_id,
+        "tool": e.tool,
+    }
+
+
+def run_autonomous_stream(
+    target: str,
+    objective: str,
+    model: str | None = None,
+    fallback_model: str | None = None,
+) -> Generator[str, None, None]:
+    event_queue: Queue[str | None] = Queue()
+
+    def emit(event: str, data: dict) -> None:
+        event_queue.put(format_sse(event, data))
+
+    def worker() -> None:
+        try:
+            result = run_autonomous(target, objective, model=model, fallback_model=fallback_model, emit=emit)
+            event_queue.put(format_sse("done", {
+                "message": result.message,
+                "tool_executions": [_execution_dict(e) for e in result.tool_executions],
+                "report": result.report,
+                "objective_met": result.objective_met,
+                "rounds": result.rounds,
+                "stopped_reason": result.stopped_reason,
+                "tools_executed": result.tools_executed,
+            }))
+        except Exception as e:
+            event_queue.put(format_sse("error", {"detail": str(e)}))
+        finally:
+            event_queue.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    while True:
+        item = event_queue.get()
+        if item is None:
+            break
+        yield item

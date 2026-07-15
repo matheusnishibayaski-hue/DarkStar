@@ -1,5 +1,10 @@
 import shlex
 import subprocess
+import threading
+import time
+from collections.abc import Generator
+from queue import Empty, Queue
+from typing import Any
 
 from backend.config import (
     ALLOWED_TOOLS,
@@ -9,8 +14,9 @@ from backend.config import (
     WIFI_COMMAND_TIMEOUT,
     WIFI_TOOLS,
 )
-from backend.executor.logs import save_execution_log
+from backend.executor.logs import new_log_id, save_execution_log
 from backend.executor.result import ExecutionResult
+from backend.executor.stream_hub import get_stream_hub
 from backend.executor.wifi_scan import execute_host_wifi
 
 NON_INTERACTIVE_FLAGS: dict[str, list[str]] = {
@@ -85,32 +91,141 @@ def _is_wifi_tool(args: list[str]) -> bool:
     return args[0].split("/")[-1] in WIFI_TOOLS
 
 
-def _run_docker_vector(args: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
+def _emit_line(
+    execution_id: str | None,
+    stream_name: str,
+    text: str,
+) -> dict[str, Any]:
+    if execution_id:
+        get_stream_hub().push_line(execution_id, stream_name, text)
+    return {"type": "line", "stream": stream_name, "text": text}
+
+
+def _stream_text_lines(
+    execution_id: str | None,
+    stream_name: str,
+    text: str,
+) -> Generator[dict[str, Any], None, None]:
+    for line in text.splitlines():
+        yield _emit_line(execution_id, stream_name, line)
+
+
+def _run_docker_streaming(
+    args: list[str],
+    timeout: int,
+    execution_id: str | None,
+) -> tuple[int, str, str]:
     docker_cmd = [
         "docker", "exec",
         "--user", "root",
         KALI_CONTAINER,
         *args,
     ]
-    return subprocess.run(
+    proc = subprocess.Popen(
         docker_cmd,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        timeout=timeout,
         encoding="utf-8",
         errors="replace",
         stdin=subprocess.DEVNULL,
+        bufsize=1,
     )
 
+    stdout_parts: list[str] = []
+    stderr_parts: list[str] = []
+    line_queue: Queue[tuple[str, str | None]] = Queue()
+    open_pipes = 2
 
-def execute_kali_command(args: list[str], reason: str) -> ExecutionResult:
+    def read_pipe(pipe, name: str) -> None:
+        nonlocal open_pipes
+        try:
+            for line in iter(pipe.readline, ""):
+                line_queue.put((name, line))
+        finally:
+            pipe.close()
+            line_queue.put((name, None))
+
+    threading.Thread(target=read_pipe, args=(proc.stdout, "stdout"), daemon=True).start()
+    threading.Thread(target=read_pipe, args=(proc.stderr, "stderr"), daemon=True).start()
+
+    start = time.time()
+    closed: set[str] = set()
+
+    while open_pipes > 0 or proc.poll() is None:
+        if time.time() - start > timeout:
+            proc.kill()
+            raise subprocess.TimeoutExpired(docker_cmd, timeout)
+
+        try:
+            stream_name, line = line_queue.get(timeout=0.1)
+        except Empty:
+            continue
+
+        if line is None:
+            if stream_name not in closed:
+                closed.add(stream_name)
+                open_pipes -= 1
+            continue
+
+        if stream_name == "stdout":
+            stdout_parts.append(line)
+        else:
+            stderr_parts.append(line)
+
+        if execution_id:
+            get_stream_hub().push_line(execution_id, stream_name, line.rstrip("\n"))
+
+    return proc.wait(), "".join(stdout_parts), "".join(stderr_parts)
+
+
+def execute_kali_command(
+    args: list[str],
+    reason: str,
+    execution_id: str | None = None,
+) -> ExecutionResult:
+    """Executa comando e consome o gerador interno, retornando o resultado final."""
+    result: ExecutionResult | None = None
+    for event in execute_kali_command_stream(args, reason, execution_id=execution_id):
+        if event.get("type") == "done":
+            result = event["result"]
+    if result is None:
+        return ExecutionResult(
+            command=args_to_display(args),
+            reason=reason,
+            stdout="",
+            stderr="Falha interna na execução.",
+            exit_code=-1,
+            success=False,
+            tool=args[0].split("/")[-1] if args else "",
+        )
+    return result
+
+
+def execute_kali_command_stream(
+    args: list[str],
+    reason: str,
+    execution_id: str | None = None,
+) -> Generator[dict[str, Any], None, None]:
     args = apply_non_interactive_flags(list(args))
     command_display = args_to_display(args)
     binary = args[0].split("/")[-1] if args else ""
+    log_id = execution_id or new_log_id()
+    hub = get_stream_hub()
+
+    if execution_id:
+        if not hub.get(execution_id):
+            hub.create(execution_id, command_display)
+
+    yield {
+        "type": "start",
+        "execution_id": log_id,
+        "command": command_display,
+    }
 
     valid, error = validate_command(args)
     if not valid:
-        return ExecutionResult(
+        result = ExecutionResult(
             command=command_display,
             reason=reason,
             stdout="",
@@ -120,10 +235,35 @@ def execute_kali_command(args: list[str], reason: str) -> ExecutionResult:
             blocked=True,
             block_reason=error,
             tool=binary,
+            log_file_id=log_id,
         )
+        for line in _stream_text_lines(execution_id, "stderr", error):
+            yield line
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+        return
 
     if binary in HOST_WIFI_TOOLS:
-        return execute_host_wifi(command_display, reason)
+        result = execute_host_wifi(command_display, reason, log_id=log_id)
+        combined = "\n".join(filter(None, [result.stdout, result.stderr]))
+        for line in _stream_text_lines(execution_id, "stdout", combined):
+            yield line
+        save_execution_log(
+            command_display, reason, result.stdout, result.stderr, log_id=log_id
+        )
+        result.log_file_id = log_id
+        if execution_id:
+            hub.finish(
+                execution_id,
+                exit_code=result.exit_code,
+                success=result.success,
+                blocked=result.blocked,
+            )
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+        return
 
     wifi = _is_wifi_tool(args)
     timeout = WIFI_COMMAND_TIMEOUT if wifi else COMMAND_TIMEOUT
@@ -138,55 +278,88 @@ def execute_kali_command(args: list[str], reason: str) -> ExecutionResult:
                 stdin=subprocess.DEVNULL,
             )
 
-        proc = _run_docker_vector(args, timeout)
-        stdout = proc.stdout or ""
-        stderr = proc.stderr or ""
-        log_id = save_execution_log(command_display, reason, stdout, stderr)
+        exit_code, stdout, stderr = _run_docker_streaming(args, timeout, execution_id)
+        save_execution_log(command_display, reason, stdout, stderr, log_id=log_id)
 
-        return ExecutionResult(
+        result = ExecutionResult(
             command=command_display,
             reason=reason,
             stdout=stdout,
             stderr=stderr,
-            exit_code=proc.returncode,
-            success=proc.returncode == 0,
+            exit_code=exit_code,
+            success=exit_code == 0,
             log_file_id=log_id,
             tool=binary,
         )
+        if execution_id:
+            hub.finish(execution_id, exit_code=exit_code, success=result.success)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+
     except subprocess.TimeoutExpired:
-        limit = timeout
-        return ExecutionResult(
+        msg = f"Timeout após {timeout}s"
+        for line in _stream_text_lines(execution_id, "stderr", msg):
+            yield line
+        result = ExecutionResult(
             command=command_display,
             reason=reason,
             stdout="",
-            stderr=f"Timeout após {limit}s",
+            stderr=msg,
             exit_code=-1,
             success=False,
             tool=binary,
+            log_file_id=log_id,
         )
+        save_execution_log(command_display, reason, "", msg, log_id=log_id)
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+
     except FileNotFoundError:
-        return ExecutionResult(
+        msg = "Docker não encontrado. Instale o Docker Desktop e inicie o container kali-tools."
+        for line in _stream_text_lines(execution_id, "stderr", msg):
+            yield line
+        result = ExecutionResult(
             command=command_display,
             reason=reason,
             stdout="",
-            stderr="Docker não encontrado. Instale o Docker Desktop e inicie o container kali-tools.",
+            stderr=msg,
             exit_code=-1,
             success=False,
             tool=binary,
+            log_file_id=log_id,
         )
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+
     except Exception as e:
-        return ExecutionResult(
+        msg = str(e)
+        for line in _stream_text_lines(execution_id, "stderr", msg):
+            yield line
+        result = ExecutionResult(
             command=command_display,
             reason=reason,
             stdout="",
-            stderr=str(e),
+            stderr=msg,
             exit_code=-1,
             success=False,
             tool=binary,
+            log_file_id=log_id,
         )
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
 
 
-def execute_in_kali(command: str, reason: str) -> ExecutionResult:
+def execute_in_kali(
+    command: str,
+    reason: str,
+    execution_id: str | None = None,
+) -> ExecutionResult:
     """Compatibilidade: converte string da IA em argv e executa sem shell."""
     args = parse_command_string(command)
-    return execute_kali_command(args, reason)
+    return execute_kali_command(args, reason, execution_id=execution_id)

@@ -7,8 +7,18 @@ from backend.config import LOG_DIR
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_execution_log(command: str, reason: str, stdout: str, stderr: str) -> str:
-    log_id = uuid.uuid4().hex[:12]
+def new_log_id() -> str:
+    return uuid.uuid4().hex[:12]
+
+
+def save_execution_log(
+    command: str,
+    reason: str,
+    stdout: str,
+    stderr: str,
+    log_id: str | None = None,
+) -> str:
+    log_id = log_id or new_log_id()
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     content = (
         f"=== Chat IA Kali — Log de Execução ===\n"

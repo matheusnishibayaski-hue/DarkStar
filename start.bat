@@ -228,12 +228,22 @@ exit /b 1
 :run_server
 echo.
 echo  ============================================
-echo   Pronto: http://localhost:8000
+if exist ".env" (
+  for /f "usebackq tokens=1,* delims==" %%a in (`findstr /b "UVICORN_HOST=" ".env" 2^>nul`) do set UVICORN_HOST=%%b
+)
+if not defined UVICORN_HOST set UVICORN_HOST=127.0.0.1
+for /f "usebackq tokens=1,* delims==" %%a in (`findstr /b "UVICORN_PORT=" ".env" 2^>nul`) do set UVICORN_PORT=%%b
+if not defined UVICORN_PORT set UVICORN_PORT=8000
+echo   Pronto: http://!UVICORN_HOST!:!UVICORN_PORT!
+if /i "!UVICORN_HOST!"=="127.0.0.1" (
+  echo   Acesso local apenas ^(127.0.0.1^)
+  echo   Rede LAN: defina UVICORN_HOST=0.0.0.0 no .env
+)
 echo   Pressione Ctrl+C para encerrar
 echo  ============================================
 echo.
 
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn backend.main:app --host !UVICORN_HOST! --port !UVICORN_PORT! --reload
 
 echo.
 echo Servidor encerrado.

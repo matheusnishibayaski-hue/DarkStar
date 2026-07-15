@@ -96,7 +96,7 @@ A IA recebe um *system prompt* compacto que a instrui a **sempre executar** ferr
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
 │  Navegador (frontend/)                                               │
-│  index.html · styles.css · app.js                                    │
+│  index.html · styles.css · js/main.js (+ módulos ES)               │
 │  - Terminal + sidebar + painéis                                      │
 │  - Seletor de ferramenta e modelo                                    │
 │  - Dashboards nmap/nuclei · relatório · Auto-Pilot                   │
@@ -183,7 +183,13 @@ Chat IA Kali/
 ├── frontend/
 │   ├── index.html              # Shell do terminal + painéis
 │   ├── styles.css              # Tema terminal, dashboards, scrollbars
-│   └── app.js                  # Chat, sidebar, modelos, tools, autopilot
+│   ├── js/
+│   │   ├── main.js             # Entry point (chat, sidebar, autopilot)
+│   │   ├── api.js              # fetch + SSE + token
+│   │   ├── exec.js             # Blocos de execução + dashboards nmap/nuclei
+│   │   ├── stream.js           # Logs ao vivo [live]
+│   │   └── constants.js        # Chaves localStorage, prompts, ajuda
+│   └── app.js                  # Legado (monolito; substituído por js/main.js)
 ├── docker/
 │   ├── Dockerfile              # Imagem com 180+ ferramentas
 │   ├── docker-compose.yml      # Serviço kali-tools (privileged, host network)
@@ -748,6 +754,124 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Changelog
 
+### v3.2 — Frontend modular e streaming Auto-Pilot (2026-07-15)
+
+#### Frontend ES modules
+- Entry point: `frontend/js/main.js` (substitui `app.js` monolítico no HTML)
+- Módulos: `constants.js`, `api.js`, `exec.js`, `stream.js`
+- SSE compartilhado via `consumeChatStream` / `createToolStreamHandlers`
+
+#### Auto-Pilot com logs ao vivo
+- `POST /api/autonomous/stream` — eventos `mission_start`, `round_start`, `tool_start`, `tool_done`, `done`
+- Blocos `[live]` no chat durante execução autônoma
+
+#### Recon DB — TTL
+- **`RECON_TTL_DAYS=30`** — entradas expiradas removidas automaticamente em `get_recon_data`
+
+#### Testes de integração
+- `tests/test_integration.py` — health, auth token, recon TTL, stream hub
+- Executar tudo: `python -m unittest discover -s tests -v`
+
+---
+
+### v3.1 — Hardening e qualidade (2026-07-15)
+
+#### Segurança local
+- **`UVICORN_HOST=127.0.0.1`** por padrão (`start.bat` lê do `.env`)
+- **`CHAT_API_TOKEN`** opcional — protege `/api/*` via header `X-Chat-Token`
+- **CORS** restrito a localhost por padrão (`CORS_ORIGINS`)
+- **`GET /api/client-config`** — frontend detecta se auth é necessária
+
+#### Smart Healing limitado
+- **`MAX_HEALING_ATTEMPTS=2`** — evita loop caro de retentativas
+- Módulo `backend/ai/healing.py`
+
+#### Recon DB mais preciso
+- Ignora domínios genéricos (`example.com`, `localhost`, etc.)
+- Persiste recon apenas para alvos presentes **no comando** executado
+
+#### Configuração
+- Aliases **`OPENROUTER_PRIMARY_MODEL`** / **`OPENROUTER_FALLBACK_MODEL`**
+- Retrocompatível com `GEMINI_MODEL` / `GEMINI_FALLBACK_MODEL`
+
+#### Testes
+- `tests/test_core.py` — 10 testes unitários (validação kali, recon, healing)
+- Executar: `python -m unittest tests.test_core -v`
+
+---
+
+### v3.0.0 — Tríade de Performance (2026-07-15)
+
+**Foco:** Streaming em tempo real, auto-correção de comandos, memória local de reconhecimento.
+
+Esta release implementa a **Tríade de Performance** para uso local: logs das ferramentas aparecem linha a linha no terminal web enquanto executam; falhas disparam **Smart Healing** automático pela IA; e descobertas sobre cada alvo são persistidas em JSON para contexto em conversas futuras.
+
+#### 1. Streaming de logs em tempo real (SSE)
+
+**Arquivos novos:** `backend/executor/stream_hub.py` — registry thread-safe de execuções ativas
+
+**Arquivos alterados:** `backend/executor/kali.py`, `backend/executor/logs.py`, `backend/ai/agent.py`, `backend/main.py`, `frontend/js/stream.js`, `frontend/styles.css`
+
+**Fluxo integrado:**
+1. Agente pré-registra `execution_id` no hub e emite `tool_start` via `POST /api/chat/stream`
+2. Frontend abre `EventSource` em `GET /api/logs/stream/{execution_id}`
+3. Docker escreve stdout/stderr → hub → SSE → terminal web em tempo real
+4. Ao final, log completo salvo em `backend/logs/{id}.log` e bloco substituído pelo dashboard final
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/logs/stream/{execution_id}` | SSE linha a linha da execução |
+| POST | `/api/chat/stream` | Chat com eventos SSE (`tool_start`, `tool_done`, `done`) |
+
+`POST /api/chat` (JSON clássico) permanece disponível.
+
+#### 2. Auto-correção de comandos (Smart Healing)
+
+**Arquivos:** `backend/ai/agent.py`, `backend/ai/autopilot.py`
+
+Quando `run_kali_tool` retorna `exit_code != 0` ou `success == false` (e não foi bloqueado pela whitelist):
+
+1. Resultado do erro é enviado à IA como mensagem `tool`
+2. Mensagem adicional é injetada automaticamente pedindo correção imediata
+3. O loop de `MAX_TOOL_ITERATIONS` continua — a IA corrige e reexecuta **sem nova mensagem do usuário**
+
+Funciona também no **Auto-Pilot**.
+
+#### 3. Banco de reconhecimento local (Recon DB)
+
+**Arquivo novo:** `backend/executor/recon_db.py`  
+**Diretório:** `backend/recon/{alvo_normalizado}.json` (gitignored)
+
+| Função | Descrição |
+|--------|-----------|
+| `save_recon_data(alvo, chave, valor)` | Salva/atualiza campo no JSON do alvo |
+| `get_recon_data(alvo)` | Lê JSON completo do alvo |
+| `extract_targets(texto)` | Extrai IPs e domínios de mensagens |
+| `extract_recon_from_output(stdout, stderr)` | Portas abertas, CVEs, achados nuclei |
+| `build_recon_context(targets)` | Texto para injetar no prompt |
+
+**Integração com a IA:**
+- **Início do chat:** se o usuário menciona IP/domínio, contexto anterior é injetado no prompt
+- **Após execução bem-sucedida:** portas, CVEs e vulnerabilidades são mergeados no JSON do alvo
+- **Auto-Pilot:** recon do alvo da missão incluído no system prompt
+
+#### Configuração v3.0
+
+Nenhuma variável nova obrigatória. Diretórios criados automaticamente:
+- `backend/logs/` — logs completos (já existia)
+- `backend/recon/` — memória de alvos (novo)
+
+#### Checklist de validação v3.0
+
+- [ ] Reiniciar servidor (`start.bat` ou uvicorn reload)
+- [ ] Hard refresh no browser (`Ctrl+Shift+R`)
+- [ ] Enviar mensagem com scan → ver badge `[live]` e linhas aparecendo em tempo real
+- [ ] Provocar erro (comando inválido) → IA tenta corrigir automaticamente
+- [ ] Scan em `scanme.nmap.org` → verificar `backend/recon/scanme.nmap.org.json`
+- [ ] Nova conversa mencionando o mesmo alvo → contexto de recon no prompt (portas salvas)
+
+---
+
 ### v2.1 — UX, modelos e OpenRouter (2026-07-15)
 
 #### Migração para OpenRouter
@@ -819,7 +943,7 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 - Log bruto oculto quando há dashboard; botão **Ver Log Completo**
 - Link **Log #{id}** para `/api/logs/{id}`
 
-**Arquivos:** `frontend/app.js`, `frontend/index.html`, `frontend/styles.css`
+**Arquivos:** `frontend/js/main.js`, `frontend/index.html`, `frontend/styles.css`
 
 #### 4. Profissionalismo — Relatórios Markdown
 

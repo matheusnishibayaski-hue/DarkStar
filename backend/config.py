@@ -8,13 +8,36 @@ load_dotenv(BASE_DIR / ".env")
 
 # OpenRouter — chave em https://openrouter.ai/keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "google/gemini-2.5-flash")
-GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "deepseek/deepseek-chat-v3.2")
+
+# Aliases novos (preferidos) com retrocompatibilidade GEMINI_*
+PRIMARY_MODEL = (
+    os.getenv("OPENROUTER_PRIMARY_MODEL")
+    or os.getenv("GEMINI_MODEL")
+    or "google/gemini-2.5-flash"
+)
+FALLBACK_MODEL = (
+    os.getenv("OPENROUTER_FALLBACK_MODEL")
+    or os.getenv("GEMINI_FALLBACK_MODEL")
+    or "deepseek/deepseek-chat-v3.2"
+)
+GEMINI_MODEL = PRIMARY_MODEL
+GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
+
+# Servidor / segurança local
+UVICORN_HOST = os.getenv("UVICORN_HOST", "127.0.0.1")
+UVICORN_PORT = int(os.getenv("UVICORN_PORT", "8000"))
+CHAT_API_TOKEN = os.getenv("CHAT_API_TOKEN", "").strip()
+_cors_raw = os.getenv(
+    "CORS_ORIGINS",
+    "http://127.0.0.1:8000,http://localhost:8000",
+)
+CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 
 KALI_CONTAINER = os.getenv("KALI_CONTAINER", "kali-tools")
 COMMAND_TIMEOUT = int(os.getenv("COMMAND_TIMEOUT", "180"))
 WIFI_COMMAND_TIMEOUT = int(os.getenv("WIFI_COMMAND_TIMEOUT", "600"))
 MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
+MAX_HEALING_ATTEMPTS = int(os.getenv("MAX_HEALING_ATTEMPTS", "2"))
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
 MAX_AUTONOMOUS_ROUNDS = int(os.getenv("MAX_AUTONOMOUS_ROUNDS", "10"))
 MAX_AUTONOMOUS_TOOLS = int(os.getenv("MAX_AUTONOMOUS_TOOLS", "25"))
@@ -22,6 +45,8 @@ OUTPUT_TOKEN_LIMIT = int(os.getenv("OUTPUT_TOKEN_LIMIT", "3000"))
 SUMMARY_HEAD_LINES = int(os.getenv("SUMMARY_HEAD_LINES", "30"))
 SUMMARY_TAIL_LINES = int(os.getenv("SUMMARY_TAIL_LINES", "15"))
 LOG_DIR = BASE_DIR / "backend" / "logs"
+RECON_DIR = BASE_DIR / "backend" / "recon"
+RECON_TTL_DAYS = int(os.getenv("RECON_TTL_DAYS", "30"))
 
 HOST_WIFI_TOOLS = {"wlan-scan", "wlan-interfaces", "wifi-list"}
 

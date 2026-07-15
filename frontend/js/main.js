@@ -1,99 +1,19 @@
-const STORAGE_KEY = "chat-ia-kali-sessions";
-const MODEL_STORAGE_KEY = "chat-ia-kali-model";
-const API_TOKEN_KEY = "chat-ia-kali-api-token";
-const liveLogStreams = new Map();
-const liveExecBlocks = new Map();
-const HISTORY_LIMIT = 10;
-
-function apiHeaders(extra = {}) {
-  const headers = { ...extra };
-  const token = localStorage.getItem(API_TOKEN_KEY);
-  if (token) headers["X-Chat-Token"] = token;
-  return headers;
-}
-
-function apiFetch(url, options = {}) {
-  const headers = apiHeaders(options.headers || {});
-  if (options.body && !headers["Content-Type"] && !(options.body instanceof FormData)) {
-    headers["Content-Type"] = "application/json";
-  }
-  return fetch(url, { ...options, headers });
-}
-
-async function checkClientConfig() {
-  try {
-    const res = await fetch("/api/client-config");
-    if (!res.ok) return;
-    const cfg = await res.json();
-    if (cfg.authRequired && !localStorage.getItem(API_TOKEN_KEY)) {
-      toast(
-        "API protegida: configure CHAT_API_TOKEN no .env e salve o token no localStorage (chave chat-ia-kali-api-token)",
-        "warn"
-      );
-    }
-  } catch { /* ignore */ }
-}
-
-const QUICK_PROMPTS = [
-  { label: "Scan Nmap", text: "Faça um scan de portas e serviços em scanme.nmap.org" },
-  { label: "Subdomínios", text: "Liste subdomínios de example.com com subfinder" },
-  { label: "Whois", text: "Consulte whois e DNS de google.com" },
-  { label: "Wi-Fi local", text: "Liste redes Wi-Fi visíveis ao redor" },
-];
-
-const QUICK_OBJECTIVES = [
-  "Encontre subdomínios expostos e verifique se há takeover",
-  "Mapeie portas abertas e identifique serviços desatualizados",
-  "Faça reconhecimento web: tecnologias, diretórios e vulnerabilidades",
-];
-
-const HELP_HTML = `
-<section class="help-section">
-  <h3>Navegação</h3>
-  <ul class="help-list">
-    <li><kbd>M</kbd> ou <kbd>☰</kbd> — abrir/fechar menu lateral</li>
-    <li>Sidebar — alternar entre conversas salvas</li>
-    <li><kbd>Esc</kbd> — fechar painéis</li>
-  </ul>
-</section>
-<section class="help-section">
-  <h3>Ações</h3>
-  <ul class="help-list">
-    <li><kbd>Ctrl+N</kbd> — novo chat</li>
-    <li><kbd>Ctrl+T</kbd> — selecionar ferramenta</li>
-    <li><kbd>Ctrl+P</kbd> — modo Auto-Pilot</li>
-    <li><kbd>Ctrl+R</kbd> — gerar relatório</li>
-    <li><kbd>Ctrl+/</kbd> — esta ajuda</li>
-    <li><kbd>Ctrl+K</kbd> — focar no prompt</li>
-  </ul>
-</section>
-<section class="help-section">
-  <h3>Prompt</h3>
-  <ul class="help-list">
-    <li><kbd>Enter</kbd> — enviar mensagem</li>
-    <li><kbd>↑</kbd> / <kbd>↓</kbd> — histórico de comandos da sessão</li>
-  </ul>
-</section>
-<section class="help-section">
-  <h3>Modelo de IA</h3>
-  <ul class="help-list">
-    <li>Seletor no prompt (pill) — escolha Gemini ou DeepSeek</li>
-    <li><strong>Economia</strong> — menos tokens, respostas rápidas</li>
-    <li><strong>Equilibrado</strong> — uso geral do dia a dia</li>
-    <li><strong>Raciocínio</strong> — análises complexas (mais tokens)</li>
-  </ul>
-</section>
-<section class="help-section">
-  <h3>Modos de uso</h3>
-  <ul class="help-list">
-    <li><strong>Chat</strong> — descreva o que precisa; a IA executa ferramentas Kali</li>
-    <li><strong>tool:X</strong> — force uma ferramenta específica (ex: nmap, nuclei)</li>
-    <li><strong>pilot</strong> — informe alvo + objetivo; o agente roda sozinho</li>
-    <li><strong>report</strong> — baixa relatório Markdown da sessão atual</li>
-  </ul>
-</section>
-<p class="help-note">Use apenas em alvos autorizados.</p>
-`;
+import {
+  STORAGE_KEY,
+  MODEL_STORAGE_KEY,
+  HISTORY_LIMIT,
+  QUICK_PROMPTS,
+  QUICK_OBJECTIVES,
+  HELP_HTML,
+} from "./constants.js";
+import { apiFetch, checkClientConfig } from "./api.js";
+import { escapeHtml, buildExecBlock } from "./exec.js";
+import {
+  closeAllLiveStreams,
+  createToolStreamHandlers,
+  consumeChatStream,
+  finalizeLiveExecBlock,
+} from "./stream.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -230,12 +150,6 @@ function closeSidebar() {
 function toggleSidebar() {
   if (sidebar.classList.contains("open")) closeSidebar();
   else openSidebar();
-}
-
-function detectTool(t) {
-  if (t.tool) return t.tool.toLowerCase();
-  const cmd = (t.command || "").trim();
-  return cmd.split(/\s+/)[0]?.split("/").pop()?.toLowerCase() || "";
 }
 
 function setPreferredTool(tool) {
@@ -689,300 +603,11 @@ async function loadTools() {
   return false;
 }
 
-function escapeHtml(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 function line(className, html) {
   const el = document.createElement("div");
   el.className = `term-line ${className || ""}`.trim();
   el.innerHTML = html;
   return el;
-}
-
-function getCombinedOutput(t) {
-  return [t.stdout, t.stderr].filter(Boolean).join("\n");
-}
-
-function parseNmapOutput(text) {
-  const rows = [];
-  const re = /^(\d+\/(tcp|udp))\s+(open|closed|filtered)\s+(\S+)(?:\s+(.*))?$/gim;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    rows.push({
-      port: m[1],
-      state: m[3],
-      service: m[4] || "—",
-      version: (m[5] || "—").trim() || "—",
-    });
-  }
-  return rows;
-}
-
-function parseNucleiOutput(text) {
-  const findings = [];
-  const re = /\[?(critical|high|medium|low|info)\]?[^\n]*/gi;
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const full = m[0].trim();
-    const sev = (m[1] || "info").toLowerCase();
-    if (full.length > 5) findings.push({ severity: sev, text: full });
-  }
-  return findings;
-}
-
-function severityClass(sev) {
-  const s = (sev || "info").toLowerCase();
-  if (s === "critical" || s === "high") return "sev-critical";
-  if (s === "medium") return "sev-medium";
-  return "sev-info";
-}
-
-function buildNmapDashboard(rows) {
-  if (!rows.length) return null;
-  const wrap = document.createElement("div");
-  wrap.className = "dash-panel dash-nmap";
-  wrap.innerHTML = `
-    <div class="dash-title">// nmap — portas detectadas (${rows.length})</div>
-    <table class="dash-table">
-      <thead><tr><th>Porta</th><th>Estado</th><th>Serviço</th><th>Versão</th></tr></thead>
-      <tbody>
-        ${rows.map((r) => `
-          <tr class="${r.state === "open" ? "row-open" : ""}">
-            <td>${escapeHtml(r.port)}</td>
-            <td>${escapeHtml(r.state)}</td>
-            <td>${escapeHtml(r.service)}</td>
-            <td>${escapeHtml(r.version)}</td>
-          </tr>`).join("")}
-      </tbody>
-    </table>
-  `;
-  return wrap;
-}
-
-function buildNucleiDashboard(findings) {
-  if (!findings.length) return null;
-  const wrap = document.createElement("div");
-  wrap.className = "dash-panel dash-nuclei";
-  wrap.innerHTML = `<div class="dash-title">// nuclei — achados (${findings.length})</div>`;
-  for (const f of findings.slice(0, 30)) {
-    const card = document.createElement("div");
-    card.className = `vuln-card ${severityClass(f.severity)}`;
-    card.textContent = f.text;
-    wrap.appendChild(card);
-  }
-  if (findings.length > 30) {
-    const more = document.createElement("div");
-    more.className = "dash-more";
-    more.textContent = `+ ${findings.length - 30} achados adicionais no log completo`;
-    wrap.appendChild(more);
-  }
-  return wrap;
-}
-
-function buildExecBlock(t) {
-  const badgeClass = t.blocked ? "status-blocked" : t.success ? "status-ok" : "status-fail";
-  const badgeText = t.blocked ? "blocked" : t.success ? "ok" : `exit ${t.exit_code}`;
-  const output = getCombinedOutput(t) || "(sem saída)";
-  const tool = detectTool(t);
-
-  const block = document.createElement("div");
-  block.className = "term-exec";
-
-  const header = document.createElement("div");
-  header.className = "term-exec-header";
-  header.innerHTML = `
-    <span class="${badgeClass}">[${badgeText}]</span>
-    <span class="exec-cmd">$ ${escapeHtml(t.command)}</span>
-  `;
-
-  const body = document.createElement("div");
-  body.className = "term-exec-body";
-
-  let hasDashboard = false;
-
-  if (tool === "nmap" || output.match(/\d+\/tcp\s+open/i)) {
-    const rows = parseNmapOutput(output);
-    const dash = buildNmapDashboard(rows);
-    if (dash) { body.appendChild(dash); hasDashboard = true; }
-  }
-
-  if (tool === "nuclei" || output.match(/\[(critical|high|medium)\]/i)) {
-    const findings = parseNucleiOutput(output);
-    const dash = buildNucleiDashboard(findings);
-    if (dash) { body.appendChild(dash); hasDashboard = true; }
-  }
-
-  const rawWrap = document.createElement("div");
-  rawWrap.className = hasDashboard ? "exec-raw hidden" : "exec-raw";
-  rawWrap.textContent = output;
-  body.appendChild(rawWrap);
-
-  const actions = document.createElement("div");
-  actions.className = "exec-actions";
-
-  if (hasDashboard) {
-    const toggleBtn = document.createElement("button");
-    toggleBtn.type = "button";
-    toggleBtn.className = "exec-btn";
-    toggleBtn.textContent = "Ver Log Completo";
-    toggleBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      rawWrap.classList.toggle("hidden");
-      toggleBtn.textContent = rawWrap.classList.contains("hidden") ? "Ver Log Completo" : "Ocultar Log";
-    });
-    actions.appendChild(toggleBtn);
-  }
-
-  if (t.log_file_id) {
-    const logBtn = document.createElement("a");
-    logBtn.className = "exec-btn";
-    logBtn.href = `/api/logs/${t.log_file_id}`;
-    logBtn.target = "_blank";
-    logBtn.rel = "noopener";
-    logBtn.textContent = `Log #${t.log_file_id}`;
-    actions.appendChild(logBtn);
-  }
-
-  body.appendChild(actions);
-  block.appendChild(header);
-  block.appendChild(body);
-
-  header.addEventListener("click", (e) => {
-    if (e.target.closest(".exec-btn")) return;
-    block.classList.toggle("open");
-  });
-
-  if (hasDashboard) block.classList.add("open");
-  return block;
-}
-
-function closeLiveStream(executionId) {
-  const es = liveLogStreams.get(executionId);
-  if (es) {
-    es.close();
-    liveLogStreams.delete(executionId);
-  }
-}
-
-function closeAllLiveStreams() {
-  for (const id of [...liveLogStreams.keys()]) closeLiveStream(id);
-}
-
-function createLiveExecBlock(executionId, command) {
-  const block = buildExecBlock({
-    command,
-    reason: "",
-    success: false,
-    exit_code: -1,
-    blocked: false,
-    stdout: "",
-    stderr: "",
-    log_file_id: executionId,
-    tool: "",
-  });
-  block.classList.add("term-exec-live", "open");
-  block.dataset.execId = executionId;
-
-  const badge = block.querySelector(".term-exec-header span");
-  if (badge) {
-    badge.className = "status-live";
-    badge.textContent = "[live]";
-  }
-
-  const rawWrap = block.querySelector(".exec-raw");
-  if (rawWrap) {
-    rawWrap.classList.remove("hidden");
-    rawWrap.textContent = "";
-    rawWrap.classList.add("exec-live-out");
-  }
-
-  const dashPanels = block.querySelectorAll(".dash-panel");
-  dashPanels.forEach((el) => el.remove());
-
-  const actions = block.querySelector(".exec-actions");
-  if (actions) actions.style.display = "none";
-
-  chatEl.appendChild(block);
-  liveExecBlocks.set(executionId, block);
-  scrollChatToBottom();
-  return block;
-}
-
-function attachLogStream(executionId) {
-  if (liveLogStreams.has(executionId)) return;
-
-  const block = liveExecBlocks.get(executionId);
-  const rawEl = block?.querySelector(".exec-live-out");
-  if (!rawEl) return;
-
-  const token = localStorage.getItem(API_TOKEN_KEY);
-  let streamUrl = `/api/logs/stream/${encodeURIComponent(executionId)}`;
-  if (token) streamUrl += `?token=${encodeURIComponent(token)}`;
-
-  const es = new EventSource(streamUrl);
-  liveLogStreams.set(executionId, es);
-
-  es.addEventListener("line", (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      const prefix = data.stream === "stderr" ? "[stderr] " : "";
-      rawEl.textContent += prefix + data.text + "\n";
-      scrollChatToBottom(false);
-    } catch { /* ignore */ }
-  });
-
-  es.addEventListener("done", () => closeLiveStream(executionId));
-
-  es.onerror = () => closeLiveStream(executionId);
-}
-
-function finalizeLiveExecBlock(exec) {
-  closeLiveStream(exec.log_file_id);
-  const existing = liveExecBlocks.get(exec.log_file_id);
-  if (existing) {
-    const replacement = buildExecBlock(exec);
-    existing.replaceWith(replacement);
-    liveExecBlocks.delete(exec.log_file_id);
-    return;
-  }
-  chatEl.appendChild(buildExecBlock(exec));
-}
-
-async function consumeChatStream(response, handlers) {
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
-
-    for (const part of parts) {
-      if (!part.trim() || part.trim().startsWith(":")) continue;
-      let event = "message";
-      let dataStr = "";
-      for (const line of part.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
-      }
-      if (!dataStr) continue;
-      try {
-        const data = JSON.parse(dataStr);
-        if (event === "tool_start") handlers.onToolStart?.(data);
-        else if (event === "tool_done") handlers.onToolDone?.(data);
-        else if (event === "mission_start") handlers.onMissionStart?.(data);
-        else if (event === "round_start") handlers.onRoundStart?.(data);
-        else if (event === "done") handlers.onDone?.(data);
-        else if (event === "error") handlers.onError?.(data);
-      } catch { /* ignore malformed */ }
-    }
-  }
 }
 
 function scrollChatToBottom(smooth = true) {
@@ -1191,24 +816,16 @@ async function startAutopilot() {
     }
 
     await consumeChatStream(res, {
-      onMissionStart(data) {
-        showAutopilotProgress(`auto-pilot: ${data.target}`);
-      },
-      onRoundStart(data) {
-        showAutopilotProgress(`rodada ${data.round}/${data.max_rounds} · ${data.tools_executed} cmd(s)`);
-      },
-      onToolStart(data) {
-        createLiveExecBlock(data.execution_id, data.command);
-        attachLogStream(data.execution_id);
-        showAutopilotProgress(`executando: ${(data.command || "").split(" ")[0] || "tool"}`);
-      },
-      onToolDone() {
-        showAutopilotProgress("analisando resultado…");
-      },
-      onDone(data) {
+      ...createToolStreamHandlers({
+        chatEl,
+        showTyping: showAutopilotProgress,
+        hideTyping,
+        scrollChatToBottom,
+      }),
+      done(data) {
         finalData = data;
       },
-      onError(data) {
+      error(data) {
         throw new Error(data.detail || "Erro no stream");
       },
     });
@@ -1238,7 +855,7 @@ async function startAutopilot() {
 
     chatEl.appendChild(line("assistant", escapeHtml(data.message)));
     for (const exec of data.tool_executions || []) {
-      finalizeLiveExecBlock(exec);
+      finalizeLiveExecBlock(chatEl, exec);
     }
     scrollChatToBottom();
 
@@ -1340,19 +957,11 @@ async function sendMessage(text) {
     let finalData = null;
 
     await consumeChatStream(res, {
-      onToolStart(data) {
-        createLiveExecBlock(data.execution_id, data.command);
-        attachLogStream(data.execution_id);
-        showTyping(`executando: ${data.command.split(" ")[0] || "tool"}`);
-      },
-      onToolDone() {
-        hideTyping();
-        showTyping("analisando resultado…");
-      },
-      onDone(data) {
+      ...createToolStreamHandlers({ chatEl, showTyping, hideTyping, scrollChatToBottom }),
+      done(data) {
         finalData = data;
       },
-      onError(data) {
+      error(data) {
         throw new Error(data.detail || "Erro no stream");
       },
     });
@@ -1375,7 +984,7 @@ async function sendMessage(text) {
 
     chatEl.appendChild(line("assistant", escapeHtml(finalData.message)));
     for (const exec of finalData.tool_executions || []) {
-      finalizeLiveExecBlock(exec);
+      finalizeLiveExecBlock(chatEl, exec);
     }
     scrollChatToBottom();
   } catch (e) {
@@ -1509,7 +1118,7 @@ renderQuickObjectives();
 
 ensureSession();
 loadModels();
-checkClientConfig();
+checkClientConfig(toast);
 loadTools().then(() => renderToolList()).then(syncToolFromSession);
 renderSessions();
 renderChat();

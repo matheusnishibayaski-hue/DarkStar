@@ -815,6 +815,22 @@ body::after {
 .term-exec-header .status-ok { color: var(--fg); }
 .term-exec-header .status-fail { color: var(--fg-error); }
 .term-exec-header .status-blocked { color: var(--fg-warn); }
+.term-exec-header .status-live { color: var(--fg-info); }
+
+.exec-live-out {
+  min-height: 3rem;
+  max-height: 420px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-left: 2px solid var(--fg-info);
+  padding-left: 0.5rem;
+}
+
+.term-exec-live .term-exec-body {
+  display: block;
+}
+
 
 .term-exec-body {
   display: none;

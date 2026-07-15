@@ -1,8 +1,11 @@
 import json
 import re
+import threading
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable, Generator
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+from queue import Queue
 
 from openai import OpenAI
 
@@ -15,7 +18,15 @@ from backend.config import (
     SYSTEM_PROMPT,
 )
 from backend.models_catalog import resolve_model
+from backend.ai.healing import healing_prompt, should_attempt_healing
 from backend.executor.kali import execute_in_kali
+from backend.executor.logs import new_log_id
+from backend.executor.recon_db import (
+    build_recon_context,
+    extract_recon_from_output,
+    extract_targets,
+    merge_recon_update,
+)
 from backend.executor.result import ExecutionResult, format_result_for_llm
 from backend.executor.summarize import summarize_output
 
@@ -78,6 +89,38 @@ class ChatResponse:
     tool_executions: list[ToolExecution] = field(default_factory=list)
 
 
+from backend.ai.sse import format_sse
+
+EmitFn = Callable[[str, dict], None]
+
+
+def _apply_recon_context(user_message: str, history: list[dict]) -> tuple[str, list[str]]:
+    from backend.executor.recon_db import is_recon_target
+
+    history_text = " ".join(m.get("content", "") for m in history if m.get("role") == "user")
+    targets = [t for t in extract_targets(user_message, history_text) if is_recon_target(t)]
+    context = build_recon_context(targets)
+    if not context:
+        return user_message, targets
+    return f"{context}\n\n{user_message}", targets
+
+
+def _persist_recon(result: ExecutionResult, session_targets: list[str]) -> None:
+    from backend.executor.recon_db import extract_targets, is_recon_target
+
+    if not result.success or result.blocked:
+        return
+    command_targets = [t for t in extract_targets(result.command) if is_recon_target(t)]
+    targets = command_targets or [t for t in session_targets if is_recon_target(t)]
+    if not targets:
+        return
+    patch = extract_recon_from_output(result.stdout, result.stderr, result.tool)
+    if len(patch) <= 2:
+        return
+    for target in targets:
+        merge_recon_update(target, patch)
+
+
 def _apply_preferred_tool(user_message: str, preferred_tool: str | None) -> str:
     if not preferred_tool or preferred_tool == "auto":
         return user_message
@@ -130,11 +173,41 @@ def _result_to_tool_execution(result: ExecutionResult) -> ToolExecution:
     )
 
 
-def _record_execution(command: str, reason: str, executions: list[ToolExecution]) -> str:
-    result = execute_in_kali(command, reason)
+def _record_execution(
+    command: str,
+    reason: str,
+    executions: list[ToolExecution],
+    *,
+    recon_targets: list[str] | None = None,
+    emit: EmitFn | None = None,
+) -> str:
+    execution_id = new_log_id()
+    get_stream_hub().create(execution_id, command or "(comando vazio)")
+    if emit:
+        emit("tool_start", {
+            "execution_id": execution_id,
+            "command": command,
+            "reason": reason,
+        })
+
+    result = execute_in_kali(command, reason, execution_id=execution_id)
     summarized, truncated = summarize_output(result.stdout, result.stderr)
     result.truncated_for_llm = truncated
-    executions.append(_result_to_tool_execution(result))
+    execution = _result_to_tool_execution(result)
+    executions.append(execution)
+    _persist_recon(result, recon_targets or [])
+
+    if emit:
+        emit("tool_done", {
+            "execution_id": execution_id,
+            "command": execution.command,
+            "success": execution.success,
+            "blocked": execution.blocked,
+            "exit_code": execution.exit_code,
+            "log_file_id": execution.log_file_id,
+            "tool": execution.tool,
+        })
+
     return format_result_for_llm(result, output_text=summarized if truncated else None)
 
 
@@ -217,7 +290,7 @@ def generate_report(
         f"# {title}",
         "",
         f"**Data:** {now}  ",
-        f"**Ferramenta:** Chat IA Kali v2.0  ",
+        f"**Ferramenta:** Chat IA Kali v3.0  ",
         f"**Execuções registradas:** {len(tool_executions)}",
         "",
         "---",
@@ -290,6 +363,8 @@ def _run_openrouter(
     user_message: str,
     model: str | None = None,
     fallback_model: str | None = None,
+    recon_targets: list[str] | None = None,
+    emit: EmitFn | None = None,
 ) -> ChatResponse:
     if not OPENROUTER_API_KEY:
         return ChatResponse(
@@ -311,6 +386,7 @@ def _run_openrouter(
     executions: list[ToolExecution] = []
     model_to_use, fallback_to_use = resolve_model(model, fallback_model)
     nudged = False
+    healing_attempts = 0
     final_text = ""
 
     for _ in range(MAX_TOOL_ITERATIONS):
@@ -361,12 +437,26 @@ def _run_openrouter(
                 command = ""
                 reason = "Falha ao decodificar os argumentos fornecidos pela IA."
 
-            result_text = _record_execution(command, reason, executions)
+            result_text = _record_execution(
+                command,
+                reason,
+                executions,
+                recon_targets=recon_targets,
+                emit=emit,
+            )
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
                 "content": result_text,
             })
+
+            last = executions[-1]
+            if should_attempt_healing(last, healing_attempts):
+                healing_attempts += 1
+                messages.append({
+                    "role": "user",
+                    "content": healing_prompt(last),
+                })
 
     messages.append({
         "role": "user",
@@ -398,8 +488,58 @@ def chat(
     preferred_tool: str | None = None,
     model: str | None = None,
     fallback_model: str | None = None,
+    emit: EmitFn | None = None,
 ) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
-    return _run_openrouter(history, user_message, model=model, fallback_model=fallback_model)
+    enriched, targets = _apply_recon_context(user_message, history)
+    return _run_openrouter(
+        history,
+        enriched,
+        model=model,
+        fallback_model=fallback_model,
+        recon_targets=targets,
+        emit=emit,
+    )
+
+
+def chat_stream(
+    history: list[dict],
+    user_message: str,
+    preferred_tool: str | None = None,
+    model: str | None = None,
+    fallback_model: str | None = None,
+) -> Generator[str, None, None]:
+    """Gera eventos SSE durante o processamento do chat."""
+    event_queue: Queue[str | None] = Queue()
+
+    def emit(event: str, data: dict) -> None:
+        event_queue.put(format_sse(event, data))
+
+    def worker() -> None:
+        try:
+            result = chat(
+                history,
+                user_message,
+                preferred_tool=preferred_tool,
+                model=model,
+                fallback_model=fallback_model,
+                emit=emit,
+            )
+            event_queue.put(format_sse("done", {
+                "message": result.message,
+                "tool_executions": [asdict(e) for e in result.tool_executions],
+            }))
+        except Exception as e:
+            event_queue.put(format_sse("error", {"detail": str(e)}))
+        finally:
+            event_queue.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    while True:
+        item = event_queue.get()
+        if item is None:
+            break
+        yield item
 
 
