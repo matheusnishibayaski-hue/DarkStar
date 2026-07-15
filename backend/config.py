@@ -49,7 +49,33 @@ SUMMARY_HEAD_LINES = int(os.getenv("SUMMARY_HEAD_LINES", "30"))
 SUMMARY_TAIL_LINES = int(os.getenv("SUMMARY_TAIL_LINES", "15"))
 LOG_DIR = BASE_DIR / "backend" / "logs"
 RECON_DIR = BASE_DIR / "backend" / "recon"
+_outputs_dir_raw = os.getenv("OUTPUTS_DIR", "").strip()
+OUTPUTS_DIR = (
+    Path(_outputs_dir_raw).expanduser().resolve()
+    if _outputs_dir_raw
+    else BASE_DIR / "backend" / "outputs"
+)
 RECON_TTL_DAYS = int(os.getenv("RECON_TTL_DAYS", "30"))
+
+# Escopo de alvos (vazio = sem restrição). Ex: scanme.nmap.org,10.0.0.5,lab.local
+_allowed_targets_raw = os.getenv("ALLOWED_TARGETS", "").strip()
+
+
+def _normalize_scope_target(value: str) -> str:
+    import re
+
+    v = value.strip().lower()
+    v = re.sub(r"^https?://", "", v)
+    v = v.split("/")[0].split(":")[0].strip(".")
+    v = re.sub(r"[^\w.\-]", "_", v)
+    return v[:128] or "unknown"
+
+
+ALLOWED_TARGETS: frozenset[str] = (
+    frozenset(_normalize_scope_target(t) for t in _allowed_targets_raw.split(",") if t.strip())
+    if _allowed_targets_raw
+    else frozenset()
+)
 
 HOST_WIFI_TOOLS = {"wlan-scan", "wlan-interfaces", "wifi-list"}
 
@@ -126,6 +152,7 @@ REGRAS:
 - Execute via run_kali_tool — nunca só sugira comandos.
 - Escolha a ferramenta adequada; interprete resultados em português.
 - Comandos sem ; | & ou redirecionamentos. Wordlists: /usr/share/seclists
+- Artefatos de saída: salve em /tools/output/ (ex: nmap -oA /tools/output/scan, gobuster -o /tools/output/dirs.txt).
 - Laboratórios públicos (scanme.nmap.org) ok sem confirmação extra."""
 
 AUTONOMOUS_SYSTEM_PROMPT = """Você é um agente autônomo de pentest em MODO AUTO-PILOT.

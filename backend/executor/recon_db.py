@@ -179,3 +179,34 @@ def build_recon_context(targets: list[str]) -> str:
         )
 
     return "\n\n".join(blocks)
+
+
+def list_recon_summaries() -> list[dict[str, Any]]:
+    """Lista alvos com recon persistido (não expirado)."""
+    summaries: list[dict[str, Any]] = []
+    if not RECON_DIR.is_dir():
+        return summaries
+
+    for path in RECON_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if _is_recon_expired(data):
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            continue
+        target = str(data.get("target") or path.stem)
+        summaries.append({
+            "target": target,
+            "updated_at": data.get("updated_at"),
+            "last_tool": data.get("last_tool"),
+            "open_ports_count": len(data.get("open_ports") or []),
+            "cves_count": len(data.get("cves") or []),
+            "vulnerabilities_count": len(data.get("vulnerabilities") or []),
+        })
+
+    summaries.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
+    return summaries

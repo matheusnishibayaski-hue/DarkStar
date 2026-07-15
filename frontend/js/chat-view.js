@@ -1,6 +1,7 @@
 /** Renderização do terminal de chat. */
 
 import { escapeHtml, buildExecBlock } from "./exec.js";
+import { renderMarkdown } from "./markdown.js";
 import { getActiveSession } from "./sessions.js";
 import { renderWelcome } from "./ui.js";
 
@@ -15,6 +16,27 @@ function line(className, html) {
   el.className = `term-line ${className || ""}`.trim();
   el.innerHTML = html;
   return el;
+}
+
+function userMessage(text) {
+  const block = document.createElement("div");
+  block.className = "cmd-line cmd-line--user";
+  block.innerHTML = `<span class="cmd-prompt-inline"><span class="cmd-user">kali@pentest</span><span class="cmd-at">:</span><span class="cmd-path">~</span><span class="cmd-sym">$</span></span> <span class="cmd-echo">${escapeHtml(text)}</span>`;
+  return block;
+}
+
+function assistantMessage(content) {
+  const block = document.createElement("div");
+  block.className = "cmd-line cmd-line--out";
+  const prefix = document.createElement("span");
+  prefix.className = "out-prefix";
+  prefix.textContent = "# ";
+  const body = document.createElement("span");
+  body.className = "md-body";
+  body.innerHTML = renderMarkdown(content);
+  block.appendChild(prefix);
+  block.appendChild(body);
+  return block;
 }
 
 export function scrollChatToBottom(smooth = true) {
@@ -45,9 +67,9 @@ export function renderChat() {
 
   for (const msg of session.messages) {
     if (msg.role === "user") {
-      chatEl.appendChild(line("prompt-line", `<span class="cmd">${escapeHtml(msg.content)}</span>`));
+      chatEl.appendChild(userMessage(msg.content));
     } else {
-      chatEl.appendChild(line("assistant", escapeHtml(msg.content)));
+      chatEl.appendChild(assistantMessage(msg.content));
       for (const t of msg.toolExecutions || []) {
         chatEl.appendChild(buildExecBlock(t));
       }
@@ -57,12 +79,12 @@ export function renderChat() {
 }
 
 export function appendUserLine(text) {
-  ctx.chatEl?.appendChild(line("prompt-line", `<span class="cmd">${escapeHtml(text)}</span>`));
+  ctx.chatEl?.appendChild(userMessage(text));
   scrollChatToBottom();
 }
 
 export function appendAssistantLine(content) {
-  ctx.chatEl?.appendChild(line("assistant", escapeHtml(content)));
+  ctx.chatEl?.appendChild(assistantMessage(content));
   scrollChatToBottom();
 }
 
@@ -73,7 +95,7 @@ export function appendLine(className, content) {
 
 export function showTyping(label = "processando") {
   hideTyping();
-  const el = line("typing-line dim", label);
+  const el = line("typing-line dim", `<span class="cmd-prompt-inline"><span class="cmd-user">kali@pentest</span><span class="cmd-at">:</span><span class="cmd-path">~</span><span class="cmd-sym">$</span></span> <span class="typing-dots">${escapeHtml(label)}</span>`);
   el.id = "typing";
   ctx.chatEl?.appendChild(el);
   scrollChatToBottom();

@@ -11,6 +11,7 @@ from fastapi.responses import Response, StreamingResponse
 from backend.config import CHAT_API_TOKEN, KALI_CONTAINER, TOOL_CATEGORIES, UVICORN_HOST, UVICORN_PORT
 from backend.deps import APP_VERSION
 from backend.executor.logs import read_execution_log
+from backend.executor.recon_db import get_recon_data, list_recon_summaries
 from backend.executor.stream_hub import get_stream_hub
 from backend.models_catalog import get_models_catalog
 from backend.tool_catalog import enrich_categories
@@ -106,6 +107,21 @@ def api_tools():
 @router.get("/models")
 def api_models():
     return get_models_catalog()
+
+
+@router.get("/recon")
+def api_recon_list():
+    return {"targets": list_recon_summaries()}
+
+
+@router.get("/recon/{target}")
+def api_recon_detail(target: str):
+    if not target or len(target) > 128 or ".." in target:
+        raise HTTPException(status_code=400, detail="Alvo inválido.")
+    data = get_recon_data(target)
+    if not data:
+        raise HTTPException(status_code=404, detail="Nenhum recon salvo para este alvo.")
+    return data
 
 
 @router.get("/logs/stream/{execution_id}")

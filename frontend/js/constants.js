@@ -1,6 +1,7 @@
 export const STORAGE_KEY = "chat-ia-kali-sessions";
 export const MODEL_STORAGE_KEY = "chat-ia-kali-model";
 export const API_TOKEN_KEY = "chat-ia-kali-api-token";
+export const SOUND_STORAGE_KEY = "chat-ia-kali-sound";
 export const HISTORY_LIMIT = 10;
 
 export const QUICK_PROMPTS = [
@@ -23,42 +24,65 @@ export const HELP_HTML = `
     <li><kbd>M</kbd> ou <kbd>☰</kbd> — abrir/fechar menu lateral</li>
     <li>Sidebar — alternar entre conversas salvas</li>
     <li><kbd>Esc</kbd> — fechar painéis</li>
+    <li><kbd>snd</kbd> na barra de status — ligar/desligar efeitos sonoros CRT</li>
   </ul>
 </section>
 <section class="help-section">
-  <h3>Ações</h3>
+  <h3>Som</h3>
   <ul class="help-list">
-    <li><kbd>Ctrl+N</kbd> — novo chat</li>
-    <li><kbd>Ctrl+T</kbd> — selecionar ferramenta</li>
-    <li><kbd>Ctrl+P</kbd> — modo Auto-Pilot</li>
-    <li><kbd>Ctrl+R</kbd> — gerar relatório</li>
-    <li><kbd>Ctrl+/</kbd> — esta ajuda</li>
-    <li><kbd>Ctrl+K</kbd> — focar no prompt</li>
+    <li>Bipes sintetizados no navegador — envio, execução, erros e painéis</li>
+    <li>Desligado automaticamente com <em>prefers-reduced-motion</em></li>
+  </ul>
+</section>
+<section class="help-section">
+  <h3>Atalhos principais</h3>
+  <p class="help-note" style="margin-bottom:0.5rem">Use <kbd>Alt</kbd> + tecla — evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega, etc.)</p>
+  <ul class="help-list">
+    <li><kbd>Alt</kbd>+<kbd>T</kbd> — ferramentas</li>
+    <li><kbd>Alt</kbd>+<kbd>P</kbd> — Auto-Pilot</li>
+    <li><kbd>Alt</kbd>+<kbd>F</kbd> — artefatos (/tools/output)</li>
+    <li><kbd>Alt</kbd>+<kbd>I</kbd> — intel (recon + ameaças)</li>
+    <li><kbd>Alt</kbd>+<kbd>C</kbd> — intel · aba threats</li>
+    <li><kbd>Alt</kbd>+<kbd>R</kbd> — relatório</li>
+    <li><kbd>Alt</kbd>+<kbd>N</kbd> — novo chat</li>
+    <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — esta ajuda</li>
+    <li><kbd>Alt</kbd>+<kbd>K</kbd> ou <kbd>Ctrl</kbd>+<kbd>K</kbd> — focar prompt</li>
+  </ul>
+</section>
+<section class="help-section">
+  <h3>Alternativas</h3>
+  <ul class="help-list">
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> — ferramentas</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — Auto-Pilot</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> — relatório (export)</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> — novo chat</li>
+    <li><kbd>?</kbd> — ajuda (fora de campos de texto)</li>
   </ul>
 </section>
 <section class="help-section">
   <h3>Prompt</h3>
   <ul class="help-list">
     <li><kbd>Enter</kbd> — enviar mensagem</li>
-    <li><kbd>↑</kbd> / <kbd>↓</kbd> — histórico de comandos da sessão</li>
+    <li><kbd>↑</kbd> / <kbd>↓</kbd> — histórico da sessão</li>
   </ul>
 </section>
 <section class="help-section">
   <h3>Modelo de IA</h3>
   <ul class="help-list">
-    <li>Seletor no prompt (pill) — escolha Gemini ou DeepSeek</li>
-    <li><strong>Economia</strong> — menos tokens, respostas rápidas</li>
-    <li><strong>Equilibrado</strong> — uso geral do dia a dia</li>
-    <li><strong>Raciocínio</strong> — análises complexas (mais tokens)</li>
+    <li>Pill ao lado do prompt — Gemini ou DeepSeek por tier</li>
+    <li><strong>Economia</strong> — scans rápidos · <strong>Equilibrado</strong> — dia a dia · <strong>Raciocínio</strong> — análises profundas</li>
   </ul>
 </section>
 <section class="help-section">
-  <h3>Modos de uso</h3>
+  <h3>Modos</h3>
   <ul class="help-list">
-    <li><strong>Chat</strong> — descreva o que precisa; a IA executa ferramentas Kali</li>
-    <li><strong>tool:X</strong> — force uma ferramenta específica (ex: nmap, nuclei)</li>
-    <li><strong>pilot</strong> — informe alvo + objetivo; o agente roda sozinho</li>
-    <li><strong>report</strong> — baixa relatório Markdown da sessão atual</li>
+    <li><strong>Chat</strong> — a IA executa ferramentas Kali via linguagem natural</li>
+    <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
+    <li><strong>pilot</strong> — missão autônoma com alvo + objetivo</li>
+    <li><strong>intel</strong> — recon local (tabela expansível) + mapa Kaspersky (<em>Alt+C</em> → threats)</li>
+    <li><strong>files</strong> — baixar artefatos salvos em <code>/tools/output</code></li>
+    <li><strong>report</strong> — relatório Markdown da sessão</li>
+    <li><strong>cancel</strong> — interrompe execução em andamento</li>
   </ul>
 </section>
 <p class="help-note">Use apenas em alvos autorizados.</p>

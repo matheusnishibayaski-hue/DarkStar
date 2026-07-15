@@ -9,3 +9,5 @@ info
 backend/logs/
 backend/recon/
 backend/data/
+backend/outputs/*
+!backend/outputs/.gitkeep

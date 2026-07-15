@@ -48,6 +48,7 @@ function closeModelMenu() {
   const { modelMenu, modelTrigger } = ctx;
   if (modelMenu) modelMenu.hidden = true;
   modelTrigger?.classList.remove("open");
+  modelTrigger?.setAttribute("aria-expanded", "false");
 }
 
 export function closeToolsPanelMenus() {
@@ -61,6 +62,7 @@ export function toggleModelMenu() {
     renderModelMenu();
     modelMenu.hidden = false;
     modelTrigger.classList.add("open");
+    modelTrigger.setAttribute("aria-expanded", "true");
   } else {
     closeModelMenu();
   }
@@ -84,12 +86,25 @@ function saveSelectedModel(model) {
 export function updateModelLabel() {
   const { modelLabel, modelTrigger } = ctx;
   if (!modelLabel || !selectedModel) return;
-  modelLabel.textContent = selectedModel.name || "Flash";
+  const short = (selectedModel.name || "flash").split(" ").pop().toLowerCase();
+  modelLabel.textContent = short;
   if (modelTrigger) {
-    modelTrigger.title = `${selectedModel.name} (${selectedModel.provider || "ia"})`;
+    modelTrigger.title = `${selectedModel.name} · ${selectedModel.tier_label || "model"}`;
     modelTrigger.classList.toggle("model-gemini", selectedModel.provider === "gemini");
     modelTrigger.classList.toggle("model-deepseek", selectedModel.provider === "deepseek");
   }
+}
+
+function resolveTierForModel(modelId, preferredTierId) {
+  if (!modelCatalog?.tiers) return null;
+  if (preferredTierId) {
+    const tier = modelCatalog.tiers.find((t) => t.id === preferredTierId);
+    if (tier?.models.some((m) => m.id === modelId)) return tier;
+  }
+  for (const tier of modelCatalog.tiers) {
+    if (tier.models.some((m) => m.id === modelId)) return tier;
+  }
+  return null;
 }
 
 export function getModelPayload() {
@@ -111,33 +126,40 @@ function renderModelMenu() {
   if (!modelCatalog?.tiers || !modelMenu) return;
   modelMenu.innerHTML = "";
 
-  for (let i = 0; i < modelCatalog.tiers.length; i++) {
-    const tier = modelCatalog.tiers[i];
-    if (i > 0) {
-      const sep = document.createElement("div");
-      sep.className = "model-menu-sep";
-      modelMenu.appendChild(sep);
-    }
+  const head = document.createElement("div");
+  head.className = "model-menu-head";
+  head.innerHTML = `<span class="model-menu-cmd">select</span> <span class="model-menu-arg">--model</span>`;
+  modelMenu.appendChild(head);
 
-    const head = document.createElement("div");
-    head.className = "model-tier-head";
-    head.innerHTML = `
-      <span class="model-tier-label">${escapeHtml(tier.label)}</span>
+  for (const tier of modelCatalog.tiers) {
+    const block = document.createElement("div");
+    block.className = "model-tier";
+
+    const tierHead = document.createElement("div");
+    tierHead.className = "model-tier-head";
+    tierHead.innerHTML = `
+      <span class="model-tier-tag"># ${escapeHtml(tier.label.toLowerCase())}</span>
       <span class="model-tier-desc">${escapeHtml(tier.description || "")}</span>
     `;
-    modelMenu.appendChild(head);
+    block.appendChild(tierHead);
+
+    const grid = document.createElement("div");
+    grid.className = "model-tier-grid";
 
     for (const m of tier.models) {
+      const isActive =
+        selectedModel?.id === m.id &&
+        (selectedModel?.tier_id === tier.id || !selectedModel?.tier_id);
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = `model-option${selectedModel?.id === m.id ? " active" : ""}`;
+      btn.className = `model-option model-option--${m.provider}${isActive ? " active" : ""}`;
+      btn.setAttribute("role", "option");
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
       btn.innerHTML = `
-        <span class="model-check">${selectedModel?.id === m.id ? "✓" : ""}</span>
+        <span class="model-option-marker" aria-hidden="true">${isActive ? ">" : " "}</span>
+        <span class="model-option-provider" aria-hidden="true">${m.provider === "deepseek" ? "DS" : "G"}</span>
         <span class="model-option-body">
-          <span class="model-option-name">
-            <span class="model-provider model-provider-${m.provider}">${m.provider === "deepseek" ? "DS" : "G"}</span>
-            ${escapeHtml(m.name)}
-          </span>
+          <span class="model-option-name">${escapeHtml(m.name)}</span>
           <span class="model-option-desc">${escapeHtml(m.description)}</span>
         </span>
       `;
@@ -146,10 +168,14 @@ function renderModelMenu() {
         name: m.name,
         fallback: m.fallback,
         provider: m.provider,
+        tier_id: tier.id,
         tier_label: tier.label,
       }));
-      modelMenu.appendChild(btn);
+      grid.appendChild(btn);
     }
+
+    block.appendChild(grid);
+    modelMenu.appendChild(block);
   }
 }
 
@@ -160,7 +186,12 @@ export async function loadModels() {
     modelCatalog = await res.json();
     const saved = loadSelectedModel();
     if (saved?.id) {
-      selectedModel = saved;
+      const tier = resolveTierForModel(saved.id, saved.tier_id);
+      selectedModel = {
+        ...saved,
+        tier_id: tier?.id || saved.tier_id,
+        tier_label: tier?.label || saved.tier_label,
+      };
     } else {
       const defaultId = modelCatalog.default_model;
       for (const tier of modelCatalog.tiers) {
@@ -171,6 +202,7 @@ export async function loadModels() {
             name: found.name,
             fallback: found.fallback,
             provider: found.provider,
+            tier_id: tier.id,
             tier_label: tier.label,
           };
           break;

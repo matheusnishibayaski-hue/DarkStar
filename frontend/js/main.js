@@ -46,6 +46,10 @@ import {
 import { initChat, sendMessage, downloadReport, rebuildInputHistoryRef } from "./chat.js";
 import { initAutopilot, startAutopilot } from "./autopilot.js";
 import { initMissionControl, cancelActiveMission } from "./mission.js";
+import { initShortcuts, handleGlobalKeydown } from "./shortcuts.js";
+import { initIntelPanel, openIntelPanel } from "./intel.js";
+import { initFilesPanel, openFilesPanel } from "./files.js";
+import { initAudio, bindSoundButton } from "./audio.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -55,6 +59,8 @@ const btnTools = document.getElementById("btn-tools");
 const btnAutopilot = document.getElementById("btn-autopilot");
 const btnCancelMission = document.getElementById("btn-cancel-mission");
 const btnReport = document.getElementById("btn-report");
+const btnIntel = document.getElementById("btn-intel");
+const btnFiles = document.getElementById("btn-files");
 const btnHelp = document.getElementById("btn-help");
 const btnNew = document.getElementById("btn-new");
 const btnScrollBottom = document.getElementById("btn-scroll-bottom");
@@ -72,6 +78,8 @@ const sidebarHelp = document.getElementById("sidebar-help");
 const overlayTools = document.getElementById("overlay-tools");
 const overlayAutopilot = document.getElementById("overlay-autopilot");
 const overlayHelp = document.getElementById("overlay-help");
+const overlayIntel = document.getElementById("overlay-intel");
+const overlayFiles = document.getElementById("overlay-files");
 const helpContent = document.getElementById("help-content");
 const autopilotTarget = document.getElementById("autopilot-target");
 const autopilotObjective = document.getElementById("autopilot-objective");
@@ -104,6 +112,7 @@ function newChat() {
 }
 
 function handleInputKeydown(e) {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
   if (e.key === "ArrowUp") {
     if (inputHistory.list.length === 0) return;
     e.preventDefault();
@@ -122,35 +131,22 @@ function handleInputKeydown(e) {
   }
 }
 
-function handleGlobalKeydown(e) {
-  const tag = e.target.tagName;
-  const inInput = tag === "INPUT" || tag === "TEXTAREA";
-
-  if (e.key === "Escape") {
+initShortcuts({
+  onEscape: () => {
     closeAllOverlays();
     closeSidebar();
-    return;
-  }
-
-  if (!(e.ctrlKey || e.metaKey)) {
-    if (e.key === "m" || e.key === "M") {
-      if (!inInput) { e.preventDefault(); toggleSidebar(); }
-    }
-    return;
-  }
-
-  const key = e.key.toLowerCase();
-  const shortcuts = {
-    n: () => { e.preventDefault(); newChat(); },
-    t: () => { e.preventDefault(); btnTools?.click(); },
-    p: () => { e.preventDefault(); openOverlay(overlayAutopilot); },
-    r: () => { e.preventDefault(); downloadReport(); },
-    k: () => { e.preventDefault(); input?.focus(); },
-    "/": () => { e.preventDefault(); openOverlay(overlayHelp); },
-  };
-
-  if (shortcuts[key]) shortcuts[key]();
-}
+  },
+  openTools: () => openToolsPanel(),
+  openPilot: () => openOverlay(overlayAutopilot),
+  openHelp: () => openOverlay(overlayHelp),
+  openIntel: () => openIntelPanel("recon"),
+  openThreats: () => openIntelPanel("threats"),
+  openFiles: () => openFilesPanel(),
+  downloadReport: () => downloadReport(),
+  newChat: () => newChat(),
+  focusInput: () => input?.focus(),
+  toggleSidebar: () => toggleSidebar(),
+});
 
 // --- Init modules ---
 initUi({
@@ -162,6 +158,8 @@ initUi({
   overlayTools,
   overlayAutopilot,
   overlayHelp,
+  overlayIntel,
+  overlayFiles,
   autopilotTarget,
   statusBarText,
   healthData: null,
@@ -195,6 +193,35 @@ initAutopilot({
 });
 
 initMissionControl(btnCancelMission);
+
+initIntelPanel({
+  overlayIntel,
+  intelPanel: document.getElementById("intel-panel"),
+  tabRecon: document.getElementById("intel-tab-recon"),
+  tabThreats: document.getElementById("intel-tab-threats"),
+  paneRecon: document.getElementById("intel-pane-recon"),
+  paneThreats: document.getElementById("intel-pane-threats"),
+  reconTableEl: document.getElementById("recon-table"),
+  reconMetaEl: document.getElementById("recon-meta"),
+  reconSearch: document.getElementById("recon-search"),
+  reconSort: document.getElementById("recon-sort"),
+  reconRefresh: document.getElementById("recon-refresh"),
+  threatLegendEl: document.getElementById("threat-legend"),
+  threatFrame: document.getElementById("threat-frame"),
+  threatLoadingEl: document.getElementById("threat-loading"),
+  threatModeLive: document.getElementById("threat-mode-live"),
+  threatModeGlobe: document.getElementById("threat-mode-globe"),
+  threatOpenFull: document.getElementById("threat-open-full"),
+  input,
+});
+
+initFilesPanel({
+  overlayFiles,
+  filesListEl: document.getElementById("files-list"),
+  filesMetaEl: document.getElementById("files-meta"),
+  filesRefreshBtn: document.getElementById("files-refresh"),
+  toast,
+});
 
 initSessions({
   sessionsEl,
@@ -249,6 +276,8 @@ document.addEventListener("click", (e) => {
 });
 
 btnAutopilot?.addEventListener("click", () => openOverlay(overlayAutopilot));
+btnIntel?.addEventListener("click", () => openIntelPanel("recon"));
+btnFiles?.addEventListener("click", () => openFilesPanel());
 btnCancelMission?.addEventListener("click", () => cancelActiveMission(toast));
 btnHelp?.addEventListener("click", () => openOverlay(overlayHelp));
 autopilotStart?.addEventListener("click", startAutopilot);
@@ -266,7 +295,13 @@ document.querySelectorAll(".panel-close").forEach((btn) => {
   });
 });
 
-for (const [overlay, id] of [[overlayTools, "overlay-tools"], [overlayAutopilot, "overlay-autopilot"], [overlayHelp, "overlay-help"]]) {
+for (const [overlay, id] of [
+  [overlayTools, "overlay-tools"],
+  [overlayAutopilot, "overlay-autopilot"],
+  [overlayHelp, "overlay-help"],
+  [overlayIntel, "overlay-intel"],
+  [overlayFiles, "overlay-files"],
+]) {
   overlay?.addEventListener("click", (e) => {
     if (e.target === overlay) closeOverlay(document.getElementById(id));
   });
@@ -280,6 +315,9 @@ form?.addEventListener("submit", (e) => {
 });
 
 // --- Boot ---
+initAudio();
+bindSoundButton(document.getElementById("btn-sound"));
+
 if (helpContent) helpContent.innerHTML = HELP_HTML;
 renderQuickObjectives();
 
@@ -293,6 +331,18 @@ updateSessionTitle();
 rebuildInputHistoryRef();
 refreshHealth();
 setInterval(refreshHealth, 30000);
+
+const statusClock = document.getElementById("status-clock");
+function tickClock() {
+  if (!statusClock) return;
+  const now = new Date();
+  statusClock.textContent = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+input?.addEventListener("focus", () => document.getElementById("cmd-cursor")?.classList.add("hidden"));
+input?.addEventListener("blur", () => document.getElementById("cmd-cursor")?.classList.remove("hidden"));
 
 if (!window.matchMedia("(max-width: 768px)").matches) {
   sidebar?.classList.add("open");

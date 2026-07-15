@@ -71,6 +71,69 @@ class TestReconTtl(unittest.TestCase):
                 self.assertEqual(loaded, {})
                 self.assertFalse(path.is_file())
 
+    def test_recon_api_list_and_detail(self):
+        import backend.config as cfg
+        import backend.executor.recon_db as recon_db
+
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(cfg, "RECON_DIR", Path(tmp)), patch.object(
+                recon_db, "RECON_DIR", Path(tmp)
+            ):
+                recon_db.save_recon_data(
+                    "lab.test",
+                    "open_ports",
+                    ["443/tcp open https"],
+                )
+                from backend.main import app
+
+                client = TestClient(app)
+                res = client.get("/api/recon")
+                self.assertEqual(res.status_code, 200)
+                targets = res.json()["targets"]
+                self.assertEqual(len(targets), 1)
+                self.assertEqual(targets[0]["target"], "lab.test")
+
+                res = client.get("/api/recon/lab.test")
+                self.assertEqual(res.status_code, 200)
+                self.assertIn("open_ports", res.json())
+
+                res = client.get("/api/recon/unknown.target")
+                self.assertEqual(res.status_code, 404)
+
+
+class TestFilesApi(unittest.TestCase):
+    def test_files_api_list_and_download(self):
+        import backend.config as cfg
+        import backend.executor.files_store as files_store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "scan.xml").write_text("<nmaprun></nmaprun>", encoding="utf-8")
+            (root / "capture.pcap").write_bytes(b"pcap")
+            with patch.object(cfg, "OUTPUTS_DIR", root), patch.object(
+                files_store, "OUTPUTS_DIR", root
+            ):
+                from backend.main import app
+
+                client = TestClient(app)
+                res = client.get("/api/files")
+                self.assertEqual(res.status_code, 200)
+                data = res.json()
+                self.assertEqual(data["root"], "/tools/output")
+                names = {f["name"] for f in data["files"]}
+                self.assertIn("scan.xml", names)
+                self.assertIn("capture.pcap", names)
+
+                res = client.get("/api/files/scan.xml")
+                self.assertEqual(res.status_code, 200)
+                self.assertIn(b"nmaprun", res.content)
+
+                res = client.get("/api/files/../scan.xml")
+                self.assertIn(res.status_code, (400, 404))
+
+                res = client.get("/api/files/missing.txt")
+                self.assertEqual(res.status_code, 404)
+
 
 class TestStreamHub(unittest.TestCase):
     def test_push_and_subscribe(self):

@@ -87,9 +87,9 @@ export function updateSessionTitle() {
   const session = getActiveSession();
   const title = session ? sessionTitle(session) : "kali@ai";
   if (ctx.sessionTitleEl) {
-    ctx.sessionTitleEl.textContent = title;
+    ctx.sessionTitleEl.textContent = `kali@pentest: ~/${title}`;
   }
-  document.title = `${title} — kali@ai`;
+  document.title = `${title} — kali@pentest`;
 }
 
 export function deleteSession(id, e) {

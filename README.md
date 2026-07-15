@@ -51,7 +51,7 @@ start.bat servidor          # ou: ./start.sh servidor
 
 **Recomendado:** defina `CHAT_API_TOKEN` no `.env` para proteger a API local.
 
-**Testes:** `python -m unittest discover -s tests -v` (29 testes, sem Docker/OpenRouter)
+**Testes:** `python -m unittest discover -s tests -v` (34 testes, sem Docker/OpenRouter)
 
 ---
 
@@ -62,9 +62,10 @@ Release **1.0.0** encerra o ciclo como **ferramenta local single-user**. Evoluç
 | Incluído | Excluído (por enquanto) |
 |----------|-------------------------|
 | Chat + Auto-Pilot + relatórios Markdown | Multi-usuário, RBAC, dashboard consultoria |
-| Execução Kali Docker, whitelist, cancel | Mitigação automática, SIEM, SOC |
+| Execução Kali Docker, whitelist, cancel, **scope lock** | Mitigação automática, SIEM, SOC |
 | Auth sessão, rate limit, bind `127.0.0.1` | ML customizado, multi-agentes paralelos |
 | Windows (`start.bat`) e Linux/macOS (`start.sh`) | Labs GNS3 / EVE-NG / VMs dinâmicas |
+| **Intel** (recon + ameaças), **file manager**, UI CRT | — |
 
 ---
 
@@ -72,18 +73,22 @@ Release **1.0.0** encerra o ciclo como **ferramenta local single-user**. Evoluç
 
 | Área | Detalhe |
 |------|---------|
-| **Chat** | Terminal web (tema fosforescente), sidebar de conversas (`localStorage`), histórico ↑↓, toasts, barra de status |
+| **Chat** | Terminal CRT (`kali@pentest:~$`), Markdown nas respostas, sidebar de conversas, histórico ↑↓, toasts, barra de status |
 | **Ferramentas** | 180+ binários na whitelist; painel com categorias, busca e exemplos; modo `auto` ou ferramenta fixa |
 | **Execução** | Vectorizada (`docker exec bin arg1 arg2…`, sem shell); flags não-interativas; timeout configurável |
 | **Streaming** | Logs stdout/stderr ao vivo via SSE; blocos `[live]` durante execução |
 | **Dashboards** | Parser Nmap (tabela portas) e Nuclei/vulns (cards por severidade) |
 | **Smart Healing** | Até `MAX_HEALING_ATTEMPTS` retentativas automáticas após falha de comando |
 | **Recon DB** | Memória local por alvo (`backend/recon/`), TTL configurável, contexto injetado em chats futuros |
+| **Intel** | Painel `/sys/intel`: aba **recon** (tabela expansível, busca, ordenação) + aba **threats** (mapa Kaspersky) |
+| **File manager** | Artefatos em `/tools/output` (volume Docker); listar e baixar via UI e `GET /api/files` |
 | **Auto-Pilot** | Alvo + objetivo → loop autônomo de ferramentas + relatório `.md` |
 | **Cancel** | Botão **cancel** interrompe chat stream e Auto-Pilot; mata processo Docker ativo |
 | **Relatórios** | Botão **report** ou fim do Auto-Pilot → Markdown estruturado |
-| **Modelos** | Tiers Economia / Equilibrado / Raciocínio; Gemini ↔ DeepSeek; fallback em 429 |
-| **Segurança** | Sessão HttpOnly, rate limit, CORS localhost, optional `CHAT_API_TOKEN` |
+| **Modelos** | Tiers Economia / Equilibrado / Raciocínio; seletor CRT `llm:`; Gemini ↔ DeepSeek; fallback em 429 |
+| **Sons CRT** | Bipes sintetizados (Web Audio API); toggle `snd:on`/`snd:off` na status bar |
+| **Segurança** | Sessão HttpOnly, rate limit, CORS localhost, `CHAT_API_TOKEN`, **`ALLOWED_TARGETS`** (scope lock) |
+| **Health** | Banner dismissível quando Docker/Kali offline; pills `docker:` / `kali:` na status bar |
 
 ---
 
@@ -92,13 +97,14 @@ Release **1.0.0** encerra o ciclo como **ferramenta local single-user**. Evoluç
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Frontend (frontend/)                                       │
-│  index.html · styles.css · js/main.js + 12 módulos ES6      │
+│  index.html · styles.css · js/main.js + módulos ES6        │
+│  (chat, intel, files, audio, threatmap, markdown, …)       │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / SSE
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Backend FastAPI (backend/main.py → routes/)                │
-│  auth · system · chat · autonomous                          │
+│  auth · system · chat · autonomous · files                │
 │  middleware: rate limit + API token guard                   │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
@@ -107,7 +113,7 @@ Release **1.0.0** encerra o ciclo como **ferramenta local single-user**. Evoluç
 │  IA (backend/ai/)        │  │  Executor (backend/executor/)│
 │  agent · autopilot       │  │  kali · logs · summarize     │
 │  healing · sse           │  │  recon_db · stream_hub       │
-│  OpenRouter + tools      │  │  wifi_scan (host Windows)    │
+│  OpenRouter + tools      │  │  files_store · wifi_scan     │
 └──────────────────────────┘  └──────────────┬──────────────┘
                                              │ docker exec
                                              ▼
@@ -136,17 +142,17 @@ Chat IA Kali/
 │   ├── main.py              # Entry FastAPI (~60 linhas)
 │   ├── config.py            # .env, whitelist, prompts
 │   ├── schemas.py · deps.py · middleware.py
-│   ├── routes/              # auth, system, chat, autonomous
-│   ├── security/            # sessions, rate_limit, missions
+│   ├── routes/              # auth, system, chat, autonomous, files
+│   ├── security/            # sessions, rate_limit, missions, scope
 │   ├── ai/                  # agent, autopilot, healing, sse
-│   ├── executor/            # kali, logs, summarize, recon_db, …
+│   ├── executor/            # kali, logs, summarize, recon_db, files_store, …
 │   ├── data/                # sessões (gitignored)
-│   └── logs/ · recon/       # gitignored
+│   └── logs/ · recon/ · outputs/   # gitignored (outputs = volume Kali)
 ├── frontend/
 │   ├── index.html · styles.css
-│   └── js/                  # main, chat, autopilot, mission, ui, …
-├── docker/                  # Dockerfile, compose, scripts Wi-Fi
-├── tests/                   # 29 testes + auth_patch helper
+│   └── js/                  # main, chat, intel, files, audio, markdown, …
+├── docker/                  # Dockerfile, compose (+ volume outputs)
+├── tests/                   # 34 testes + auth_patch helper
 ├── scripts/docker-check.ps1 # Docker com timeout (Windows)
 ├── start.bat · start.sh
 ├── requirements.txt · requirements-lock.txt
@@ -218,6 +224,8 @@ Copie `.env.example` → `.env`. Variáveis principais:
 | `MAX_HISTORY_MESSAGES` | `10` | Mensagens enviadas à IA |
 | `OUTPUT_TOKEN_LIMIT` | `3000` | Limite antes de resumir output |
 | `RECON_TTL_DAYS` | `30` | Expiração cache recon |
+| `ALLOWED_TARGETS` | vazio | Scope lock: lista de alvos permitidos (vazio = sem restrição) |
+| `OUTPUTS_DIR` | `backend/outputs` | Pasta host dos artefatos (montada em `/tools/output` no Kali) |
 | `SESSION_TTL_HOURS` | `24` | TTL cookie de sessão |
 | `RATE_LIMIT_REQUESTS` | `30` | Requisições por janela |
 | `RATE_LIMIT_WINDOW_SEC` | `60` | Janela rate limit |
@@ -228,31 +236,63 @@ Copie `.env.example` → `.env`. Variáveis principais:
 
 ## Interface
 
-### Layout
+### Layout (tema CRT)
+
+Interface estilo terminal fosforescente (`kali@pentest:~$`), scanlines, boot sequence na sessão nova e relógio na status bar.
 
 | Área | Conteúdo |
 |------|----------|
 | Sidebar | Conversas, novo chat, ajuda |
-| Barra superior | `tools` · `pilot` · `cancel` · `report` · `?` · `+` |
-| Terminal | Mensagens, execuções, dashboards |
-| Prompt | Entrada + pill de modelo |
-| Status bar | Docker, Kali, ferramenta, modelo, contadores |
+| Barra superior | `tools` · `pilot` · `cancel` · **`intel`** · **`files`** · `report` · `?` · `+` |
+| Terminal | Mensagens (Markdown), execuções `[live]`, dashboards |
+| Prompt | Entrada + seletor de modelo `llm:` (tiers Economia / Equilibrado / Raciocínio) |
+| Status bar | `docker:` · `kali:` · relógio · status · **`snd:on`/`snd:off`** |
+| Health banner | Aviso dismissível quando Docker ou container Kali estão offline |
+
+### Painel Intel (`intel` · `Alt+I`)
+
+Painel unificado **`/sys/intel`** com duas abas:
+
+| Aba | Função |
+|-----|--------|
+| **recon** | Tabela retro de alvos em cache (`GET /api/recon`). Clique na linha → card expansível com portas, CVEs e achados. Busca, ordenação, **usar no prompt** e **re-scan**. |
+| **threats** (`Alt+C`) | Mapa global de ciberameaças ([Kaspersky Cybermap](https://cybermap.kaspersky.com/pt)) embutido. Modos **live** (legenda + mapa) e **globe** (mapa expandido). Botão ↗ abre o mapa completo. |
+
+### Painel Files (`files` · `Alt+F`)
+
+Lista artefatos gerados no container em **`/tools/output`** (relatórios, `.pcap`, scans `-oA`, etc.). Clique na linha para download. Volume Docker: `backend/outputs` ↔ `/tools/output`.
+
+Peça à IA para salvar saídas com caminho explícito, por exemplo:
+
+```text
+nmap -oA /tools/output/scanme scanme.nmap.org
+```
+
+### Sons CRT (`snd:on` / `snd:off`)
+
+Efeitos sintetizados via **Web Audio API** (sem arquivos `.mp3`). Feedback em envio de mensagem, fim de execução (`[ok]` / `[exit N]` / `[blocked]`), toasts e abertura de painéis. Desligado com `prefers-reduced-motion` ou pelo botão na status bar. Preferência em `localStorage` (`chat-ia-kali-sound`).
 
 ### Atalhos
 
 | Atalho | Ação |
 |--------|------|
+| `Alt+T` | Ferramentas |
+| `Alt+P` | Auto-Pilot |
+| `Alt+I` | Intel (aba recon) |
+| `Alt+C` | Intel (aba threats) |
+| `Alt+F` | Artefatos (`/tools/output`) |
+| `Alt+R` | Relatório |
+| `Alt+N` | Novo chat |
+| `Alt+H` / `F1` | Ajuda |
+| `Alt+K` / `Ctrl+K` | Focar prompt |
 | `M` | Sidebar |
 | `Esc` | Fechar painéis |
-| `Ctrl+K` | Focar prompt |
 | `↑` / `↓` | Histórico da sessão |
-| `Ctrl+T` | Ferramentas |
-| `Ctrl+P` | Auto-Pilot |
-| `Ctrl+R` | Relatório |
-| `Ctrl+N` | Novo chat |
-| `Ctrl+/` | Ajuda |
+| `snd` (status bar) | Ligar/desligar sons CRT |
 
-Persistência no navegador: `chat-ia-kali-sessions` (conversas), `chat-ia-kali-model` (modelo ativo).
+Alternativas: `Ctrl+Shift+T/P/E/N`. Usar `Alt+*` evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega).
+
+Persistência no navegador: `chat-ia-kali-sessions` (conversas), `chat-ia-kali-model` (modelo ativo), `chat-ia-kali-sound` (sons).
 
 ---
 
@@ -272,7 +312,7 @@ Durante chat ou Auto-Pilot, o botão **cancel** envia `AbortController` no clien
 
 ### Auto-Pilot
 
-1. `Ctrl+P` → informe **alvo** e **objetivo**
+1. `Alt+P` → informe **alvo** e **objetivo**
 2. Agente roda loop (`autopilot.py`) até objetivo, limite de rodadas ou cancel
 3. Relatório Markdown baixado automaticamente ao concluir
 
@@ -330,6 +370,7 @@ Arquivo central: `backend/executor/kali.py`.
 | Execução vectorizada | `docker exec kali-tools nmap -sV alvo` — sem `bash -c` |
 | Whitelist | Binário deve estar em `ALLOWED_TOOLS` (`config.py`) |
 | Path traversal | `..` bloqueado nos argumentos |
+| **Scope lock** | Com `ALLOWED_TARGETS` no `.env`, comandos só rodam se o alvo estiver na lista (`backend/security/scope.py`) |
 | Tamanho | Comando ≤ 500 caracteres |
 | stdin | `DEVNULL` em todas execuções Docker |
 | Flags auto | `--batch` (sqlmap), `-y` (apt), `-I` (hydra), etc. |
@@ -351,7 +392,7 @@ Diagnóstico container: `docker exec kali-tools wifi-status`
 cd docker && docker compose up -d --build
 ```
 
-Imagem Debian Bookworm slim: APT + binários Go + repos Git + pip (Impacket, nxc, nuclei templates, SecLists). Compose: `privileged`, `network_mode: host`, caps `NET_ADMIN`/`NET_RAW`, USB `/dev/bus/usb`.
+Imagem Debian Bookworm slim: APT + binários Go + repos Git + pip (Impacket, nxc, nuclei templates, SecLists). Compose: `privileged`, `network_mode: host`, caps `NET_ADMIN`/`NET_RAW`, USB `/dev/bus/usb`, volume **`../backend/outputs:/tools/output`** para artefatos persistentes.
 
 Categorias na UI: Rede, OSINT, Web, SSL, Senhas, AD, Wi-Fi, Vuln, Forense, Automação, Utilitários.
 
@@ -363,8 +404,9 @@ Categorias na UI: Rede, OSINT, Web, SSL, Senhas, AD, Wi-Fi, Vuln, Forense, Autom
 |---------|----------|------------|
 | `backend/logs/{id}.log` | Output completo de cada execução | Não |
 | `backend/recon/{alvo}.json` | Portas, CVEs, achados por alvo | Não |
+| `backend/outputs/` | Artefatos de ferramentas (`/tools/output` no Kali) | Não |
 | `backend/data/sessions.json` | Sessões auth HttpOnly | Não |
-| `localStorage` (browser) | Conversas e modelo | N/A |
+| `localStorage` (browser) | Conversas, modelo e preferência de som | N/A |
 
 Recon: extraído após execuções bem-sucedidas; injetado no prompt quando o usuário menciona o mesmo alvo. Entradas expiradas removidas por `RECON_TTL_DAYS`.
 
@@ -382,6 +424,10 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | GET | `/api/client-config` | `authRequired`, host, port |
 | GET | `/api/tools` | Categorias + metadados UI |
 | GET | `/api/models` | Tiers Gemini/DeepSeek |
+| GET | `/api/recon` | Lista alvos com recon em cache |
+| GET | `/api/recon/{target}` | Detalhe recon (portas, CVEs, achados) |
+| GET | `/api/files` | Lista artefatos em `OUTPUTS_DIR` |
+| GET | `/api/files/{path}` | Download de artefato (path validado, anti-traversal) |
 | GET | `/api/logs/{id}` | Log completo (text/plain) |
 | GET | `/api/logs/stream/{id}` | SSE linha a linha |
 | GET | `/api/auth/session` | Estado da sessão |
@@ -443,7 +489,10 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | Kali off | `cd docker && docker compose up -d --build`; ver `/api/health` |
 | IA não responde | Verificar `OPENROUTER_API_KEY`; tier Economia; saldo OpenRouter |
 | `[blocked]` | Ferramenta fora da whitelist ou `..` nos args |
-| CSS/JS antigo | Hard refresh `Ctrl+Shift+R` |
+| CSS/JS antigo | Hard refresh `Ctrl+Shift+R` (cache-bust em `?v=` nos assets) |
+| Arquivos vazios em **files** | Recrie o container após alterar `docker-compose.yml` (`docker compose up -d --build`) |
+| Mapa Kaspersky sem interação | Use aba **threats** · modo **globe**; arraste o globo; ↗ para mapa completo |
+| Sem som | Clique na página uma vez (política do browser); verifique `snd:on` |
 | Wi-Fi container vazio | Dongle USB; `docker exec kali-tools wifi-status` |
 | Build Docker lenta | Normal na 1ª vez; cache nas seguintes |
 | 401 nas APIs | Login com `CHAT_API_TOKEN` ou header `X-Chat-Token` |
@@ -453,7 +502,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 
 ## Testes e validação
 
-### Automatizados (29 testes)
+### Automatizados (34 testes)
 
 ```bash
 python -m unittest discover -s tests -v
@@ -461,8 +510,8 @@ python -m unittest discover -s tests -v
 
 | Arquivo | Cobertura |
 |---------|-----------|
-| `test_core.py` | Whitelist, recon, healing |
-| `test_integration.py` | Health, auth, recon TTL, stream hub |
+| `test_core.py` | Whitelist, recon, healing, **scope lock** |
+| `test_integration.py` | Health, auth, recon TTL, stream hub, **files API** |
 | `test_sse.py` | Chat/autonomous stream, cancel SSE |
 | `test_security.py` | Sessão, rate limit, persistência disco |
 | `test_kali_mock.py` | Cancel Docker (subprocess mock) |
@@ -479,7 +528,7 @@ CI: `.github/workflows/tests.yml` em push/PR para `main`/`master` com `requireme
 
 **Segurança:** `CHAT_API_TOKEN` · login · sessão sobrevive restart
 
-**UI:** hard refresh · sidebar · status bar Docker/Kali
+**UI:** hard refresh · sidebar · status bar Docker/Kali · **intel** · **files** · sons CRT
 
 ---
 
@@ -489,18 +538,32 @@ CI: `.github/workflows/tests.yml` em push/PR para `main`/`master` com `requireme
 |-------|-------|
 | Release estável | **1.0.0** |
 | API | `/api/health` → `"version": "1.0.0"` |
-| Testes | 29 |
+| Testes | 34 |
 
 ```bash
 git tag -a v1.0.0 -m "Chat IA Kali 1.0.0"
 git push origin main --tags
 ```
 
-**Não versionar:** `.env`, `venv/`, `backend/data/`, `backend/logs/`, `backend/recon/`
+**Não versionar:** `.env`, `venv/`, `backend/data/`, `backend/logs/`, `backend/recon/`, `backend/outputs/*`
 
 ---
 
 ## Changelog
+
+### Pós-1.0.0 — UI CRT e painéis (2026-07)
+
+Melhorias de interface e operação local (ainda sobre base **1.0.0**):
+
+| Área | Adição |
+|------|--------|
+| **Layout** | Tema terminal CRT (`kali@pentest`), boot sequence, scanlines, prompt estilo shell |
+| **UX** | Markdown nas respostas; banner health Docker/Kali; seletor de modelos `llm:` com tiers |
+| **Intel** | Painel `/sys/intel`: recon (tabela expansível, busca, ordenação) + threats (Kaspersky Cybermap) |
+| **Files** | File manager `/tools/output`, API `GET /api/files`, volume Docker `backend/outputs` |
+| **Áudio** | Sons CRT via Web Audio API (`audio.js`), toggle `snd:on`/`snd:off` |
+| **Segurança** | Scope lock `ALLOWED_TARGETS` no `.env` |
+| **Testes** | +5 (recon API, files API, scope lock) → **34** total |
 
 ### 1.0.0 — Release estável (2026-07-15)
 

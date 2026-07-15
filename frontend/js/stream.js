@@ -1,5 +1,6 @@
 import { consumeSseStream, logStreamUrl } from "./api.js";
 import { buildExecBlock } from "./exec.js";
+import { playSound } from "./audio.js";
 
 const liveLogStreams = new Map();
 const liveExecBlocks = new Map();
@@ -83,9 +84,12 @@ export function finalizeLiveExecBlock(chatEl, exec) {
   if (existing) {
     existing.replaceWith(buildExecBlock(exec));
     liveExecBlocks.delete(exec.log_file_id);
-    return;
+  } else {
+    chatEl.appendChild(buildExecBlock(exec));
   }
-  chatEl.appendChild(buildExecBlock(exec));
+  if (exec.blocked) playSound("exec_blocked");
+  else if (exec.success) playSound("exec_ok");
+  else playSound("exec_fail");
 }
 
 /** Handlers SSE reutilizáveis para chat e auto-pilot. */

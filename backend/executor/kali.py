@@ -19,6 +19,7 @@ from backend.executor.result import ExecutionResult
 from backend.executor.stream_hub import get_stream_hub
 from backend.executor.wifi_scan import execute_host_wifi
 from backend.security.missions import get_mission_registry
+from backend.security.scope import validate_command_scope
 
 NON_INTERACTIVE_FLAGS: dict[str, list[str]] = {
     "sqlmap": ["--batch"],
@@ -252,6 +253,28 @@ def execute_kali_command_stream(
             log_file_id=log_id,
         )
         for line in _stream_text_lines(execution_id, "stderr", error):
+            yield line
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+        return
+
+    scope_ok, scope_error = validate_command_scope(args)
+    if not scope_ok:
+        result = ExecutionResult(
+            command=command_display,
+            reason=reason,
+            stdout="",
+            stderr=scope_error,
+            exit_code=-1,
+            success=False,
+            blocked=True,
+            block_reason=scope_error,
+            tool=binary,
+            log_file_id=log_id,
+        )
+        for line in _stream_text_lines(execution_id, "stderr", scope_error):
             yield line
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False, blocked=True)

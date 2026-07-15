@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from backend.config import CORS_ORIGINS
 from backend.deps import APP_VERSION
 from backend.middleware import api_token_guard, rate_limit_guard
-from backend.routes import auth, autonomous, chat, system
+from backend.routes import auth, autonomous, chat, files, system
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -29,6 +29,7 @@ app.middleware("http")(rate_limit_guard)
 app.middleware("http")(api_token_guard)
 
 app.include_router(system.router)
+app.include_router(files.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(autonomous.router)

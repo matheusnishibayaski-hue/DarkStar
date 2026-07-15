@@ -32,6 +32,39 @@ class TestKaliValidation(unittest.TestCase):
         self.assertTrue(ok)
 
 
+class TestScopeLock(unittest.TestCase):
+    def test_blocks_out_of_scope_command(self):
+        import backend.config as cfg
+        from backend.security import scope as scope_mod
+
+        with unittest.mock.patch.object(cfg, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+            with unittest.mock.patch.object(scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+                ok, msg = scope_mod.validate_command_scope(["nmap", "-sV", "evil.com"])
+                self.assertFalse(ok)
+                self.assertIn("ALLOWED_TARGETS", msg)
+
+    def test_allows_in_scope_command(self):
+        import backend.config as cfg
+        from backend.security import scope as scope_mod
+
+        with unittest.mock.patch.object(cfg, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+            with unittest.mock.patch.object(scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+                ok, msg = scope_mod.validate_command_scope(["nmap", "-sV", "scanme.nmap.org"])
+                self.assertTrue(ok)
+                self.assertEqual(msg, "")
+
+    def test_autonomous_target_validation(self):
+        import backend.config as cfg
+        from backend.security import scope as scope_mod
+
+        with unittest.mock.patch.object(cfg, "ALLOWED_TARGETS", frozenset({"lab.test"})):
+            with unittest.mock.patch.object(scope_mod, "ALLOWED_TARGETS", frozenset({"lab.test"})):
+                ok, _ = scope_mod.validate_autonomous_target("lab.test")
+                self.assertTrue(ok)
+                ok, msg = scope_mod.validate_autonomous_target("other.test")
+                self.assertFalse(ok)
+
+
 class TestReconDb(unittest.TestCase):
     def test_normalize_domain(self):
         self.assertEqual(normalize_target("https://ScanMe.Nmap.org/path"), "scanme.nmap.org")

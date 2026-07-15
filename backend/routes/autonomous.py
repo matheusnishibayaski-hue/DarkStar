@@ -9,12 +9,21 @@ from backend.ai.autopilot import run_autonomous, run_autonomous_stream
 from backend.ai.sse import format_sse
 from backend.deps import tool_execution_response
 from backend.schemas import AutonomousRequest, AutonomousResponseModel
+from backend.security.scope import validate_autonomous_target
 
 router = APIRouter(prefix="/api", tags=["autonomous"])
 
 
+def _ensure_scope(target: str) -> None:
+    ok, err = validate_autonomous_target(target)
+    if not ok:
+        raise HTTPException(status_code=403, detail=err)
+
+
 @router.post("/autonomous/stream")
 def api_autonomous_stream(req: AutonomousRequest):
+    _ensure_scope(req.target)
+
     def event_generator():
         try:
             yield from run_autonomous_stream(
@@ -40,6 +49,7 @@ def api_autonomous_stream(req: AutonomousRequest):
 
 @router.post("/autonomous", response_model=AutonomousResponseModel)
 def api_autonomous(req: AutonomousRequest):
+    _ensure_scope(req.target)
     try:
         result = run_autonomous(
             req.target,

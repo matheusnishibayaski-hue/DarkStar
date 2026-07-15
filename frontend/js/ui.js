@@ -1,9 +1,11 @@
 /** UI compartilhada: toasts, sidebar, overlays, status, health. */
 
 import { QUICK_PROMPTS } from "./constants.js";
-import { selectedModel, getPreferredTool, openToolsPanel } from "./tools-panel.js";
+import { selectedModel, getPreferredTool } from "./tools-panel.js";
 import { collectSessionExecutions, getActiveSession } from "./sessions.js";
 import { apiFetch } from "./api.js";
+import { escapeHtml } from "./exec.js";
+import { playSound } from "./audio.js";
 
 let ctx = {};
 
@@ -14,6 +16,9 @@ export function initUi(context) {
 export function toast(msg, type = "info", ms = 4000) {
   const { toastContainer } = ctx;
   if (!toastContainer) return;
+  if (type === "error") playSound("error");
+  else if (type === "warn") playSound("warn");
+  else if (type === "success") playSound("success");
   const el = document.createElement("div");
   el.className = `toast toast-${type}`;
   el.textContent = msg;
@@ -53,36 +58,61 @@ export function openOverlay(overlay) {
   closeSidebar();
   if (!overlay) return;
   overlay.hidden = false;
+  requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
+  document.body.classList.add("has-overlay");
+  playSound("panel");
   if (overlay === ctx.overlayTools) ctx.toolSearch?.focus();
   if (overlay === ctx.overlayAutopilot) ctx.autopilotTarget?.focus();
 }
 
 export function closeOverlay(overlay) {
   if (!overlay) return;
+  overlay.classList.remove("overlay-visible");
   overlay.hidden = true;
+  if (!document.querySelector(".overlay:not([hidden])")) {
+    document.body.classList.remove("has-overlay");
+  }
   ctx.input?.focus();
 }
 
 export function closeAllOverlays(closeToolsPanelMenus) {
-  closeOverlay(ctx.overlayTools);
-  closeOverlay(ctx.overlayAutopilot);
-  closeOverlay(ctx.overlayHelp);
+  for (const ov of [ctx.overlayTools, ctx.overlayAutopilot, ctx.overlayHelp, ctx.overlayIntel, ctx.overlayFiles]) {
+    if (ov) {
+      ov.classList.remove("overlay-visible");
+      ov.hidden = true;
+    }
+  }
+  document.body.classList.remove("has-overlay");
   closeToolsPanelMenus?.();
+  ctx.input?.focus();
 }
 
 export function updateStatusBar({ loading }) {
   const { statusBarText, healthData } = ctx;
   if (!statusBarText) return;
 
+  const dockerTag = document.getElementById("status-pill-docker");
+  const kaliTag = document.getElementById("status-pill-kali");
+
+  if (healthData && dockerTag && kaliTag) {
+    dockerTag.textContent = healthData.docker ? "docker:ok" : "docker:off";
+    dockerTag.className = "status-tag " + (healthData.docker ? "status-ok" : "status-off");
+    if (healthData.kali_container) {
+      kaliTag.textContent = "kali:ok";
+      kaliTag.className = "status-tag status-ok";
+    } else if (healthData.docker) {
+      kaliTag.textContent = "kali:warn";
+      kaliTag.className = "status-tag status-warn";
+    } else {
+      kaliTag.textContent = "kali:off";
+      kaliTag.className = "status-tag status-off";
+    }
+  }
+
   const session = getActiveSession();
   const execCount = collectSessionExecutions(session).length;
   const parts = [];
 
-  if (healthData) {
-    if (healthData.docker && healthData.kali_container) parts.push("kali ok");
-    else if (!healthData.docker) parts.push("docker off");
-    else parts.push("kali off");
-  }
   parts.push(`tools:${getPreferredTool()}`);
   if (selectedModel) parts.push(selectedModel.name);
   if (session) parts.push(`${session.messages.length} msg`);
@@ -92,6 +122,56 @@ export function updateStatusBar({ loading }) {
   statusBarText.textContent = parts.join(" · ") || "pronto";
 }
 
+const HEALTH_BANNER_KEY = "kali-health-banner-dismiss";
+
+function healthBannerFingerprint(data) {
+  if (!data) return "";
+  if (!data.docker) return "docker-off";
+  if (!data.kali_container) return "kali-off";
+  return "";
+}
+
+export function updateHealthBanner() {
+  const banner = document.getElementById("health-banner");
+  if (!banner) return;
+
+  const data = ctx.healthData;
+  const fp = healthBannerFingerprint(data);
+
+  if (!fp) {
+    sessionStorage.removeItem(HEALTH_BANNER_KEY);
+    banner.hidden = true;
+    banner.innerHTML = "";
+    return;
+  }
+
+  if (sessionStorage.getItem(HEALTH_BANNER_KEY) === fp) {
+    banner.hidden = true;
+    return;
+  }
+
+  const isDocker = fp === "docker-off";
+  const title = isDocker ? "Docker indisponível" : "Container Kali offline";
+  const detail = isDocker
+    ? 'Ferramentas Kali não executam sem Docker. Abra o Docker Desktop e rode <code>start.bat</code> ou <code>start.bat repair</code>.'
+    : `${escapeHtml(data.kali_error || "Container Kali não está rodando.")} — <code>start.bat repair</code> ou <code>docker compose up -d</code> em <code>docker/</code>.`;
+
+  banner.className = `health-banner health-banner--${isDocker ? "error" : "warn"}`;
+  banner.hidden = false;
+  banner.innerHTML = `
+    <div class="health-banner-body">
+      <strong class="health-banner-title">${title}</strong>
+      <p class="health-banner-text">${detail}</p>
+    </div>
+    <button type="button" class="health-banner-close" aria-label="Dispensar aviso">×</button>
+  `;
+
+  banner.querySelector(".health-banner-close")?.addEventListener("click", () => {
+    sessionStorage.setItem(HEALTH_BANNER_KEY, fp);
+    banner.hidden = true;
+  });
+}
+
 export async function refreshHealth() {
   const { statusBarText } = ctx;
   try {
@@ -99,6 +179,7 @@ export async function refreshHealth() {
     if (!res.ok) return;
     ctx.healthData = await res.json();
     updateStatusBar({ loading: ctx.loading });
+    updateHealthBanner();
     if (ctx.healthData.docker && !ctx.healthData.kali_container) {
       statusBarText.title = ctx.healthData.kali_error || "Container Kali não está rodando";
     } else if (statusBarText) {
@@ -108,26 +189,46 @@ export async function refreshHealth() {
 }
 
 export function renderWelcome() {
-  const { input, overlayAutopilot, overlayHelp } = ctx;
+  const { input } = ctx;
   const wrap = document.createElement("div");
-  wrap.className = "welcome";
-  wrap.innerHTML = `
-    <p class="welcome-title">// bem-vindo ao Chat IA Kali</p>
-    <p class="welcome-desc">Escolha um atalho ou digite no prompt abaixo. Use <strong>pilot</strong> para missões autônomas.</p>
-    <div class="welcome-actions">
-      <button type="button" class="welcome-btn welcome-btn-pilot" data-action="pilot">Auto-Pilot</button>
-      <button type="button" class="welcome-btn" data-action="tools">Ferramentas</button>
-      <button type="button" class="welcome-btn" data-action="help">Ajuda</button>
-    </div>
-    <p class="welcome-label">exemplos rápidos</p>
-    <div class="welcome-prompts" id="welcome-prompts"></div>
+  wrap.className = "welcome boot";
+
+  const bootLines = [
+    "[ OK ] pentest-ai kernel 1.0.0 — local mode",
+    "[ OK ] docker bridge .................... linked",
+    "[ OK ] kali toolchain ................... ready",
+    "[ OK ] openrouter agent ................. online",
+    "[ OK ] intel db ......................... recon+threats",
+    "[ OK ] output volume ..................... /tools/output",
+  ];
+
+  const log = document.createElement("div");
+  log.className = "boot-log";
+  for (const line of bootLines) {
+    const row = document.createElement("div");
+    row.className = "boot-line";
+    row.innerHTML = `<span class="boot-tag">[ OK ]</span> ${escapeHtml(line.replace("[ OK ] ", ""))}`;
+    log.appendChild(row);
+  }
+  wrap.appendChild(log);
+
+  const ready = document.createElement("p");
+  ready.className = "boot-ready";
+  ready.innerHTML = `
+    <span class="cmd-prompt-inline"><span class="cmd-user">kali@pentest</span><span class="cmd-at">:</span><span class="cmd-path">~</span><span class="cmd-sym">$</span></span>
+    <span class="boot-msg"> session ready — awaiting input</span>
   `;
+  wrap.appendChild(ready);
 
-  wrap.querySelector('[data-action="pilot"]').addEventListener("click", () => openOverlay(overlayAutopilot));
-  wrap.querySelector('[data-action="tools"]').addEventListener("click", () => openToolsPanel());
-  wrap.querySelector('[data-action="help"]').addEventListener("click", () => openOverlay(overlayHelp));
+  const hint = document.createElement("p");
+  hint.className = "boot-hint";
+  hint.textContent = "# quick commands:";
+  wrap.appendChild(hint);
 
-  const promptsEl = wrap.querySelector("#welcome-prompts");
+  const promptsEl = document.createElement("div");
+  promptsEl.className = "welcome-prompts";
+  promptsEl.id = "welcome-prompts";
+  wrap.appendChild(promptsEl);
   for (const p of QUICK_PROMPTS) {
     const btn = document.createElement("button");
     btn.type = "button";

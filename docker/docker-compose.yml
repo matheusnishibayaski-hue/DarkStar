@@ -16,3 +16,4 @@ services:
     volumes:
       - /sys/class/net:/sys/class/net:ro
       - /sys/devices:/sys/devices:ro
+      - ../backend/outputs:/tools/output

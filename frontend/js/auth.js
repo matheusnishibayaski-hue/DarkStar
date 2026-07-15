@@ -32,11 +32,15 @@ function showLoginOverlay(toast) {
     }
 
     overlay.hidden = false;
+    requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
+    document.body.classList.add("has-overlay");
     input.value = "";
     input.focus();
 
     const cleanup = () => {
+      overlay.classList.remove("overlay-visible");
       overlay.hidden = true;
+      document.body.classList.remove("has-overlay");
       submit.removeEventListener("click", onSubmit);
       cancel?.removeEventListener("click", onCancel);
       input.removeEventListener("keydown", onKey);

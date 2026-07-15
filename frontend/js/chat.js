@@ -36,6 +36,7 @@ import {
   scrollChatToBottom,
 } from "./chat-view.js";
 import { toast, showToastError, downloadMarkdown, setLoading, getLoading } from "./ui.js";
+import { playSound } from "./audio.js";
 
 let ctx = {};
 
@@ -121,6 +122,7 @@ export async function sendMessage(text) {
   const abortController = new AbortController();
   beginMission(missionId, abortController);
   setBusy(true);
+  playSound("send");
 
   if (ctx.input) {
     ctx.input.value = "";
@@ -213,6 +215,9 @@ export async function sendMessage(text) {
     appendAssistantLine(finalData.message);
     for (const exec of finalData.tool_executions || []) {
       finalizeLiveExecBlock(ctx.chatEl, exec);
+    }
+    if ((finalData.tool_executions || []).length === 0) {
+      playSound("success");
     }
     scrollChatToBottom();
   } catch (e) {
