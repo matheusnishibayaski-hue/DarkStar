@@ -17,6 +17,7 @@ from backend.config import (
     OPENROUTER_API_KEY,
     SYSTEM_PROMPT,
 )
+from backend.deps import APP_VERSION
 from backend.models_catalog import resolve_model
 from backend.ai.healing import healing_prompt, should_attempt_healing
 from backend.executor.kali import execute_in_kali
@@ -25,8 +26,10 @@ from backend.executor.recon_db import (
     build_recon_context,
     extract_recon_from_output,
     extract_targets,
+    list_recon_summaries,
     merge_recon_update,
 )
+from backend.executor.files_store import list_output_files
 from backend.executor.result import ExecutionResult, format_result_for_llm
 from backend.executor.summarize import summarize_output
 from backend.security.missions import get_mission_registry
@@ -293,7 +296,7 @@ def generate_report(
         f"# {title}",
         "",
         f"**Data:** {now}  ",
-        f"**Ferramenta:** Chat IA Kali v3.0  ",
+        f"**Ferramenta:** Chat IA Kali v{APP_VERSION}  ",
         f"**Execuções registradas:** {len(tool_executions)}",
         "",
         "---",
@@ -332,11 +335,40 @@ def generate_report(
     else:
         lines.append("*Nenhuma vulnerabilidade crítica extraída automaticamente dos logs.*")
 
+    lines.extend(["", "---", "", "## 4. Recon cacheado (/var/recon)", ""])
+    recon_summaries = list_recon_summaries()
+    if recon_summaries:
+        lines.extend([
+            "| Alvo | Portas | CVEs | Achados | Atualizado |",
+            "|------|--------|------|---------|------------|",
+        ])
+        for r in recon_summaries[:20]:
+            lines.append(
+                f"| {r.get('target', '')} | {r.get('open_ports_count', 0)} | "
+                f"{r.get('cves_count', 0)} | {r.get('vulnerabilities_count', 0)} | "
+                f"{r.get('updated_at', '')[:16]} |"
+            )
+    else:
+        lines.append("*Nenhum dado de recon persistido.*")
+
+    lines.extend(["", "---", "", "## 5. Artefatos (/tools/output)", ""])
+    artifacts = list_output_files()
+    if artifacts:
+        lines.append("| Arquivo | Tamanho | Modificado |")
+        lines.append("|---------|---------|------------|")
+        for f in artifacts[:30]:
+            size_kb = f.get("size", 0) // 1024
+            lines.append(
+                f"| `{f.get('name', '')}` | {size_kb} KB | {f.get('modified_at', '')[:16]} |"
+            )
+    else:
+        lines.append("*Nenhum artefato em /tools/output.*")
+
     lines.extend([
         "",
         "---",
         "",
-        "## 4. Recomendações de Mitigação",
+        "## 6. Recomendações de Mitigação",
         "",
         "1. **Patch Management:** Aplicar correções para CVEs e serviços desatualizados identificados.",
         "2. **Hardening:** Fechar portas/serviços desnecessários expostos na varredura.",
@@ -345,7 +377,7 @@ def generate_report(
         "",
         "---",
         "",
-        "## 5. Anexo — Logs",
+        "## 7. Anexo — Logs",
         "",
     ])
 

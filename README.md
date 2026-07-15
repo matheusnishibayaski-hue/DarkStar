@@ -1,6 +1,6 @@
 # Chat IA Kali
 
-**Versão estável 1.0.0** — assistente local de pentest com IA que **executa ferramentas reais** no Kali Linux (Docker), não apenas sugere comandos.
+**Versão estável 1.1.0** — assistente local de pentest com IA que **executa ferramentas reais** no Kali Linux (Docker), não apenas sugere comandos.
 
 Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://openrouter.ai)) interpreta, escolhe a ferramenta, roda no container isolado e devolve análise, dashboards visuais e relatórios Markdown. Inclui modo **Auto-Pilot** para missões autônomas multi-etapa, streaming de logs ao vivo, cancelamento de execuções e auth por sessão HttpOnly.
 
@@ -47,25 +47,25 @@ start.bat servidor          # ou: ./start.sh servidor
 1. Na primeira execução, `.env` é criado a partir de `.env.example`.
 2. Edite **`OPENROUTER_API_KEY`** (obrigatório) em [openrouter.ai/keys](https://openrouter.ai/keys).
 3. Abra **http://127.0.0.1:8000**
-4. Confirme: `GET /api/health` → `"version": "1.0.0"`, `"status": "ok"`.
+4. Confirme: `GET /api/health` → `"version": "1.1.0"`, `"status": "ok"`.
 
 **Recomendado:** defina `CHAT_API_TOKEN` no `.env` para proteger a API local.
 
-**Testes:** `python -m unittest discover -s tests -v` (34 testes, sem Docker/OpenRouter)
+**Testes:** `python -m unittest discover -s tests -v` (44+ testes, sem Docker/OpenRouter) · E2E: `npm install && npx playwright test -c e2e/playwright.config.js`
 
 ---
 
-## Escopo v1.0
+## Escopo v1.1
 
-Release **1.0.0** encerra o ciclo como **ferramenta local single-user**. Evoluções grandes (playbooks YAML, timeline de missão) ficam reservadas para uma eventual v2.
+Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → relatório** com auditoria, playbooks, timeline e testes E2E.
 
 | Incluído | Excluído (por enquanto) |
 |----------|-------------------------|
-| Chat + Auto-Pilot + relatórios Markdown | Multi-usuário, RBAC, dashboard consultoria |
-| Execução Kali Docker, whitelist, cancel, **scope lock** | Mitigação automática, SIEM, SOC |
-| Auth sessão, rate limit, bind `127.0.0.1` | ML customizado, multi-agentes paralelos |
-| Windows (`start.bat`) e Linux/macOS (`start.sh`) | Labs GNS3 / EVE-NG / VMs dinâmicas |
-| **Intel** (recon + ameaças), **file manager**, UI CRT | — |
+| Chat + Auto-Pilot + relatórios enriquecidos | Multi-usuário, RBAC, dashboard consultoria |
+| Execução Kali Docker, whitelist, cancel, scope lock + **aviso** | Mitigação automática, SIEM, SOC |
+| **Auditoria** JSONL, **playbooks**, **timeline** | ML customizado, multi-agentes paralelos |
+| Auth sessão, rate limit, bind `127.0.0.1` | Labs GNS3 / EVE-NG / VMs dinâmicas |
+| Intel (recon + threats + audit), file manager, onboarding | — |
 
 ---
 
@@ -427,7 +427,10 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | GET | `/api/recon` | Lista alvos com recon em cache |
 | GET | `/api/recon/{target}` | Detalhe recon (portas, CVEs, achados) |
 | GET | `/api/files` | Lista artefatos em `OUTPUTS_DIR` |
-| GET | `/api/files/{path}` | Download de artefato (path validado, anti-traversal) |
+| GET | `/api/files/{path}` | Download de artefato (path validado, anti-traversal, limite MB) |
+| GET | `/api/audit` | Trilha de auditoria (JSONL, `?limit=&date=`) |
+| GET | `/api/playbooks` | Lista playbooks pré-definidos |
+| POST | `/api/playbooks/{id}/run` | Executa playbook em alvo autorizado |
 | GET | `/api/logs/{id}` | Log completo (text/plain) |
 | GET | `/api/logs/stream/{id}` | SSE linha a linha |
 | GET | `/api/auth/session` | Estado da sessão |
@@ -502,7 +505,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 
 ## Testes e validação
 
-### Automatizados (34 testes)
+### Automatizados (44+ testes)
 
 ```bash
 python -m unittest discover -s tests -v
@@ -514,13 +517,15 @@ python -m unittest discover -s tests -v
 | `test_integration.py` | Health, auth, recon TTL, stream hub, **files API** |
 | `test_sse.py` | Chat/autonomous stream, cancel SSE |
 | `test_security.py` | Sessão, rate limit, persistência disco |
-| `test_kali_mock.py` | Cancel Docker (subprocess mock) |
+| `test_audit.py` | Auditoria JSONL e API |
+| `test_playbooks.py` | Playbooks YAML e scope |
+| `test_openapi.py` | Contrato OpenAPI v1.1 |
 
-CI: `.github/workflows/tests.yml` em push/PR para `main`/`master` com `requirements-lock.txt`.
+CI: `.github/workflows/tests.yml` — unitários + E2E Playwright + integração Docker opcional.
 
 ### Checklist manual (release)
 
-**Infra:** `start.bat`/`start.sh` ok · Docker · container `kali-tools` · `/api/health` → `1.0.0`
+**Infra:** `start.bat`/`start.sh` ok · Docker · container `kali-tools` · `/api/health` → `1.1.0`
 
 **Funcional:** chat · execução nmap lab · **cancel** · whitelist bloqueia · log em `backend/logs/`
 
@@ -536,20 +541,32 @@ CI: `.github/workflows/tests.yml` em push/PR para `main`/`master` com `requireme
 
 | Campo | Valor |
 |-------|-------|
-| Release estável | **1.0.0** |
-| API | `/api/health` → `"version": "1.0.0"` |
-| Testes | 34 |
+| Release estável | **1.1.0** |
+| API | `/api/health` → `"version": "1.1.0"` |
+| Testes | 44+ unit · 3 E2E |
+| Segurança | Ver [SECURITY.md](SECURITY.md) |
 
 ```bash
-git tag -a v1.0.0 -m "Chat IA Kali 1.0.0"
+git tag -a v1.1.0 -m "Chat IA Kali 1.1.0"
 git push origin main --tags
 ```
 
-**Não versionar:** `.env`, `venv/`, `backend/data/`, `backend/logs/`, `backend/recon/`, `backend/outputs/*`
+**Não versionar:** `.env`, `venv/`, `backend/data/`, `backend/logs/`, `backend/recon/`, `backend/audit/`, `backend/outputs/*`
 
 ---
 
 ## Changelog
+
+Ver [CHANGELOG.md](CHANGELOG.md) para histórico completo.
+
+### 1.1.0 — Release operacional (2026-07-15)
+
+| Área | Adição |
+|------|--------|
+| **Segurança** | Auditoria JSONL (`GET /api/audit`), aviso de escopo, `SECURITY.md`, limite download files |
+| **Utilidade** | Timeline de missão, playbooks `recon-web`/`port-scan`, relatório com recon + artefatos |
+| **UX** | Onboarding 60s, abas audit/timeline no Intel, playbooks no Auto-Pilot |
+| **Engenharia** | E2E Playwright no CI, ESLint, `frontend/js/api/routes.js` |
 
 ### Pós-1.0.0 — UI CRT e painéis (2026-07)
 

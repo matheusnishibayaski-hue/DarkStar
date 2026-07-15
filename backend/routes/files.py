@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from backend.config import MAX_FILE_DOWNLOAD_BYTES
 from backend.executor.files_store import (
     guess_media_type,
     is_allowed_extension,
@@ -29,6 +30,13 @@ def api_files_download(file_path: str):
         raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
     if not is_allowed_extension(path):
         raise HTTPException(status_code=403, detail="Tipo de arquivo não permitido.")
+
+    size = path.stat().st_size
+    if size > MAX_FILE_DOWNLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Arquivo excede o limite de download ({MAX_FILE_DOWNLOAD_BYTES // (1024 * 1024)} MB).",
+        )
 
     return FileResponse(
         path,

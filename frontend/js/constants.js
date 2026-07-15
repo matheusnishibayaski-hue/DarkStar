@@ -2,6 +2,7 @@ export const STORAGE_KEY = "chat-ia-kali-sessions";
 export const MODEL_STORAGE_KEY = "chat-ia-kali-model";
 export const API_TOKEN_KEY = "chat-ia-kali-api-token";
 export const SOUND_STORAGE_KEY = "chat-ia-kali-sound";
+export const ONBOARDING_STORAGE_KEY = "chat-ia-kali-onboarded";
 export const HISTORY_LIMIT = 10;
 
 export const QUICK_PROMPTS = [

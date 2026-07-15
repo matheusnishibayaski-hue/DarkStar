@@ -1,6 +1,7 @@
 /** Modo Auto-Pilot autônomo. */
 
 import { apiFetch } from "./api.js";
+import { listPlaybooks, runPlaybook } from "./api/routes.js";
 import {
   getActiveSession,
   ensureSession,
@@ -33,17 +34,73 @@ import {
 import { toast, showToastError, downloadMarkdown, setLoading, getLoading, closeOverlay } from "./ui.js";
 
 let ctx = {};
+let playbooksCache = [];
 
 export function initAutopilot(context) {
   ctx = context;
+  loadPlaybookOptions();
+  ctx.playbookRun?.addEventListener("click", runSelectedPlaybook);
 }
 
 function setBusy(busy) {
   setLoading(busy);
   if (ctx.input) ctx.input.disabled = busy;
   if (ctx.autopilotStart) ctx.autopilotStart.disabled = busy;
+  if (ctx.playbookRun) ctx.playbookRun.disabled = busy;
   if (ctx.btnAutopilot) ctx.btnAutopilot.disabled = busy;
   ctx.updateStatusBar?.();
+}
+
+async function loadPlaybookOptions() {
+  const select = ctx.playbookSelect;
+  if (!select) return;
+  try {
+    const res = await listPlaybooks();
+    if (!res.ok) return;
+    playbooksCache = (await res.json()).playbooks || [];
+    select.innerHTML = '<option value="">— playbook —</option>';
+    for (const pb of playbooksCache) {
+      const opt = document.createElement("option");
+      opt.value = pb.id;
+      opt.textContent = `${pb.name} (${pb.steps_count} passos)`;
+      select.appendChild(opt);
+    }
+  } catch { /* ignore */ }
+}
+
+async function runSelectedPlaybook() {
+  const id = ctx.playbookSelect?.value;
+  const target = ctx.autopilotTarget?.value.trim();
+  if (!id) {
+    showToastError("Selecione um playbook.");
+    return;
+  }
+  if (!target) {
+    showToastError("Informe o alvo para o playbook.");
+    return;
+  }
+  if (getLoading()) return;
+
+  setBusy(true);
+  closeOverlay(ctx.overlayAutopilot);
+  appendLine("info", `playbook ${id} → ${target} …`);
+
+  try {
+    const res = await runPlaybook(id, { target, mission_id: createMissionId() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showToastError(data.detail || "Falha ao executar playbook");
+      return;
+    }
+    const ok = (data.results || []).filter((r) => r.success).length;
+    appendLine("info", `playbook concluído: ${ok}/${data.steps_run} passo(s) ok`);
+    toast(`playbook ${id} executado`, "success");
+  } catch (e) {
+    showToastError(e.message);
+  } finally {
+    setBusy(false);
+    ctx.input?.focus();
+  }
 }
 
 export async function startAutopilot() {

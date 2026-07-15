@@ -8,12 +8,13 @@ import sys
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from backend.config import CHAT_API_TOKEN, KALI_CONTAINER, TOOL_CATEGORIES, UVICORN_HOST, UVICORN_PORT
+from backend.config import ALLOWED_TARGETS, CHAT_API_TOKEN, KALI_CONTAINER, TOOL_CATEGORIES, UVICORN_HOST, UVICORN_PORT
 from backend.deps import APP_VERSION
 from backend.executor.logs import read_execution_log
 from backend.executor.recon_db import get_recon_data, list_recon_summaries
 from backend.executor.stream_hub import get_stream_hub
 from backend.models_catalog import get_models_catalog
+from backend.security.scope import scope_lock_enabled
 from backend.tool_catalog import enrich_categories
 
 router = APIRouter(prefix="/api", tags=["system"])
@@ -27,6 +28,8 @@ def client_config():
         "sessionAuth": bool(CHAT_API_TOKEN),
         "host": UVICORN_HOST,
         "port": UVICORN_PORT,
+        "scope_lock_enabled": scope_lock_enabled(),
+        "scope_warning": not scope_lock_enabled(),
     }
 
 
@@ -96,6 +99,8 @@ def health():
         "wifi_interfaces": wifi_interfaces,
         "wifi_message": wifi_message,
         "auth_required": bool(CHAT_API_TOKEN),
+        "scope_lock_enabled": scope_lock_enabled(),
+        "scope_warning": not scope_lock_enabled(),
     }
 
 

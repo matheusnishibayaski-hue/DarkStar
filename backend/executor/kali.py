@@ -15,9 +15,11 @@ from backend.config import (
     WIFI_TOOLS,
 )
 from backend.executor.logs import new_log_id, save_execution_log
+from backend.executor.recon_db import extract_targets
 from backend.executor.result import ExecutionResult
 from backend.executor.stream_hub import get_stream_hub
 from backend.executor.wifi_scan import execute_host_wifi
+from backend.security.audit import record_tool_execution
 from backend.security.missions import get_mission_registry
 from backend.security.scope import validate_command_scope
 
@@ -91,6 +93,26 @@ def _is_wifi_tool(args: list[str]) -> bool:
     if not args:
         return False
     return args[0].split("/")[-1] in WIFI_TOOLS
+
+
+def _audit_result(
+    result: ExecutionResult,
+    args: list[str],
+    reason: str,
+    mission_id: str | None = None,
+) -> None:
+    targets = extract_targets(" ".join(args)) if args else []
+    record_tool_execution(
+        command=result.command,
+        tool=result.tool,
+        targets=targets,
+        success=result.success,
+        blocked=result.blocked,
+        exit_code=result.exit_code,
+        log_file_id=result.log_file_id or "",
+        mission_id=mission_id,
+        reason=reason,
+    )
 
 
 def _emit_line(
@@ -257,6 +279,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
         return
 
@@ -279,6 +302,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
         return
 
@@ -299,6 +323,7 @@ def execute_kali_command_stream(
                 blocked=result.blocked,
             )
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
         return
 
@@ -331,6 +356,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=exit_code, success=result.success)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
 
     except InterruptedError as e:
@@ -351,6 +377,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
 
     except subprocess.TimeoutExpired:
@@ -371,6 +398,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
 
     except FileNotFoundError:
@@ -390,6 +418,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
 
     except Exception as e:
@@ -409,6 +438,7 @@ def execute_kali_command_stream(
         if execution_id:
             hub.finish(execution_id, exit_code=-1, success=False)
             hub.cleanup(execution_id)
+        _audit_result(result, args, reason, mission_id)
         yield {"type": "done", "result": result}
 
 

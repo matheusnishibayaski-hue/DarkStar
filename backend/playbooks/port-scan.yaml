@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=./playbook.schema.json
+id: port-scan
+name: Port Scan
+description: Varredura de portas com nmap (-oA em /tools/output)
+steps:
+  - tool: nmap
+    args:
+      - -sV
+      - -T4
+      - -oA
+      - /tools/output/nmap-{target_safe}
+      - "{target}"

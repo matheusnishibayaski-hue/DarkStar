@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://chat-ia-kali.local/schemas/playbook.json",
+  "title": "Chat IA Kali Playbook",
+  "description": "Playbook de pentest executado via backend/playbooks/loader.py",
+  "type": "object",
+  "required": ["id", "name", "steps"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Identificador único (usado na API /api/playbooks/{id}/run)"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["tool", "args"],
+        "additionalProperties": false,
+        "properties": {
+          "tool": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Binário na whitelist ALLOWED_TOOLS"
+          },
+          "args": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "description": "Argumentos sem o binário. Placeholders: {target}, {target_safe}"
+          }
+        }
+      }
+    }
+  }
+}

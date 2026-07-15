@@ -8,7 +8,7 @@ from backend.config import CHAT_API_TOKEN, SESSION_TTL_HOURS
 from backend.schemas import ToolExecutionResponse
 from backend.security.sessions import SESSION_COOKIE_NAME, get_session_store
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
 PUBLIC_API_PATHS = frozenset({
     "/api/health",

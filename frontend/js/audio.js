@@ -57,7 +57,7 @@ function tone(ctx, {
 
   osc.type = type;
   osc.frequency.setValueAtTime(freq, t);
-  if (freqEnd != null) {
+  if (typeof freqEnd === "number") {
     osc.frequency.linearRampToValueAtTime(freqEnd, t + duration);
   }
 

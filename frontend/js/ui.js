@@ -3,7 +3,7 @@
 import { QUICK_PROMPTS } from "./constants.js";
 import { selectedModel, getPreferredTool } from "./tools-panel.js";
 import { collectSessionExecutions, getActiveSession } from "./sessions.js";
-import { apiFetch } from "./api.js";
+import { getHealth } from "./api/routes.js";
 import { escapeHtml } from "./exec.js";
 import { playSound } from "./audio.js";
 
@@ -131,6 +131,25 @@ function healthBannerFingerprint(data) {
   return "";
 }
 
+function updateScopeBanner() {
+  const banner = document.getElementById("scope-banner");
+  if (!banner) return;
+  const data = ctx.healthData;
+  if (data?.scope_warning) {
+    banner.hidden = false;
+    banner.className = "health-banner health-banner--warn scope-banner";
+    banner.innerHTML = `
+      <div class="health-banner-body">
+        <strong class="health-banner-title">// AVISO: escopo aberto</strong>
+        <p class="health-banner-text">Defina <code>ALLOWED_TARGETS</code> no <code>.env</code> para restringir scans a alvos autorizados.</p>
+      </div>
+    `;
+  } else {
+    banner.hidden = true;
+    banner.innerHTML = "";
+  }
+}
+
 export function updateHealthBanner() {
   const banner = document.getElementById("health-banner");
   if (!banner) return;
@@ -142,6 +161,7 @@ export function updateHealthBanner() {
     sessionStorage.removeItem(HEALTH_BANNER_KEY);
     banner.hidden = true;
     banner.innerHTML = "";
+    updateScopeBanner();
     return;
   }
 
@@ -170,16 +190,19 @@ export function updateHealthBanner() {
     sessionStorage.setItem(HEALTH_BANNER_KEY, fp);
     banner.hidden = true;
   });
+
+  updateScopeBanner();
 }
 
 export async function refreshHealth() {
   const { statusBarText } = ctx;
   try {
-    const res = await apiFetch("/api/health");
+    const res = await getHealth();
     if (!res.ok) return;
     ctx.healthData = await res.json();
     updateStatusBar({ loading: ctx.loading });
     updateHealthBanner();
+    updateScopeBanner();
     if (ctx.healthData.docker && !ctx.healthData.kali_container) {
       statusBarText.title = ctx.healthData.kali_error || "Container Kali não está rodando";
     } else if (statusBarText) {
@@ -194,7 +217,7 @@ export function renderWelcome() {
   wrap.className = "welcome boot";
 
   const bootLines = [
-    "[ OK ] pentest-ai kernel 1.0.0 — local mode",
+    "[ OK ] pentest-ai kernel 1.1.0 — local mode",
     "[ OK ] docker bridge .................... linked",
     "[ OK ] kali toolchain ................... ready",
     "[ OK ] openrouter agent ................. online",

@@ -1,11 +1,14 @@
-/** Painel unificado /sys/intel — Recon + CiberAmeaças. */
+/** Painel unificado /sys/intel — Recon + Threats + Timeline + Audit. */
 
 import { openOverlay, closeOverlay } from "./ui.js";
 import { initReconIntel, loadReconTab } from "./recon.js";
 import { initThreatIntel, activateThreatsTab } from "./threatmap.js";
+import { initTimeline, renderTimeline } from "./timeline.js";
+import { initAuditTab, loadAuditTab } from "./audit-tab.js";
 
 let ctx = {};
-let activeTab = "recon";
+
+const TABS = ["recon", "threats", "timeline", "audit"];
 
 export function initIntelPanel(context) {
   ctx = context;
@@ -18,6 +21,7 @@ export function initIntelPanel(context) {
     reconRefresh: ctx.reconRefresh,
     input: ctx.input,
     onClose: () => closeIntel(),
+    onOpenFiles: (filter) => ctx.onOpenFiles?.(filter),
   });
 
   initThreatIntel({
@@ -30,8 +34,24 @@ export function initIntelPanel(context) {
     threatOpenFull: ctx.threatOpenFull,
   });
 
-  ctx.tabRecon?.addEventListener("click", () => switchTab("recon"));
-  ctx.tabThreats?.addEventListener("click", () => switchTab("threats"));
+  initTimeline({
+    timelineEl: ctx.timelineEl,
+    onOpenFiles: () => ctx.onOpenFiles?.(),
+  });
+
+  initAuditTab({
+    auditTableEl: ctx.auditTableEl,
+    auditMetaEl: ctx.auditMetaEl,
+    auditRefresh: ctx.auditRefresh,
+  });
+
+  for (const tab of TABS) {
+    ctx[`tab${capitalize(tab)}`]?.addEventListener("click", () => switchTab(tab));
+  }
+}
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 function closeIntel() {
@@ -39,18 +59,20 @@ function closeIntel() {
 }
 
 function switchTab(tab) {
-  activeTab = tab;
-  ctx.tabRecon?.classList.toggle("active", tab === "recon");
-  ctx.tabThreats?.classList.toggle("active", tab === "threats");
-  ctx.tabRecon?.setAttribute("aria-selected", tab === "recon" ? "true" : "false");
-  ctx.tabThreats?.setAttribute("aria-selected", tab === "threats" ? "true" : "false");
-  ctx.paneRecon?.classList.toggle("hidden", tab !== "recon");
-  ctx.paneThreats?.classList.toggle("hidden", tab !== "threats");
-  ctx.paneRecon?.toggleAttribute("hidden", tab !== "recon");
-  ctx.paneThreats?.toggleAttribute("hidden", tab !== "threats");
+  for (const t of TABS) {
+    const btn = ctx[`tab${capitalize(t)}`];
+    const pane = ctx[`pane${capitalize(t)}`];
+    const on = t === tab;
+    btn?.classList.toggle("active", on);
+    btn?.setAttribute("aria-selected", on ? "true" : "false");
+    pane?.classList.toggle("hidden", !on);
+    pane?.toggleAttribute("hidden", !on);
+  }
 
   if (tab === "recon") loadReconTab();
   if (tab === "threats") activateThreatsTab();
+  if (tab === "timeline") renderTimeline();
+  if (tab === "audit") loadAuditTab();
 }
 
 export function openIntelPanel(tab = "recon") {

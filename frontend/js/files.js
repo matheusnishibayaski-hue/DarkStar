@@ -1,5 +1,6 @@
 /** Painel de artefatos — /tools/output (volume compartilhado com o Kali). */
 
+import { listFiles } from "./api/routes.js";
 import { apiFetch } from "./api.js";
 import { escapeHtml } from "./exec.js";
 import { openOverlay } from "./ui.js";
@@ -17,6 +18,7 @@ const ICONS = {
 };
 
 let ctx = {};
+let nameFilter = "";
 
 export function initFilesPanel(context) {
   ctx = context;
@@ -74,15 +76,29 @@ function renderFiles(files, root) {
   const { filesListEl, filesMetaEl } = ctx;
   if (!filesListEl) return;
 
-  if (filesMetaEl) {
-    filesMetaEl.textContent = `${files.length} arquivo(s) · ${root || "/tools/output"}`;
+  let visible = files;
+  if (nameFilter) {
+    const q = nameFilter.toLowerCase();
+    visible = files.filter((f) => f.name.toLowerCase().includes(q));
   }
 
-  if (!files.length) {
+  if (filesMetaEl) {
+    const suffix = nameFilter ? ` · filtro: ${nameFilter}` : "";
+    filesMetaEl.textContent = `${visible.length} arquivo(s) · ${root || "/tools/output"}${suffix}`;
+  }
+
+  if (!visible.length) {
+    const exampleTarget = nameFilter || "scanme.nmap.org";
     filesListEl.innerHTML = `
-      <p class="files-empty">Nenhum artefato ainda.</p>
-      <p class="files-hint">Peça à IA salvar saídas em <code>/tools/output/</code> (ex: <code>nmap -oA /tools/output/scan …</code>).</p>
+      <p class="files-empty">Nenhum artefato${nameFilter ? " para este filtro" : " ainda"}.</p>
+      <p class="files-hint">Peça à IA salvar saídas em <code>/tools/output/</code>:</p>
+      <pre class="files-example">nmap -oA /tools/output/scan ${escapeHtml(exampleTarget)}</pre>
+      ${nameFilter ? '<button type="button" class="files-clear-filter" id="files-clear-filter">limpar filtro</button>' : ""}
     `;
+    document.getElementById("files-clear-filter")?.addEventListener("click", () => {
+      nameFilter = "";
+      loadFiles();
+    });
     return;
   }
 
@@ -103,7 +119,7 @@ function renderFiles(files, root) {
   `;
   table.appendChild(head);
 
-  for (const f of files) {
+  for (const f of visible) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "files-row files-row-item";
@@ -133,7 +149,7 @@ async function loadFiles() {
   }
 
   try {
-    const res = await apiFetch("/api/files");
+    const res = await listFiles();
     if (!res.ok) throw new Error("Falha ao listar arquivos");
     const data = await res.json();
     renderFiles(data.files || [], data.root);
@@ -144,8 +160,9 @@ async function loadFiles() {
   }
 }
 
-export async function openFilesPanel() {
+export async function openFilesPanel(filter = "") {
   if (!ctx.overlayFiles) return;
+  nameFilter = (filter || "").trim().toLowerCase();
   openOverlay(ctx.overlayFiles);
   await loadFiles();
 }

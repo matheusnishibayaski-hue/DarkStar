@@ -1,6 +1,6 @@
 /** Recon — tabela retro com linhas expansíveis (cache /var/recon). */
 
-import { apiFetch } from "./api.js";
+import { listRecon, getReconDetail } from "./api/routes.js";
 import { escapeHtml } from "./exec.js";
 
 let ctx = {};
@@ -86,6 +86,7 @@ function renderExpandCard(target, data, loading, error) {
       <div class="recon-card-actions">
         <button type="button" class="recon-action-btn" data-action="prompt" data-target="${escapeHtml(target)}">usar no prompt</button>
         <button type="button" class="recon-action-btn recon-action-btn--scan" data-action="scan" data-target="${escapeHtml(target)}">re-scan</button>
+        <button type="button" class="recon-action-btn recon-action-btn--files" data-action="files" data-target="${escapeHtml(target)}">artefatos</button>
       </div>
     </div>
   `;
@@ -102,6 +103,10 @@ function bindCardActions(container) {
         ctx.input.value = `Recon e análise de ${target}`;
       } else if (action === "scan") {
         ctx.input.value = `Atualize o recon de ${target}: portas, serviços e vulnerabilidades`;
+      } else if (action === "files") {
+        ctx.onOpenFiles?.(target);
+        ctx.onClose?.();
+        return;
       }
       ctx.input.focus();
       ctx.onClose?.();
@@ -122,7 +127,15 @@ function renderTable(targets) {
     reconTableEl.innerHTML = searchQuery
       ? '<p class="recon-empty">Nenhum alvo corresponde à busca.</p>'
       : `<p class="recon-empty">Nenhum alvo em cache.</p>
-         <p class="recon-hint">Execute scans em alvos autorizados — a IA persiste portas, CVEs e achados automaticamente.</p>`;
+         <p class="recon-hint">Execute scans em alvos autorizados — a IA persiste portas, CVEs e achados automaticamente.</p>
+         <button type="button" class="recon-action-btn recon-first-scan" id="recon-first-scan">rodar primeiro scan</button>`;
+    document.getElementById("recon-first-scan")?.addEventListener("click", () => {
+      if (ctx.input) {
+        ctx.input.value = "Faça um scan básico em scanme.nmap.org e salve em /tools/output/";
+        ctx.input.focus();
+        ctx.onClose?.();
+      }
+    });
     return;
   }
 
@@ -191,7 +204,7 @@ async function fetchDetail(target) {
   renderTable(cachedList || []);
 
   try {
-    const res = await apiFetch(`/api/recon/${encodeURIComponent(target)}`);
+    const res = await getReconDetail(target);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       detailCache.set(target, { error: err.detail || "Erro ao carregar" });
@@ -230,7 +243,7 @@ export async function loadReconTab(force = false) {
   reconTableEl.innerHTML = '<p class="recon-empty">listando /var/recon …</p>';
 
   try {
-    const res = await apiFetch("/api/recon");
+    const res = await listRecon();
     if (!res.ok) throw new Error("Falha ao listar recon");
     cachedList = (await res.json()).targets || [];
     renderTable(cachedList);

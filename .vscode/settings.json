@@ -1,0 +1,6 @@
+{
+  "yaml.schemas": {
+    "./backend/playbooks/playbook.schema.json": "backend/playbooks/*.yaml"
+  },
+  "yaml.customTags": []
+}

@@ -50,6 +50,7 @@ import { initShortcuts, handleGlobalKeydown } from "./shortcuts.js";
 import { initIntelPanel, openIntelPanel } from "./intel.js";
 import { initFilesPanel, openFilesPanel } from "./files.js";
 import { initAudio, bindSoundButton } from "./audio.js";
+import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -84,6 +85,9 @@ const helpContent = document.getElementById("help-content");
 const autopilotTarget = document.getElementById("autopilot-target");
 const autopilotObjective = document.getElementById("autopilot-objective");
 const autopilotStart = document.getElementById("autopilot-start");
+const playbookSelect = document.getElementById("playbook-select");
+const playbookRun = document.getElementById("playbook-run");
+const btnToolbarMore = document.getElementById("btn-toolbar-more");
 const toastContainer = document.getElementById("toast-container");
 
 const inputHistory = { list: [], idx: -1 };
@@ -187,6 +191,8 @@ initAutopilot({
   autopilotTarget,
   autopilotObjective,
   autopilotStart,
+  playbookSelect,
+  playbookRun,
   btnAutopilot,
   overlayAutopilot,
   updateStatusBar: refreshStatusBar,
@@ -199,8 +205,16 @@ initIntelPanel({
   intelPanel: document.getElementById("intel-panel"),
   tabRecon: document.getElementById("intel-tab-recon"),
   tabThreats: document.getElementById("intel-tab-threats"),
+  tabTimeline: document.getElementById("intel-tab-timeline"),
+  tabAudit: document.getElementById("intel-tab-audit"),
   paneRecon: document.getElementById("intel-pane-recon"),
   paneThreats: document.getElementById("intel-pane-threats"),
+  paneTimeline: document.getElementById("intel-pane-timeline"),
+  paneAudit: document.getElementById("intel-pane-audit"),
+  timelineEl: document.getElementById("intel-timeline"),
+  auditTableEl: document.getElementById("audit-table"),
+  auditMetaEl: document.getElementById("audit-meta"),
+  auditRefresh: document.getElementById("audit-refresh"),
   reconTableEl: document.getElementById("recon-table"),
   reconMetaEl: document.getElementById("recon-meta"),
   reconSearch: document.getElementById("recon-search"),
@@ -213,6 +227,7 @@ initIntelPanel({
   threatModeGlobe: document.getElementById("threat-mode-globe"),
   threatOpenFull: document.getElementById("threat-open-full"),
   input,
+  onOpenFiles: (filter) => openFilesPanel(filter),
 });
 
 initFilesPanel({
@@ -257,6 +272,16 @@ initToolsPanel({
   closeOverlay,
 });
 
+initOnboarding({
+  onboardingOverlay: document.getElementById("overlay-onboarding"),
+  onboardingBody: document.getElementById("onboarding-body"),
+  onboardingTitle: document.getElementById("onboarding-title"),
+  onboardingNext: document.getElementById("onboarding-next"),
+  onboardingSkip: document.getElementById("onboarding-skip"),
+  onboardingBackdrop: document.getElementById("overlay-onboarding"),
+  input,
+});
+
 // --- Events ---
 btnMenu?.addEventListener("click", toggleSidebar);
 sidebarClose?.addEventListener("click", closeSidebar);
@@ -284,6 +309,10 @@ autopilotStart?.addEventListener("click", startAutopilot);
 btnReport?.addEventListener("click", downloadReport);
 btnNew?.addEventListener("click", newChat);
 btnScrollBottom?.addEventListener("click", () => scrollChatToBottom());
+
+btnToolbarMore?.addEventListener("click", () => {
+  document.getElementById("term-toolbar-extra")?.classList.toggle("open");
+});
 
 toolSearch?.addEventListener("input", () => renderToolList(toolSearch.value));
 input?.addEventListener("keydown", handleInputKeydown);
@@ -331,6 +360,7 @@ updateSessionTitle();
 rebuildInputHistoryRef();
 refreshHealth();
 setInterval(refreshHealth, 30000);
+maybeShowOnboarding();
 
 const statusClock = document.getElementById("status-clock");
 function tickClock() {

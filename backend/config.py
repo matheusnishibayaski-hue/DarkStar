@@ -56,6 +56,9 @@ OUTPUTS_DIR = (
     else BASE_DIR / "backend" / "outputs"
 )
 RECON_TTL_DAYS = int(os.getenv("RECON_TTL_DAYS", "30"))
+AUDIT_DIR = BASE_DIR / "backend" / "audit"
+_max_dl_mb = int(os.getenv("MAX_FILE_DOWNLOAD_MB", "50"))
+MAX_FILE_DOWNLOAD_BYTES = _max_dl_mb * 1024 * 1024
 
 # Escopo de alvos (vazio = sem restrição). Ex: scanme.nmap.org,10.0.0.5,lab.local
 _allowed_targets_raw = os.getenv("ALLOWED_TARGETS", "").strip()

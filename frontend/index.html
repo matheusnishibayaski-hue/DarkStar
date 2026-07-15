@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>kali@pentest</title>
-  <link rel="stylesheet" href="/static/styles.css?v=17" />
+  <link rel="stylesheet" href="/static/styles.css?v=18" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
@@ -47,9 +47,12 @@
             <button type="button" class="term-btn" id="btn-tools" title="Alt+T">tools:<span class="term-badge" id="tool-badge">auto</span></button>
             <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Alt+P">pilot</button>
             <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar">stop</button>
-            <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I">intel</button>
-            <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F">files</button>
-            <button type="button" class="term-btn" id="btn-report" title="Alt+R">report</button>
+            <span class="term-toolbar-extra" id="term-toolbar-extra">
+              <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I">intel</button>
+              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F">files</button>
+              <button type="button" class="term-btn" id="btn-report" title="Alt+R">report</button>
+            </span>
+            <button type="button" class="term-btn term-btn-more" id="btn-toolbar-more" title="Mais" aria-haspopup="true">⋯</button>
             <span class="term-bar-divider" aria-hidden="true"></span>
             <button type="button" class="term-btn term-btn-ghost" id="btn-help" title="Alt+H">?</button>
             <button type="button" class="term-btn term-btn-ghost" id="btn-new" title="Alt+N">+</button>
@@ -57,6 +60,7 @@
         </header>
 
         <div class="health-banner" id="health-banner" hidden role="status"></div>
+        <div class="health-banner scope-banner" id="scope-banner" hidden role="status"></div>
 
         <div class="term-screen crt-screen" id="chat"></div>
 
@@ -132,6 +136,15 @@
           <textarea id="autopilot-objective" class="autopilot-textarea" rows="3" placeholder="mapear portas e serviços web" spellcheck="false"></textarea>
         </div>
         <div class="quick-objectives" id="quick-objectives"></div>
+        <div class="playbook-section">
+          <p class="panel-callout"># playbooks</p>
+          <div class="playbook-row">
+            <select class="panel-field playbook-select" id="playbook-select" aria-label="Playbook">
+              <option value="">— playbook —</option>
+            </select>
+            <button type="button" class="playbook-run-btn" id="playbook-run">./run-playbook</button>
+          </div>
+        </div>
         <button type="button" class="autopilot-start" id="autopilot-start">./start-mission</button>
       </div>
     </div>
@@ -161,6 +174,8 @@
           <div class="intel-tabs" role="tablist" aria-label="Intel">
             <button type="button" class="intel-tab active" id="intel-tab-recon" role="tab" aria-selected="true">recon</button>
             <button type="button" class="intel-tab" id="intel-tab-threats" role="tab" aria-selected="false">threats</button>
+            <button type="button" class="intel-tab" id="intel-tab-timeline" role="tab" aria-selected="false">timeline</button>
+            <button type="button" class="intel-tab" id="intel-tab-audit" role="tab" aria-selected="false">audit</button>
           </div>
           <button type="button" class="panel-close" data-close="overlay-intel" aria-label="Fechar">×</button>
         </div>
@@ -203,6 +218,18 @@
           </div>
         </div>
       </div>
+
+      <div class="intel-pane hidden" id="intel-pane-timeline" role="tabpanel" hidden>
+        <div class="intel-pane-body timeline-wrap" id="intel-timeline"></div>
+      </div>
+
+      <div class="intel-pane hidden" id="intel-pane-audit" role="tabpanel" hidden>
+        <div class="intel-toolbar audit-toolbar">
+          <button type="button" class="intel-refresh-btn" id="audit-refresh" title="Atualizar">refresh</button>
+          <span class="intel-meta" id="audit-meta">/var/audit</span>
+        </div>
+        <div class="intel-pane-body audit-table-wrap" id="audit-table"></div>
+      </div>
     </div>
   </div>
 
@@ -219,6 +246,22 @@
         </div>
       </div>
       <div class="panel-body files-panel-body" id="files-list"></div>
+    </div>
+  </div>
+
+  <div class="overlay overlay-onboarding" id="overlay-onboarding" hidden>
+    <div class="panel panel-narrow panel-onboarding crt-panel" role="dialog" aria-modal="true" aria-label="Bem-vindo">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="onboarding-title">bem-vindo</span>
+          <span class="panel-title-sub">guia rápido · 60s</span>
+        </div>
+      </div>
+      <div class="panel-body onboarding-body" id="onboarding-body"></div>
+      <div class="onboarding-actions">
+        <button type="button" class="onboarding-skip" id="onboarding-skip">pular</button>
+        <button type="button" class="autopilot-start onboarding-next" id="onboarding-next">continuar</button>
+      </div>
     </div>
   </div>
 
@@ -242,6 +285,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=14"></script>
+  <script type="module" src="/static/js/main.js?v=15"></script>
 </body>
 </html>

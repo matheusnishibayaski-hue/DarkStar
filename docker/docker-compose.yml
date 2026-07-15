@@ -4,9 +4,11 @@ services:
     container_name: kali-tools
     hostname: kali-tools
     restart: unless-stopped
-    # Necessário para monitor mode, airmon-ng e acesso às interfaces wireless
+    # Perfil completo — necessário para monitor mode, airmon-ng e Wi-Fi
     privileged: true
     network_mode: host
+    # Perfil restrito (sem Wi-Fi): comente privileged + network_mode: host,
+    # use rede bridge e remova SYS_ADMIN — ver SECURITY.md
     cap_add:
       - NET_ADMIN
       - NET_RAW

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=./playbook.schema.json
+id: recon-web
+name: Recon Web
+description: Subdomínios e probe HTTP no alvo autorizado
+steps:
+  - tool: subfinder
+    args:
+      - -d
+      - "{target}"
+      - -silent
+      - -o
+      - /tools/output/subs-{target_safe}.txt
+  - tool: httpx
+    args:
+      - -l
+      - /tools/output/subs-{target_safe}.txt
+      - -silent
+      - -o
+      - /tools/output/httpx-{target_safe}.txt
+      - -title
+      - -status-code

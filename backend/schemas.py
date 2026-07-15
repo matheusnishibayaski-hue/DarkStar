@@ -52,6 +52,11 @@ class LoginRequest(BaseModel):
     token: str = Field(..., min_length=1, max_length=256)
 
 
+class PlaybookRunRequest(BaseModel):
+    target: str = Field(..., min_length=1, max_length=253)
+    mission_id: str = Field(default="", max_length=64)
+
+
 class AutonomousResponseModel(BaseModel):
     message: str
     tool_executions: list[ToolExecutionResponse]

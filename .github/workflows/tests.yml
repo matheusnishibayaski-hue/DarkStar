@@ -7,7 +7,7 @@ on:
     branches: [main, master]
 
 jobs:
-  test:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,3 +21,55 @@ jobs:
 
       - name: Run test suite
         run: python -m unittest discover -s tests -v
+
+  e2e:
+    needs: unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements-lock.txt
+
+      - name: Install Node dependencies
+        run: npm ci || npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start API server
+        run: |
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
+          sleep 3
+
+      - name: Run E2E smoke tests
+        run: npx playwright test -c e2e/playwright.config.js
+
+  docker-integration:
+    needs: unit
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Docker version
+        run: docker --version
+
+      - name: Build Kali image
+        working-directory: docker
+        run: docker compose build
+
+      - name: Start Kali container
+        working-directory: docker
+        run: docker compose up -d
+
+      - name: nmap version in container
+        run: docker exec kali-tools nmap --version
