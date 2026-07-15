@@ -17,7 +17,7 @@ REM [1/6] Python e config (nao depende do Docker)
 echo [1/6] Configuracao...
 if not exist ".env" (
     copy /y ".env.example" ".env" >nul
-    echo       .env criado - edite GEMINI_API_KEY se necessario
+    echo       .env criado - edite OPENROUTER_API_KEY se necessario
 )
 
 if not exist "venv\Scripts\python.exe" (

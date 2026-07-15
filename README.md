@@ -1,6 +1,8 @@
 # Chat IA Kali
 
-Assistente de chat com interface de terminal para **testes de penetração éticos**. O usuário descreve o que precisa em linguagem natural; a IA (Google Gemini) interpreta o pedido, escolhe a ferramenta adequada e **executa comandos reais** em um ambiente Kali Linux isolado via Docker — em vez de apenas sugerir comandos.
+Assistente de chat com interface de terminal para **testes de penetração éticos**. O usuário descreve o que precisa em linguagem natural; a IA interpreta o pedido, escolhe a ferramenta adequada e **executa comandos reais** em um ambiente Kali Linux isolado via Docker — em vez de apenas sugerir comandos.
+
+A IA é alimentada via **OpenRouter** (modelos Gemini e DeepSeek), com seletor de custo/qualidade na interface, modo **Auto-Pilot** para missões autônomas, dashboards visuais de resultados, relatórios Markdown e execução vectorizada sem shell.
 
 > **Aviso legal:** use este projeto **somente** em sistemas, redes ou aplicações que você possui ou para os quais tem **autorização explícita por escrito**. O uso não autorizado é ilegal.
 
@@ -9,6 +11,7 @@ Assistente de chat com interface de terminal para **testes de penetração étic
 ## Sumário
 
 - [Visão geral](#visão-geral)
+- [Funcionalidades](#funcionalidades)
 - [Arquitetura](#arquitetura)
 - [Fluxo de uma conversa](#fluxo-de-uma-conversa)
 - [Estrutura do projeto](#estrutura-do-projeto)
@@ -16,96 +19,145 @@ Assistente de chat com interface de terminal para **testes de penetração étic
 - [Instalação e execução](#instalação-e-execução)
 - [Configuração (`.env`)](#configuração-env)
 - [Interface web](#interface-web)
+- [Seletor de modelos (Gemini / DeepSeek)](#seletor-de-modelos-gemini--deepseek)
+- [Modo Auto-Pilot](#modo-auto-pilot)
 - [API REST](#api-rest)
 - [Motor de execução e segurança](#motor-de-execução-e-segurança)
+- [Logs, resumo de output e relatórios](#logs-resumo-de-output-e-relatórios)
 - [Ferramentas disponíveis](#ferramentas-disponíveis)
 - [Wi-Fi: duas camadas de execução](#wi-fi-duas-camadas-de-execução)
 - [Container Docker Kali](#container-docker-kali)
-- [Agente de IA (Gemini)](#agente-de-ia-gemini)
+- [Agente de IA (OpenRouter)](#agente-de-ia-openrouter)
 - [Solução de problemas](#solução-de-problemas)
 - [Desenvolvimento manual](#desenvolvimento-manual)
+- [Exemplos de uso](#exemplos-de-uso)
+- [Changelog](#changelog)
+- [Licença e responsabilidade](#licença-e-responsabilidade)
 
 ---
 
 ## Visão geral
 
-O **Chat IA Kali** combina três peças:
+O **Chat IA Kali** combina quatro camadas:
 
 | Camada | Tecnologia | Função |
 |--------|------------|--------|
-| **Frontend** | HTML, CSS, JavaScript vanilla | Interface estilo terminal com histórico de conversas e seletor de ferramentas |
-| **Backend** | Python + FastAPI + Uvicorn | API REST, servir arquivos estáticos, orquestrar IA e execução |
-| **Ambiente de ferramentas** | Docker (Debian + 180+ ferramentas de segurança) | Executar `nmap`, `nuclei`, `sqlmap`, `aircrack-ng` etc. de forma isolada |
+| **Frontend** | HTML, CSS, JavaScript vanilla | Terminal interativo, sidebar, seletor de ferramentas/modelos, dashboards |
+| **Backend** | Python + FastAPI + Uvicorn | API REST, orquestração IA + execução + relatórios |
+| **IA** | OpenRouter (SDK OpenAI) | Gemini / DeepSeek com function calling |
+| **Ferramentas** | Docker (180+ tools de segurança) | `nmap`, `nuclei`, `sqlmap`, `aircrack-ng` etc. |
 
-A IA recebe um *system prompt* que a instrui a **sempre executar** ferramentas via function calling (`run_kali_tool`) quando o usuário pedir scans, análises ou consultas técnicas — nunca apenas recomendar comandos.
+A IA recebe um *system prompt* compacto que a instrui a **sempre executar** ferramentas via function calling (`run_kali_tool`) quando o usuário pedir scans, análises ou consultas técnicas — nunca apenas recomendar comandos.
+
+---
+
+## Funcionalidades
+
+### Chat interativo
+- Interface estilo terminal Linux (tema verde fosforescente, scanlines, JetBrains Mono)
+- Histórico de conversas na sidebar (persistido em `localStorage`)
+- Seletor de ferramenta fixa ou modo `auto`
+- Histórico de comandos no prompt (↑ / ↓)
+- Barra de status inferior (Docker, Kali, ferramenta, modelo, mensagens)
+- Toasts de feedback e botão scroll ↓
+
+### Execução real de ferramentas
+- 180+ ferramentas na whitelist
+- Execução **vectorizada** no Docker (sem `bash -c`)
+- Wi-Fi nativo no Windows (`netsh`) ou no container (monitor mode)
+- Flags não-interativas automáticas (`--batch`, `-y`, etc.)
+- Logs completos em disco; resumo inteligente enviado à IA
+
+### Visualização de resultados
+- **Dashboard Nmap:** tabela Porta / Estado / Serviço / Versão
+- **Dashboard Nuclei/vulns:** cards coloridos por severidade
+- Log bruto oculto por padrão quando há dashboard; botão **Ver Log Completo**
+- Link para log persistido (`/api/logs/{id}`)
+
+### Relatórios e Auto-Pilot
+- Botão **report** gera relatório Markdown da sessão
+- **Auto-Pilot:** informe alvo + objetivo; o agente executa múltiplas ferramentas em loop e entrega relatório final
+
+### Economia de tokens
+- System prompt enxuto
+- Histórico limitado (`MAX_HISTORY_MESSAGES`)
+- Output truncado/resumido antes de ir à IA (`summarize.py`)
+- Catálogo de ferramentas só na UI (`tool_catalog.py`) — não infla o prompt
+
+### Seletor de modelos
+- Três tiers: **Economia**, **Equilibrado**, **Raciocínio**
+- Alternância **Gemini ↔ DeepSeek** por tier
+- Fallback automático em erro de cota
 
 ---
 
 ## Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Navegador (frontend/)                                          │
-│  index.html · styles.css · app.js                               │
-│  - Terminal interativo                                          │
-│  - Histórico em localStorage                                    │
-│  - Seletor de ferramenta (auto ou fixa)                         │
-└───────────────────────────┬─────────────────────────────────────┘
-                            │ HTTP (fetch)
-                            ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  Backend FastAPI (backend/main.py)                              │
-│  GET  /              → index.html                               │
-│  GET  /static/*      → CSS/JS                                   │
-│  GET  /api/health    → status Docker + Wi-Fi                      │
-│  GET  /api/tools     → categorias de ferramentas                │
-│  POST /api/chat      → conversa com IA + execuções              │
-└───────────────┬─────────────────────────┬───────────────────────┘
-                │                         │
-                ▼                         ▼
-┌───────────────────────────┐  ┌────────────────────────────────┐
-│  Agente Gemini            │  │  Executor (backend/executor/)  │
-│  backend/ai/agent.py      │  │  kali.py · wifi_scan.py        │
-│  - Function calling       │  │  - Validação whitelist         │
-│  - Loop até 5 iterações   │  │  - docker exec kali-tools      │
-│  - Fallback de modelo     │  │  - Wi-Fi nativo Windows (netsh)│
-└───────────────────────────┘  └───────────────┬────────────────┘
-                                               │
-                                               ▼
-                               ┌───────────────────────────────┐
-                               │  Container Docker kali-tools  │
-                               │  docker/Dockerfile            │
-                               │  180+ ferramentas pré-instal. │
-                               └───────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Navegador (frontend/)                                               │
+│  index.html · styles.css · app.js                                    │
+│  - Terminal + sidebar + painéis                                      │
+│  - Seletor de ferramenta e modelo                                    │
+│  - Dashboards nmap/nuclei · relatório · Auto-Pilot                   │
+└────────────────────────────┬─────────────────────────────────────────┘
+                             │ HTTP (fetch)
+                             ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│  Backend FastAPI (backend/main.py)                                   │
+│  GET  /              → index.html                                    │
+│  GET  /static/*      → CSS/JS                                        │
+│  GET  /api/health    → status Docker + Wi-Fi                         │
+│  GET  /api/tools     → categorias + metadados UI                     │
+│  GET  /api/models    → catálogo Gemini/DeepSeek                      │
+│  GET  /api/logs/{id} → log completo da execução                      │
+│  POST /api/chat      → conversa com IA + execuções                   │
+│  POST /api/autonomous→ modo Auto-Pilot                               │
+│  POST /api/generate-report → relatório Markdown                      │
+└──────────────┬─────────────────────────────┬─────────────────────────┘
+               │                             │
+               ▼                             ▼
+┌────────────────────────────┐   ┌─────────────────────────────────────┐
+│  Agente IA (OpenRouter)    │   │  Executor (backend/executor/)       │
+│  backend/ai/agent.py       │   │  kali.py · wifi_scan.py             │
+│  backend/ai/autopilot.py   │   │  summarize.py · logs.py · result.py │
+│  - Function calling        │   │  - Whitelist + execução vectorizada │
+│  - Fallback de modelo      │   │  - Resumo de output para IA         │
+└────────────────────────────┘   └──────────────────┬──────────────────┘
+                                                    │
+                                                    ▼
+                                    ┌───────────────────────────────┐
+                                    │  Container Docker kali-tools  │
+                                    │  docker/Dockerfile            │
+                                    │  180+ ferramentas pré-instal. │
+                                    └───────────────────────────────┘
 ```
 
 ---
 
 ## Fluxo de uma conversa
 
-1. **Usuário digita** uma mensagem no prompt do terminal (ex.: *"Faça um scan de portas em scanme.nmap.org"*).
+1. **Usuário digita** uma mensagem (ex.: *"Faça um scan de portas em scanme.nmap.org"*).
 
-2. **Frontend** (`app.js`) envia `POST /api/chat` com:
-   - `message`: texto atual
-   - `history`: mensagens anteriores (user/assistant)
-   - `preferred_tool`: `"auto"` ou nome de uma ferramenta fixa (ex.: `"nmap"`)
+2. **Frontend** envia `POST /api/chat` com:
+   - `message`, `history`, `preferred_tool`
+   - `model` e `fallback_model` (do seletor pill)
 
 3. **Backend** repassa para `chat()` em `backend/ai/agent.py`.
 
-4. **Gemini** analisa o pedido com o `SYSTEM_PROMPT` (definido em `backend/config.py`). Se precisar de dados técnicos, chama a função `run_kali_tool(command, reason)`.
+4. **IA** analisa com o `SYSTEM_PROMPT`. Se precisar de dados técnicos, chama `run_kali_tool(command, reason)`.
 
 5. **Executor** (`backend/executor/kali.py`):
-   - Valida o comando (whitelist + padrões bloqueados)
-   - Se for ferramenta Wi-Fi do host (`wlan-scan`, `wlan-interfaces`, `wifi-list`) → executa no Windows via `netsh`
-   - Caso contrário → `docker exec --user root kali-tools bash -c "<comando>"`
+   - Faz parse com `shlex` → lista de argumentos
+   - Valida binário na whitelist + bloqueio de `..` nos args
+   - Wi-Fi host (`wlan-scan`, etc.) → `netsh` no Windows
+   - Demais → `docker exec kali-tools <bin> <arg1> <arg2> ...` (sem shell)
 
-6. **Resultado** volta para a IA em texto formatado (`format_result_for_llm`); a IA pode executar mais ferramentas (até `MAX_TOOL_ITERATIONS`, padrão 5) ou gerar a resposta final em português.
+6. **Output** é salvo em `backend/logs/{uuid}.log`; um **resumo** vai para a IA; stdout/stderr **completos** vão ao frontend.
 
-7. **Resposta** inclui:
-   - `message`: texto interpretado pela IA
-   - `tool_executions`: lista com comando, stdout, stderr, exit code, sucesso/bloqueio
+7. A IA pode executar mais ferramentas (até `MAX_TOOL_ITERATIONS`, padrão 5) ou responder em português.
 
-8. **Frontend** renderiza a resposta e blocos expansíveis `[ok]` / `[exit N]` / `[blocked]` para cada execução.
+8. **Frontend** renderiza resposta, dashboards e blocos `[ok]` / `[exit N]` / `[blocked]`.
 
 ---
 
@@ -114,29 +166,35 @@ A IA recebe um *system prompt* que a instrui a **sempre executar** ferramentas v
 ```
 Chat IA Kali/
 ├── backend/
-│   ├── main.py              # FastAPI: rotas, health check, static files
-│   ├── config.py              # .env, whitelist, system prompt, categorias
+│   ├── main.py                 # FastAPI: rotas, health, static files
+│   ├── config.py               # .env, whitelist, system prompts
+│   ├── models_catalog.py       # Tiers Gemini/DeepSeek para UI
+│   ├── tool_catalog.py         # Resumo + exemplo por ferramenta (só UI)
 │   ├── ai/
-│   │   └── agent.py           # Integração Gemini + function calling
-│   └── executor/
-│       ├── kali.py            # Validação e docker exec
-│       ├── wifi_scan.py       # Scan Wi-Fi nativo (Windows/Linux host)
-│       └── result.py          # ExecutionResult e formatação para LLM
+│   │   ├── agent.py            # Chat OpenRouter + function calling + relatório
+│   │   └── autopilot.py        # Modo Auto-Pilot autônomo
+│   ├── executor/
+│   │   ├── kali.py             # Validação, execução vectorizada, flags
+│   │   ├── wifi_scan.py        # Scan Wi-Fi nativo (Windows/Linux host)
+│   │   ├── result.py           # ExecutionResult e formatação para LLM
+│   │   ├── summarize.py        # Truncamento/resumo de output longo
+│   │   └── logs.py               # Persistência de logs em disco
+│   └── logs/                   # Logs de execução (gitignored)
 ├── frontend/
-│   ├── index.html             # Shell do terminal
-│   ├── styles.css             # Tema verde terminal (JetBrains Mono)
-│   └── app.js                 # Chat, histórico, seletor de ferramentas
+│   ├── index.html              # Shell do terminal + painéis
+│   ├── styles.css              # Tema terminal, dashboards, scrollbars
+│   └── app.js                  # Chat, sidebar, modelos, tools, autopilot
 ├── docker/
-│   ├── Dockerfile             # Imagem com 180+ ferramentas
-│   ├── docker-compose.yml     # Serviço kali-tools (privileged, host network)
-│   ├── wifi-entrypoint.sh     # Desbloqueia rfkill e mantém container vivo
-│   └── wifi-status.sh         # Diagnóstico de interfaces wireless
+│   ├── Dockerfile              # Imagem com 180+ ferramentas
+│   ├── docker-compose.yml      # Serviço kali-tools (privileged, host network)
+│   ├── wifi-entrypoint.sh      # Desbloqueia rfkill e mantém container vivo
+│   └── wifi-status.sh          # Diagnóstico de interfaces wireless
 ├── scripts/
-│   └── docker-check.ps1       # Helper com timeout para comandos Docker no Windows
-├── start.bat                  # Script principal de inicialização (Windows)
-├── requirements.txt           # Dependências Python
-├── .env.example               # Modelo de variáveis de ambiente
-└── .env                       # Suas chaves (não versionar)
+│   └── docker-check.ps1        # Helper com timeout para Docker no Windows
+├── start.bat                   # Script principal de inicialização (Windows)
+├── requirements.txt            # Dependências Python
+├── .env.example                # Modelo de variáveis de ambiente
+└── .env                        # Suas chaves (não versionar)
 ```
 
 ---
@@ -145,19 +203,17 @@ Chat IA Kali/
 
 | Requisito | Versão / observação |
 |-----------|---------------------|
-| **Windows** | Ambiente principal (IIS em `inetpub`; script `start.bat` para Windows) |
+| **Windows** | Ambiente principal (`start.bat`); Linux também funciona manualmente |
 | **Python** | 3.10 ou superior |
-| **Docker Desktop** | Para ferramentas Kali (opcional no modo `start.bat servidor`) |
-| **Chave Google Gemini** | Gratuita em [Google AI Studio](https://aistudio.google.com/apikey) |
-| **Dongle USB Wi-Fi** | Apenas para ataques/captura no container (monitor mode) |
+| **Docker Desktop** | Para ferramentas Kali (opcional com `start.bat servidor`) |
+| **Chave OpenRouter** | Em [openrouter.ai/keys](https://openrouter.ai/keys) |
+| **Dongle USB Wi-Fi** | Apenas para captura/monitor mode no container |
 
 ---
 
 ## Instalação e execução
 
 ### Modo completo (recomendado)
-
-Duplo clique ou no terminal:
 
 ```bat
 start.bat
@@ -166,8 +222,8 @@ start.bat
 O script executa **6 etapas**:
 
 1. **Configuração Python** — cria `.env` a partir de `.env.example`, cria `venv`, instala `requirements.txt`
-2. **Docker** — verifica se o engine responde; inicia Docker Desktop se necessário (até ~8 min de espera)
-3. **Container Kali** — `docker compose up -d --build` em `docker/` (primeira build pode levar vários minutos)
+2. **Docker** — verifica engine; inicia Docker Desktop se necessário (até ~8 min)
+3. **Container Kali** — `docker compose up -d --build` em `docker/`
 4. **Aguarda container** — verifica se `kali-tools` está running
 5. **Verifica ferramentas** — testa `which nmap` dentro do container
 6. **Servidor web** — `uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload`
@@ -178,9 +234,9 @@ Acesse: **http://localhost:8000**
 
 | Comando | Descrição |
 |---------|-----------|
-| `start.bat servidor` | Sobe só o chat, sem Docker. Wi-Fi nativo (`wlan-scan`) funciona; ferramentas Kali não |
+| `start.bat servidor` | Sobe só o chat, sem Docker. Wi-Fi nativo funciona; ferramentas Kali não |
 | `start.bat nodocker` | Alias de `servidor` |
-| `start.bat repair` | Reinicia Docker Desktop e limpa cache (`builder prune`, `system prune`) |
+| `start.bat repair` | Reinicia Docker Desktop e limpa cache |
 
 ---
 
@@ -189,57 +245,142 @@ Acesse: **http://localhost:8000**
 Copie `.env.example` para `.env` (o `start.bat` faz isso automaticamente):
 
 ```env
-# Google Gemini — chave gratuita em https://aistudio.google.com/apikey
-GEMINI_API_KEY=sua_chave_aqui
+# OpenRouter — chave em https://openrouter.ai/keys
+OPENROUTER_API_KEY=sk-or-v1-...
 
-# flash-lite tem mais cota no plano gratuito
-GEMINI_MODEL=gemini-2.5-flash-lite
-GEMINI_FALLBACK_MODEL=gemini-2.5-flash-lite
+# Modelo principal e fallback (IDs OpenRouter)
+GEMINI_MODEL=google/gemini-2.5-flash
+GEMINI_FALLBACK_MODEL=deepseek/deepseek-chat-v3.2
 
 # Container Docker
 KALI_CONTAINER=kali-tools
-
-# Timeout de comandos normais (segundos)
 COMMAND_TIMEOUT=180
-
-# Timeout de ferramentas Wi-Fi no container (segundos)
 WIFI_COMMAND_TIMEOUT=600
 
-# Máximo de chamadas run_kali_tool por mensagem do usuário
+# Limites de IA e execução
 MAX_TOOL_ITERATIONS=5
+MAX_HISTORY_MESSAGES=10
+MAX_AUTONOMOUS_ROUNDS=10
+MAX_AUTONOMOUS_TOOLS=25
+
+# Economia de tokens no output das ferramentas
+OUTPUT_TOKEN_LIMIT=3000
+SUMMARY_HEAD_LINES=30
+SUMMARY_TAIL_LINES=15
 ```
 
-**Importante:** cada mensagem no chat pode gerar **2–6 chamadas** à API Gemini (ferramentas + resposta). Se a cota esgotar (erro 429), aguarde alguns minutos ou use `gemini-2.5-flash-lite`.
+**Dica de custo:** use tier **Economia** (Flash-Lite ou DeepSeek V3.2) no seletor da UI para scans simples; reserve **Raciocínio** (Pro / R1) para análises complexas.
+
+Logs persistidos em `backend/logs/` (não versionados).
 
 ---
 
 ## Interface web
 
-A UI imita um terminal Linux com tema verde fosforescente.
+### Layout
+
+| Área | Descrição |
+|------|-----------|
+| **Sidebar** | Conversas salvas, botão novo chat, link de atalhos |
+| **Barra superior** | Título da sessão + botões de ação |
+| **Terminal** | Histórico de mensagens e execuções |
+| **Prompt** | Entrada de comando + seletor de modelo (pill) |
+| **Barra de status** | Docker, Kali, ferramenta, modelo, contadores |
 
 ### Barra superior
 
-| Botão | Função |
-|-------|--------|
-| **tool:auto** | Abre painel para escolher ferramenta fixa ou deixar em `auto` |
-| **hist** | Histórico de conversas (persistido no `localStorage` do navegador) |
-| **+** | Nova conversa |
+| Botão | Atalho | Função |
+|-------|--------|--------|
+| **tools:auto** | `Ctrl+T` | Painel grande de ferramentas (grid 3 colunas) |
+| **pilot** | `Ctrl+P` | Modo Auto-Pilot |
+| **report** | `Ctrl+R` | Gera e baixa relatório Markdown |
+| **?** | `Ctrl+/` | Ajuda com atalhos |
+| **+** | `Ctrl+N` | Nova conversa |
+
+### Painel de ferramentas
+
+- Modal amplo (~94% da largura, até 1280px)
+- Abas por categoria (Rede, OSINT, Web, Wi-Fi, etc.)
+- Busca por nome, categoria ou descrição
+- Cards com resumo, exemplo de comando e botão **usar** (preenche o prompt)
+- Card **auto** em destaque — IA escolhe a ferramenta
 
 ### Prompt
 
 ```
-kali@ai:~$ <sua mensagem>
+kali@ai:~$ <sua mensagem>                    [Flash ▾]
 ```
 
 - Mensagens do usuário aparecem como linhas de comando
 - Respostas da IA começam com `# `
-- Execuções de ferramentas aparecem como blocos clicáveis: `[ok]`, `[exit 1]`, `[blocked]`
+- Execuções: blocos clicáveis `[ok]`, `[exit 1]`, `[blocked]`
+- Dashboards automáticos para nmap e nuclei
+
+### Atalhos de teclado
+
+| Atalho | Ação |
+|--------|------|
+| `M` | Abrir/fechar sidebar |
+| `Esc` | Fechar painéis |
+| `Ctrl+K` | Focar no prompt |
+| `↑` / `↓` | Histórico de comandos da sessão |
+| `Ctrl+T` | Ferramentas |
+| `Ctrl+P` | Auto-Pilot |
+| `Ctrl+R` | Relatório |
+| `Ctrl+N` | Novo chat |
+| `Ctrl+/` | Ajuda |
 
 ### Persistência
 
-Chave no navegador: `chat-ia-kali-sessions`
+| Chave localStorage | Conteúdo |
+|--------------------|----------|
+| `chat-ia-kali-sessions` | Conversas (id, title, messages, preferredTool) |
+| `chat-ia-kali-model` | Modelo selecionado (id, provider, fallback) |
 
-Cada sessão guarda: `id`, `title`, `messages`, `preferredTool`, timestamps.
+---
+
+## Seletor de modelos (Gemini / DeepSeek)
+
+Botão pill ao lado do prompt abre menu estilo dropdown com três tiers:
+
+| Tier | Gemini | DeepSeek | Uso |
+|------|--------|----------|-----|
+| **Economia** | Flash-Lite | V3.2 | Scans rápidos, menor custo |
+| **Equilibrado** | Flash | Chat | Uso geral do dia a dia |
+| **Raciocínio** | Pro | R1 | Análises profundas, relatórios |
+
+- Checkmark no modelo ativo
+- Badges **G** (Gemini) e **DS** (DeepSeek)
+- Escolha persistida no navegador
+- Enviada em `POST /api/chat` e `POST /api/autonomous`
+- Fallback cruzado automático (ex.: Gemini → DeepSeek do mesmo tier)
+
+Catálogo definido em `backend/models_catalog.py`; exposto via `GET /api/models`.
+
+---
+
+## Modo Auto-Pilot
+
+Missões autônomas multi-etapa sem intervenção manual.
+
+1. Clique **pilot** ou `Ctrl+P`
+2. Informe **alvo** (IP, domínio, URL) e **objetivo** (ex.: *"mapear portas abertas e identificar serviços web"*)
+3. O agente (`backend/ai/autopilot.py`):
+   - Executa ferramentas em loop (até `MAX_AUTONOMOUS_ROUNDS` / `MAX_AUTONOMOUS_TOOLS`)
+   - Analisa resultados entre rodadas
+   - Encerra via `finish_mission` quando o objetivo foi atingido ou não há mais passos úteis
+4. Retorna mensagem final + execuções + **relatório Markdown** (download automático)
+
+**Endpoint:** `POST /api/autonomous`
+
+```json
+{
+  "target": "scanme.nmap.org",
+  "objective": "Identificar portas abertas e serviços",
+  "model": "google/gemini-2.5-flash",
+  "fallback_model": "deepseek/deepseek-chat-v3.2"
+}
+```
 
 ---
 
@@ -247,13 +388,10 @@ Cada sessão guarda: `id`, `title`, `messages`, `preferredTool`, timestamps.
 
 ### `GET /api/health`
 
-Verifica saúde do sistema.
-
-**Resposta exemplo:**
-
 ```json
 {
   "status": "ok",
+  "version": "2.0.0",
   "docker": true,
   "kali_container": true,
   "kali_error": "",
@@ -263,12 +401,17 @@ Verifica saúde do sistema.
 }
 ```
 
-- No **Windows**, Wi-Fi usa `netsh wlan show interfaces`
-- Com container ativo no **Linux**, lista interfaces via `iw dev` dentro do Docker
-
 ### `GET /api/tools`
 
-Retorna categorias e ferramentas para o seletor da UI (definidas em `TOOL_CATEGORIES` em `config.py`).
+Retorna categorias enriquecidas com `summary` e `example` de cada ferramenta (UI).
+
+### `GET /api/models`
+
+Retorna tiers, modelos Gemini/DeepSeek, defaults e fallbacks.
+
+### `GET /api/logs/{log_id}`
+
+Retorna log completo da execução (text/plain).
 
 ### `POST /api/chat`
 
@@ -281,7 +424,9 @@ Retorna categorias e ferramentas para o seletor da UI (definidas em `TOOL_CATEGO
     { "role": "user", "content": "..." },
     { "role": "assistant", "content": "..." }
   ],
-  "preferred_tool": "auto"
+  "preferred_tool": "auto",
+  "model": "google/gemini-2.5-flash",
+  "fallback_model": "deepseek/deepseek-chat-v3.2"
 }
 ```
 
@@ -289,30 +434,60 @@ Retorna categorias e ferramentas para o seletor da UI (definidas em `TOOL_CATEGO
 
 ```json
 {
-  "message": "Interpretação dos resultados em português...",
+  "message": "Interpretação dos resultados...",
   "tool_executions": [
     {
       "command": "nmap -sV scanme.nmap.org",
-      "reason": "Identificar serviços e versões nas portas abertas",
+      "reason": "Identificar serviços e versões",
       "stdout": "...",
       "stderr": "",
       "exit_code": 0,
       "success": true,
-      "blocked": false
+      "blocked": false,
+      "log_file_id": "a1b2c3d4e5f6",
+      "tool": "nmap"
     }
   ]
 }
 ```
 
+### `POST /api/autonomous`
+
+Ver [Modo Auto-Pilot](#modo-auto-pilot).
+
+### `POST /api/generate-report`
+
+Gera relatório Markdown a partir do histórico e execuções da sessão.
+
+**Corpo:**
+
+```json
+{
+  "history": [...],
+  "tool_executions": [...],
+  "title": "Relatório de Pentest"
+}
+```
+
+**Resposta:** arquivo `relatorio-pentest.md` (download).
+
 ---
 
 ## Motor de execução e segurança
 
-Toda execução passa por `validate_command()` em `backend/executor/kali.py`.
+Toda execução passa por `validate_command(args: list[str])` em `backend/executor/kali.py`.
 
-### Whitelist de ferramentas
+### Execução vectorizada (v2.0)
 
-Apenas binários listados em `ALLOWED_TOOLS` (`config.py`) são permitidos — mais de **180 ferramentas**, incluindo:
+| Antes | Depois |
+|-------|--------|
+| `docker exec ... bash -c "<string>"` | `docker exec ... <binário> <arg1> <arg2> ...` |
+| Validação por regex em string | Whitelist do binário + bloqueio de `..` nos argumentos |
+| Risco de shell injection | Argumentos isolados via `shlex`; sem interpretação shell |
+
+### Whitelist
+
+Apenas binários em `ALLOWED_TOOLS` (`config.py`) — **180+ ferramentas**, incluindo:
 
 - Rede/recon: `nmap`, `masscan`, `dig`, `whois`, `rustscan`, …
 - OSINT: `subfinder`, `amass`, `theHarvester`, `httpx`, …
@@ -321,14 +496,19 @@ Apenas binários listados em `ALLOWED_TOOLS` (`config.py`) são permitidos — m
 - Wi-Fi host: `wlan-scan`, `wlan-interfaces`, `wifi-list`
 - Wi-Fi container: `aircrack-ng`, `airodump-ng`, `wifite`, …
 
-### Padrões bloqueados
+### Flags não-interativas automáticas
 
-Comandos que correspondem a estes padrões são **rejeitados** (`blocked: true`):
+| Ferramenta | Flag inserida |
+|------------|---------------|
+| sqlmap | `--batch` |
+| apt / apt-get | `-y` |
+| dpkg | `--force-confdef --force-confold` |
+| hydra | `-I` |
+| nikto | `-ask no` |
+| wpscan | `--no-update` |
+| ffuf | `-noninteractive` |
 
-- Shell injection: `;`, `&`, `|`, `` ` ``, `$`
-- Path traversal: `../`
-- Redirecionamento perigoso: `> /`
-- Comandos destrutivos/admin: `rm`, `mkfs`, `dd`, `shutdown`, `reboot`, `chmod`, `chown`, `sudo`, `su`
+Todas as execuções Docker usam `stdin=subprocess.DEVNULL`.
 
 ### Limites
 
@@ -337,24 +517,47 @@ Comandos que correspondem a estes padrões são **rejeitados** (`blocked: true`)
 | Tamanho máximo do comando | 500 caracteres |
 | Timeout comandos normais | 180 s |
 | Timeout ferramentas Wi-Fi | 600 s |
-| Tamanho máximo stdout capturado | 50 000 caracteres |
-| Tamanho máximo stderr capturado | 10 000 caracteres |
+| Iterações de ferramenta por mensagem | 5 |
+| Histórico enviado à IA | 10 mensagens |
 
-### Isolamento Docker
+---
 
-Comandos Kali rodam como:
+## Logs, resumo de output e relatórios
 
-```bash
-docker exec --user root kali-tools bash -c "<comando>"
-```
+### Logs persistidos
 
-O container é **privileged**, com `network_mode: host`, capacidades `NET_ADMIN`/`NET_RAW`/`SYS_ADMIN` e acesso USB — necessário para monitor mode e dongles Wi-Fi.
+- Cada execução gera UUID de 12 caracteres
+- Log completo em `backend/logs/{id}.log`
+- Frontend exibe link **Log #{id}** → `GET /api/logs/{id}`
+
+### Resumo para a IA (`summarize.py`)
+
+Quando output excede `OUTPUT_TOKEN_LIMIT`:
+
+1. Mantém primeiras **N linhas** (`SUMMARY_HEAD_LINES`, padrão 30)
+2. Extrai linhas críticas via regex (`[CRITICAL]`, `[CVE-`, `open/tcp`, etc.)
+3. Mantém últimas **N linhas** (`SUMMARY_TAIL_LINES`, padrão 15)
+4. Prefixo: `[Output truncado para economia. Resumo técnico abaixo:]`
+
+Apenas o **resumo** vai para a IA; o frontend recebe stdout/stderr **completos**.
+
+### Relatório Markdown (`generate_report`)
+
+Estrutura gerada pela IA:
+
+1. Resumo Executivo
+2. Resumo Técnico (tabela de comandos)
+3. Tabela de Vulnerabilidades / Achados
+4. Recomendações de Mitigação
+5. Anexo — referências aos logs persistidos
+
+Disparado pelo botão **report** ou retornado pelo Auto-Pilot.
 
 ---
 
 ## Ferramentas disponíveis
 
-As categorias exibidas na UI (`TOOL_CATEGORIES`):
+Categorias na UI (`TOOL_CATEGORIES` + metadados em `tool_catalog.py`):
 
 | Categoria | Exemplos |
 |-----------|----------|
@@ -380,26 +583,15 @@ Wordlists: `/usr/share/seclists` (SecLists) dentro do container.
 
 Ferramentas: `wlan-scan`, `wlan-interfaces`, `wifi-list`
 
-Executadas via **`netsh wlan`** no próprio Windows:
-
-- Adaptador Wi-Fi ativo
-- Redes visíveis (SSID, BSSID, sinal)
-- Perfis salvos no PC
-
-Funcionam mesmo com `start.bat servidor` (sem Docker).
+Executadas via **`netsh wlan`** no Windows. Funcionam com `start.bat servidor` (sem Docker).
 
 ### 2. Container Docker (captura / monitor mode)
 
-Ferramentas: `aircrack-ng`, `airodump-ng`, `airmon-ng`, `reaver`, `wifite`, `hcxdumptool`, `wifi-status`, etc.
+Ferramentas: `aircrack-ng`, `airodump-ng`, `airmon-ng`, `reaver`, `wifite`, `hcxdumptool`, etc.
 
-Requisitos:
+Requisitos: container `kali-tools` running, dongle USB compatível, USB repassado, entrypoint desbloqueia rfkill.
 
-- Docker com container `kali-tools` rodando
-- Dongle USB Wi-Fi compatível com monitor mode
-- USB repassado ao container (`/dev/bus/usb`)
-- Entrypoint desbloqueia rfkill (`wifi-entrypoint.sh`)
-
-Diagnóstico dentro do container:
+Diagnóstico:
 
 ```bash
 docker exec kali-tools wifi-status
@@ -409,7 +601,7 @@ docker exec kali-tools wifi-status
 
 ## Container Docker Kali
 
-### Build e execução manual
+### Build manual
 
 ```bash
 cd docker
@@ -418,16 +610,16 @@ docker compose up -d --build
 
 ### Imagem (`docker/Dockerfile`)
 
-Base: **Debian Bookworm slim**, com instalação em camadas:
+Base **Debian Bookworm slim** com instalação em camadas:
 
 1. **APT** — nmap, masscan, sqlmap, hydra, john, aircrack-ng, tshark, etc.
 2. **Binários** — ffuf, feroxbuster, nuclei, subfinder, httpx, rustscan, kerbrute, chisel, trivy, …
 3. **Git** — nikto, testssl.sh, searchsploit, dirsearch, wifite, autorecon, SecLists, …
 4. **Python/Ruby pip** — impacket, nxc, certipy-ad, wpscan, evil-winrm, volatility3, …
 
-O container **não executa um shell interativo** — fica vivo com `sleep infinity` após desbloquear rádios Wi-Fi.
+O container fica vivo com `sleep infinity` após desbloquear rádios Wi-Fi.
 
-### Compose (`docker/docker-compose.yml`)
+### Compose
 
 ```yaml
 services:
@@ -443,28 +635,30 @@ services:
 
 ---
 
-## Agente de IA (Gemini)
+## Agente de IA (OpenRouter)
 
 Arquivo: `backend/ai/agent.py`
 
+### Integração
+
+- Cliente **OpenAI SDK** apontando para `https://openrouter.ai/api/v1`
+- Chave: `OPENROUTER_API_KEY` no `.env`
+- Modelos referenciados como IDs OpenRouter (`google/gemini-2.5-flash`, `deepseek/deepseek-chat-v3.2`, etc.)
+
 ### Comportamento
 
-- Usa **Google GenAI SDK** (`google-genai`) com function calling validado
-- `automatic_function_calling` está **desabilitado** — o loop é manual para registrar cada execução
-- Se a IA responder sem executar ferramenta na primeira tentativa, um **nudge** força: *"Execute o comando AGORA com run_kali_tool"*
-- **Ferramenta preferida:** se o usuário selecionar ex.: `nmap`, a mensagem é prefixada com instrução para usar essa ferramenta obrigatoriamente
+- Function calling manual (loop controlado para registrar cada execução)
+- **Nudge** se a IA responder sem executar: *"Execute o comando AGORA com run_kali_tool"*
+- **Ferramenta preferida:** prefixo força uso da ferramenta selecionada na UI
+- Histórico truncado a `MAX_HISTORY_MESSAGES`
 
 ### Tratamento de erros
 
-| Erro | Mensagem ao usuário |
-|------|---------------------|
-| API key inválida | Link para gerar nova chave |
-| Cota esgotada (429) | Sugestão de `flash-lite`, aguardar, reduzir uso |
-| Sem `GEMINI_API_KEY` | Instrução para configurar `.env` |
-
-### Fallback de modelo
-
-Se o modelo principal retornar 429, tenta `GEMINI_FALLBACK_MODEL` após 2 segundos.
+| Erro | Ação |
+|------|------|
+| API key inválida | Mensagem com link para OpenRouter |
+| Cota esgotada (429) | Fallback automático após 2 s |
+| Sem `OPENROUTER_API_KEY` | Instrução para configurar `.env` |
 
 ---
 
@@ -472,17 +666,9 @@ Se o modelo principal retornar 429, tenta `GEMINI_FALLBACK_MODEL` após 2 segund
 
 ### Docker não responde
 
-- Abra o **Docker Desktop** e aguarde o ícone estabilizar
+- Abra o **Docker Desktop** e aguarde estabilizar
 - Rode `start.bat repair`
-- Ou suba só o chat: `start.bat servidor`
-
-### Erro "input/output error" ou blob corrompido
-
-1. Feche o Docker Desktop (Quit na bandeja)
-2. Reabra e aguarde
-3. **Settings → Troubleshoot → Clean/Purge data**
-4. Verifique espaço em disco em `C:`
-5. Execute `start.bat repair` e depois `start.bat`
+- Ou: `start.bat servidor` (só chat)
 
 ### Container `kali-tools` não está rodando
 
@@ -491,48 +677,46 @@ cd docker
 docker compose up -d --build
 ```
 
-Ou use o health check: `GET http://localhost:8000/api/health`
+Ou verifique: `GET http://localhost:8000/api/health`
 
-### Chave Gemini inválida ou cota esgotada
+### Chave OpenRouter inválida ou cota esgotada
 
-- Gere chave em https://aistudio.google.com/apikey
-- Use `GEMINI_MODEL=gemini-2.5-flash-lite` no `.env`
-- Aguarde alguns minutos entre sessões intensas
+- Gere chave em [openrouter.ai/keys](https://openrouter.ai/keys)
+- Use tier **Economia** no seletor da UI
+- Configure fallback diferente no `.env`
 
 ### Comando bloqueado (`[blocked]`)
 
-A ferramenta não está na whitelist ou o comando contém padrão proibido. Verifique `ALLOWED_TOOLS` e `BLOCKED_PATTERNS` em `backend/config.py`.
+Ferramenta fora da whitelist ou argumento com `..`. Verifique `ALLOWED_TOOLS` em `backend/config.py`.
+
+### Modal de ferramentas pequeno / CSS desatualizado
+
+Hard refresh: `Ctrl+Shift+R` (cache bust via `?v=` no HTML).
 
 ### Wi-Fi no container sem interface
 
-- Confirme dongle USB conectado
+- Dongle USB conectado
 - `docker exec kali-tools wifi-status`
-- Container precisa estar `privileged` com USB mapeado
+- Container `privileged` com USB mapeado
 
-### Build Docker muito lenta
+### Build Docker lenta
 
-Normal na primeira execução (download de dezenas de ferramentas). Builds subsequentes usam cache.
+Normal na primeira execução. Builds subsequentes usam cache.
 
 ---
 
 ## Desenvolvimento manual
 
-Sem `start.bat`:
-
 ```bash
-# Ambiente virtual
 python -m venv venv
-venv\Scripts\activate        # Windows
+venv\Scripts\activate          # Windows
 pip install -r requirements.txt
 
-# Configuração
 copy .env.example .env
-# Edite GEMINI_API_KEY
+# Edite OPENROUTER_API_KEY
 
-# Container (opcional)
-cd docker && docker compose up -d --build
+cd docker && docker compose up -d --build   # opcional
 
-# Servidor
 python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
@@ -542,7 +726,7 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 |--------|-----|
 | `fastapi` | Framework web |
 | `uvicorn` | Servidor ASGI |
-| `google-genai` | Cliente Gemini |
+| `openai` | Cliente OpenRouter (API compatível) |
 | `python-dotenv` | Carregar `.env` |
 | `pydantic` | Validação de request/response |
 
@@ -550,13 +734,139 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Exemplos de uso
 
-| Pedido no chat | O que acontece |
-|----------------|----------------|
-| *"Liste redes Wi-Fi ao redor"* | Executa `wlan-scan` via `netsh` no Windows |
-| *"Scan SYN nas top 1000 portas de scanme.nmap.org"* | `nmap` dentro do container Kali |
+| Pedido / ação | O que acontece |
+|---------------|----------------|
+| *"Liste redes Wi-Fi ao redor"* | `wlan-scan` via `netsh` no Windows |
+| *"Scan SYN nas top 1000 portas de scanme.nmap.org"* | `nmap` no container + dashboard na UI |
 | *"Busque subdomínios de example.com"* | `subfinder` ou `amass` |
-| *"Teste vulnerabilidades web em https://alvo.com"* | `nuclei` ou combinação recon + scan |
-| Selecionar **tool:nmap** + *"scanme.nmap.org"* | Força uso do nmap independente da escolha da IA |
+| Selecionar **nmap** + botão **usar** | Fixa ferramenta e preenche exemplo no prompt |
+| **pilot** → alvo + objetivo | Auto-Pilot executa loop e baixa relatório |
+| **report** após sessão | Download de `relatorio-pentest.md` |
+| Pill **Economia → DeepSeek V3.2** | Chat usa modelo mais barato |
+
+---
+
+## Changelog
+
+### v2.1 — UX, modelos e OpenRouter (2026-07-15)
+
+#### Migração para OpenRouter
+- Substituído Google Gemini SDK direto por **OpenRouter** via SDK OpenAI
+- Chave: `OPENROUTER_API_KEY` (substitui `GEMINI_API_KEY`)
+- Modelos configuráveis: Gemini e DeepSeek via IDs OpenRouter
+- Fallback automático em erro 429 / cota
+
+#### Seletor de modelos na UI
+- Menu estilo pill/dropdown no prompt
+- Três tiers: **Economia**, **Equilibrado**, **Raciocínio**
+- Alternância Gemini ↔ DeepSeek por tier
+- Persistência em `localStorage`
+- Novo endpoint: `GET /api/models`
+- Campos `model` e `fallback_model` em `/api/chat` e `/api/autonomous`
+
+#### Interface e navegação
+- Sidebar com conversas, tela welcome, barra de status inferior
+- Atalhos: `Ctrl+T/P/R/N/K+/`, `M` para menu, `Esc` para fechar painéis
+- Toasts, histórico ↑↓ no prompt, botão scroll ↓
+- Painel **tools** ampliado (~94% largura, grid 3 colunas)
+- Abas por categoria, busca, cards com resumo/exemplo e botão **usar**
+- Scrollbars customizados (tema terminal, scanlines, thumb verde)
+- Catálogo de ferramentas enriquecido (`tool_catalog.py`) — metadados só na UI
+
+#### Economia de tokens (refinamento)
+- System prompt enxuto
+- `MAX_HISTORY_MESSAGES=10`
+- `OUTPUT_TOKEN_LIMIT=3000`, resumo 30+15 linhas
+
+#### Modo Auto-Pilot
+- `backend/ai/autopilot.py` — missões autônomas multi-etapa
+- `POST /api/autonomous` — alvo + objetivo → loop de ferramentas + relatório
+- Botão **pilot** na barra superior
+- Limites: `MAX_AUTONOMOUS_ROUNDS`, `MAX_AUTONOMOUS_TOOLS`
+
+---
+
+### v2.0.0 — Mega prompt (2026-07-14)
+
+**Foco:** Segurança rigorosa, redução de custo, UX profissional.
+
+#### 1. Segurança — Execução vectorizada no Docker
+
+| Antes | Depois |
+|-------|--------|
+| `docker exec ... bash -c "<string>"` | `docker exec ... <binário> <arg1> <arg2> ...` |
+| Validação por regex (`;`, `\|`, `&`, etc.) | Whitelist do binário + bloqueio de `..` nos args |
+| `validate_command(command: str)` | `validate_command(args: list[str])` via `shlex` |
+
+**Benefício:** elimina shell injection clássica via `bash -c`.
+
+**Arquivos:** `backend/executor/kali.py`, `backend/config.py`
+
+#### 2. Custo — Resumo inteligente de output
+
+- Logs completos em `backend/logs/{uuid}.log`
+- `ExecutionResult` com `log_file_id`, `tool`, `truncated_for_llm`
+- `summarize.py` — truncamento + extração de linhas críticas
+- Apenas resumo vai à IA; frontend recebe output completo
+- Nova rota: `GET /api/logs/{log_id}`
+
+**Arquivos novos:** `backend/executor/summarize.py`, `backend/executor/logs.py`
+
+#### 3. UX/UI — Dashboards visuais
+
+- Parser **Nmap:** tabela Porta / Estado / Serviço / Versão
+- Parser **Nuclei/vulns:** cards por severidade (Critical/High vermelho, Medium amarelo, Info azul)
+- Log bruto oculto quando há dashboard; botão **Ver Log Completo**
+- Link **Log #{id}** para `/api/logs/{id}`
+
+**Arquivos:** `frontend/app.js`, `frontend/index.html`, `frontend/styles.css`
+
+#### 4. Profissionalismo — Relatórios Markdown
+
+- `generate_report()` em `backend/ai/agent.py`
+- `POST /api/generate-report`
+- Botão **report** na barra superior
+- Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Mitigação → Anexo logs
+
+#### 5. Técnica — Tratamento de não-interatividade
+
+- `apply_non_interactive_flags()` — `--batch`, `-y`, `-I`, etc.
+- `stdin=subprocess.DEVNULL` em todas execuções Docker
+
+#### API v2.0 — campos e rotas novas
+
+**`ToolExecutionResponse` expandido:**
+
+```json
+{
+  "log_file_id": "a1b2c3d4e5f6",
+  "tool": "nmap"
+}
+```
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/logs/{log_id}` | Log completo |
+| POST | `/api/generate-report` | Relatório `.md` |
+
+**Health:** campo `version: "2.0.0"`
+
+#### Configuração v2.0
+
+```env
+OUTPUT_TOKEN_LIMIT=5000
+```
+
+Logs em `backend/logs/` (`.gitignore`)
+
+#### Checklist de validação v2.0
+
+- [ ] Reiniciar servidor: `start.bat`
+- [ ] Testar `nmap scanme.nmap.org` — dashboard Nmap na UI
+- [ ] Testar output longo (nuclei) — truncamento na IA, log completo em `/api/logs/{id}`
+- [ ] Tentar `; rm -rf /` — deve falhar na whitelist
+- [ ] Clicar **report** — baixar `relatorio-pentest.md`
+- [ ] Verificar `backend/logs/` após execuções
 
 ---
 

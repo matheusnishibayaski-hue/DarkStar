@@ -4,54 +4,125 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>kali@ai — terminal</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/styles.css?v=4" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="terminal" id="terminal">
-    <div class="term-bar">
-      <span class="term-bar-title">kali@ai — pentest terminal</span>
-      <div class="term-bar-actions">
-        <button type="button" class="term-btn" id="btn-tools" title="Selecionar ferramenta">
-          <span class="term-btn-label">tool</span>:<span id="tool-badge">auto</span>
-        </button>
-        <button type="button" class="term-btn" id="btn-history" title="Histórico de conversas">hist</button>
-        <button type="button" class="term-btn" id="btn-new" title="Novo chat">+</button>
+  <div class="app-shell">
+    <!-- Sidebar: navegação principal -->
+    <aside class="sidebar" id="sidebar" aria-label="Navegação">
+      <div class="sidebar-head">
+        <span class="sidebar-logo">kali@ai</span>
+        <button type="button" class="sidebar-close" id="sidebar-close" title="Fechar menu" aria-label="Fechar menu">×</button>
       </div>
-    </div>
 
-    <div class="term-screen" id="chat"></div>
+      <button type="button" class="sidebar-new" id="sidebar-new">+ novo chat</button>
 
-    <form class="term-prompt" id="form" autocomplete="off">
-      <span class="prompt-user">kali@ai</span><span class="prompt-sep">:</span><span class="prompt-path">~</span><span class="prompt-sep">$</span>
-      <input type="text" id="input" spellcheck="false" autofocus />
-    </form>
+      <div class="sidebar-section-label">conversas</div>
+      <div class="sidebar-sessions" id="sidebar-sessions"></div>
+
+      <div class="sidebar-footer">
+        <button type="button" class="sidebar-link" id="sidebar-help">? atalhos</button>
+      </div>
+    </aside>
+
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+
+    <!-- Área principal -->
+    <main class="main-area">
+      <div class="terminal" id="terminal">
+        <div class="term-bar">
+          <div class="term-bar-left">
+            <button type="button" class="term-btn term-btn-menu" id="btn-menu" title="Menu (M)" aria-label="Abrir menu">☰</button>
+            <span class="term-bar-title" id="session-title">kali@ai — pentest terminal</span>
+          </div>
+          <div class="term-bar-actions">
+            <button type="button" class="term-btn" id="btn-tools" title="Ferramentas (Ctrl+T)">
+              tools:<span id="tool-badge">auto</span>
+            </button>
+            <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Auto-Pilot (Ctrl+P)">pilot</button>
+            <button type="button" class="term-btn" id="btn-report" title="Relatório (Ctrl+R)">report</button>
+            <button type="button" class="term-btn" id="btn-help" title="Ajuda (Ctrl+/)">?</button>
+            <button type="button" class="term-btn" id="btn-new" title="Novo chat (Ctrl+N)">+</button>
+          </div>
+        </div>
+
+        <div class="term-screen" id="chat"></div>
+
+        <form class="term-prompt" id="form" autocomplete="off">
+          <span class="prompt-user">kali@ai</span><span class="prompt-sep">:</span><span class="prompt-path">~</span><span class="prompt-sep">$</span>
+          <input type="text" id="input" spellcheck="false" autofocus
+            placeholder="pergunta ou comando… (↑↓ histórico · Ctrl+K foco)" />
+          <div class="model-picker-wrap">
+            <button type="button" class="model-trigger" id="model-trigger" title="Modelo de IA">
+              <span class="model-trigger-name" id="model-label">Flash</span>
+              <span class="model-chevron">▾</span>
+            </button>
+            <div class="model-menu" id="model-menu" hidden role="listbox" aria-label="Selecionar modelo"></div>
+          </div>
+        </form>
+
+        <div class="status-bar" id="status-bar">
+          <span id="status-bar-text">carregando status…</span>
+          <span class="status-bar-hint">Ctrl+/ ajuda</span>
+        </div>
+      </div>
+    </main>
   </div>
+
+  <button type="button" class="scroll-bottom" id="btn-scroll-bottom" hidden title="Ir ao final">↓</button>
+  <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
   <!-- Painel: ferramentas -->
-  <div class="overlay" id="overlay-tools" hidden>
-    <div class="panel" role="dialog" aria-label="Ferramentas">
-      <div class="panel-head">
-        <span>// ferramenta</span>
+  <div class="overlay overlay-tools-wrap" id="overlay-tools" hidden>
+    <div class="panel panel-tools" role="dialog" aria-label="Ferramentas">
+      <div class="panel-head panel-head-tools">
+        <div>
+          <span class="panel-title-main">// ferramentas</span>
+          <span class="panel-title-sub"><kbd class="kbd-hint">Ctrl+T</kbd> · selecione ou busque</span>
+        </div>
         <button type="button" class="panel-close" data-close="overlay-tools">esc</button>
       </div>
-      <input type="text" class="panel-search" id="tool-search" placeholder="buscar..." spellcheck="false" />
-      <div class="panel-body" id="tool-list"></div>
+      <p class="tools-hint">Deixe em <strong>auto</strong> ou fixe uma ferramenta. <em>usar</em> coloca o exemplo no prompt.</p>
+      <div class="tools-categories" id="tool-categories"></div>
+      <input type="text" class="panel-search tools-search" id="tool-search" placeholder="buscar ferramenta, categoria ou descrição…" spellcheck="false" />
+      <div class="panel-body tools-grid-wrap" id="tool-list"></div>
     </div>
   </div>
 
-  <!-- Painel: histórico -->
-  <div class="overlay" id="overlay-history" hidden>
-    <div class="panel" role="dialog" aria-label="Histórico">
+  <!-- Painel: modo autônomo -->
+  <div class="overlay" id="overlay-autopilot" hidden>
+    <div class="panel panel-wide" role="dialog" aria-label="Modo Autônomo">
       <div class="panel-head">
-        <span>// histórico</span>
-        <button type="button" class="panel-close" data-close="overlay-history">esc</button>
+        <span>// auto-pilot <kbd class="kbd-hint">Ctrl+P</kbd></span>
+        <button type="button" class="panel-close" data-close="overlay-autopilot">esc</button>
       </div>
-      <div class="panel-body" id="chat-history"></div>
+      <div class="panel-body autopilot-form">
+        <p class="autopilot-desc">
+          Informe alvo e objetivo. O agente executa comandos, analisa resultados e encerra com relatório pronto.
+        </p>
+        <label class="autopilot-label" for="autopilot-target">Alvo</label>
+        <input type="text" id="autopilot-target" class="panel-search autopilot-input" placeholder="ex: alvo.com" spellcheck="false" />
+        <label class="autopilot-label" for="autopilot-objective">Objetivo</label>
+        <textarea id="autopilot-objective" class="autopilot-textarea" rows="4" placeholder="ex: Encontre subdomínios expostos e verifique se há takeover" spellcheck="false"></textarea>
+        <div class="quick-objectives" id="quick-objectives"></div>
+        <button type="button" class="autopilot-start" id="autopilot-start">Iniciar Auto-Pilot</button>
+      </div>
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <!-- Painel: ajuda / atalhos -->
+  <div class="overlay" id="overlay-help" hidden>
+    <div class="panel panel-wide" role="dialog" aria-label="Ajuda">
+      <div class="panel-head">
+        <span>// ajuda &amp; atalhos</span>
+        <button type="button" class="panel-close" data-close="overlay-help">esc</button>
+      </div>
+      <div class="panel-body help-body" id="help-content"></div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

@@ -10,12 +10,16 @@ from pydantic import BaseModel, Field
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-from backend.ai.agent import chat
+from backend.ai.agent import chat, generate_report
+from backend.ai.autopilot import run_autonomous
 from backend.config import KALI_CONTAINER, TOOL_CATEGORIES
+from backend.tool_catalog import enrich_categories
+from backend.models_catalog import get_models_catalog
+from backend.executor.logs import read_execution_log
 
 FRONTEND_DIR = BASE_DIR / "frontend"
 
-app = FastAPI(title="Chat IA Kali", version="1.0.0")
+app = FastAPI(title="Chat IA Kali", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,6 +38,8 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     history: list[ChatMessage] = Field(default_factory=list)
     preferred_tool: str = Field(default="auto", max_length=64)
+    model: str = Field(default="", max_length=128)
+    fallback_model: str = Field(default="", max_length=128)
 
 
 class ToolExecutionResponse(BaseModel):
@@ -44,11 +50,50 @@ class ToolExecutionResponse(BaseModel):
     exit_code: int
     success: bool
     blocked: bool
+    log_file_id: str = ""
+    tool: str = ""
 
 
 class ChatResponseModel(BaseModel):
     message: str
     tool_executions: list[ToolExecutionResponse]
+
+
+class ReportRequest(BaseModel):
+    history: list[ChatMessage] = Field(default_factory=list)
+    tool_executions: list[ToolExecutionResponse] = Field(default_factory=list)
+    title: str = Field(default="Relatório de Pentest", max_length=200)
+
+
+class AutonomousRequest(BaseModel):
+    target: str = Field(..., min_length=1, max_length=253)
+    objective: str = Field(..., min_length=3, max_length=2000)
+    model: str = Field(default="", max_length=128)
+    fallback_model: str = Field(default="", max_length=128)
+
+
+class AutonomousResponseModel(BaseModel):
+    message: str
+    tool_executions: list[ToolExecutionResponse]
+    report: str
+    objective_met: bool
+    rounds: int
+    stopped_reason: str
+    tools_executed: int
+
+
+def _tool_execution_response(e) -> ToolExecutionResponse:
+    return ToolExecutionResponse(
+        command=e.command,
+        reason=e.reason,
+        stdout=e.stdout,
+        stderr=e.stderr,
+        exit_code=e.exit_code,
+        success=e.success,
+        blocked=e.blocked,
+        log_file_id=getattr(e, "log_file_id", "") or "",
+        tool=getattr(e, "tool", "") or "",
+    )
 
 
 @app.get("/api/health")
@@ -107,6 +152,7 @@ def health():
 
     return {
         "status": "ok",
+        "version": "2.0.0",
         "docker": docker_ok,
         "kali_container": kali_ok,
         "kali_error": kali_error,
@@ -118,28 +164,74 @@ def health():
 
 @app.get("/api/tools")
 def api_tools():
-    return {"categories": TOOL_CATEGORIES}
+    return {"categories": enrich_categories(TOOL_CATEGORIES)}
+
+
+@app.get("/api/models")
+def api_models():
+    return get_models_catalog()
+
+
+@app.get("/api/logs/{log_id}")
+def api_log(log_id: str):
+    content = read_execution_log(log_id)
+    if content is None:
+        raise HTTPException(status_code=404, detail="Log não encontrado.")
+    return Response(content=content, media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/chat", response_model=ChatResponseModel)
 def api_chat(req: ChatRequest):
     try:
         history = [{"role": m.role, "content": m.content} for m in req.history]
-        result = chat(history, req.message, preferred_tool=req.preferred_tool)
+        result = chat(
+            history,
+            req.message,
+            preferred_tool=req.preferred_tool,
+            model=req.model or None,
+            fallback_model=req.fallback_model or None,
+        )
         return ChatResponseModel(
             message=result.message,
-            tool_executions=[
-                ToolExecutionResponse(
-                    command=e.command,
-                    reason=e.reason,
-                    stdout=e.stdout,
-                    stderr=e.stderr,
-                    exit_code=e.exit_code,
-                    success=e.success,
-                    blocked=e.blocked,
-                )
-                for e in result.tool_executions
-            ],
+            tool_executions=[_tool_execution_response(e) for e in result.tool_executions],
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/autonomous", response_model=AutonomousResponseModel)
+def api_autonomous(req: AutonomousRequest):
+    try:
+        result = run_autonomous(
+            req.target,
+            req.objective,
+            model=req.model or None,
+            fallback_model=req.fallback_model or None,
+        )
+        return AutonomousResponseModel(
+            message=result.message,
+            tool_executions=[_tool_execution_response(e) for e in result.tool_executions],
+            report=result.report,
+            objective_met=result.objective_met,
+            rounds=result.rounds,
+            stopped_reason=result.stopped_reason,
+            tools_executed=result.tools_executed,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate-report")
+def api_generate_report(req: ReportRequest):
+    try:
+        history = [{"role": m.role, "content": m.content} for m in req.history]
+        executions = [e.model_dump() for e in req.tool_executions]
+        markdown = generate_report(history, executions, title=req.title)
+        filename = "relatorio-pentest.md"
+        return Response(
+            content=markdown,
+            media_type="text/markdown; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

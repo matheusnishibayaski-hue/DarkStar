@@ -3,6 +3,7 @@ import subprocess
 import sys
 
 from backend.config import HOST_WIFI_TOOLS
+from backend.executor.logs import save_execution_log
 from backend.executor.result import ExecutionResult
 
 
@@ -43,6 +44,7 @@ def _scan_windows(command: str, reason: str) -> ExecutionResult:
             ok = networks.returncode == 0
 
         stdout = "\n\n".join(sections)
+        log_id = save_execution_log(command, reason, stdout[:50000], "")
         return ExecutionResult(
             command=command,
             reason=reason,
@@ -50,6 +52,8 @@ def _scan_windows(command: str, reason: str) -> ExecutionResult:
             stderr="",
             exit_code=0 if ok else 1,
             success=ok,
+            log_file_id=log_id,
+            tool=binary,
         )
     except FileNotFoundError:
         return ExecutionResult(
@@ -113,13 +117,18 @@ def _scan_linux(command: str, reason: str) -> ExecutionResult:
         except Exception as e:
             errors.append(str(e))
 
+    stdout = "\n\n".join(sections)[:50000]
+    stderr = "\n".join(errors)[:10000]
+    log_id = save_execution_log(command, reason, stdout, stderr)
     return ExecutionResult(
         command=command,
         reason=reason,
-        stdout="\n\n".join(sections)[:50000],
-        stderr="\n".join(errors)[:10000],
+        stdout=stdout,
+        stderr=stderr,
         exit_code=0 if ok else 1,
         success=ok,
+        log_file_id=log_id,
+        tool=binary,
     )
 
 

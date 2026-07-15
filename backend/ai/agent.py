@@ -1,19 +1,62 @@
+import json
+import re
 import time
-
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
-from google import genai
-from google.genai import types
+from openai import OpenAI
 
 from backend.config import (
-    GEMINI_API_KEY,
     GEMINI_FALLBACK_MODEL,
     GEMINI_MODEL,
+    MAX_HISTORY_MESSAGES,
     MAX_TOOL_ITERATIONS,
+    OPENROUTER_API_KEY,
     SYSTEM_PROMPT,
 )
+from backend.models_catalog import resolve_model
 from backend.executor.kali import execute_in_kali
-from backend.executor.result import format_result_for_llm
+from backend.executor.result import ExecutionResult, format_result_for_llm
+from backend.executor.summarize import summarize_output
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+OPENROUTER_HEADERS = {
+    "HTTP-Referer": "https://github.com/matheusnishibayaski-hue/Chat-IA-Kali",
+    "X-Title": "Chat IA Kali",
+}
+
+KALI_TOOL_DEFINITION = {
+    "type": "function",
+    "function": {
+        "name": "run_kali_tool",
+        "description": (
+            "Executa comandos reais em um contêiner Kali Linux isolado para varreduras, "
+            "análises, consultas técnicas ou reconhecimento. Use sempre esta ferramenta em vez "
+            "de apenas sugerir comandos em texto livre."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": (
+                        "Comando com argumentos separados por espaço "
+                        "(ex: 'nmap -sV scanme.nmap.org'). Não use ; | & ou redirecionamentos."
+                    ),
+                },
+                "reason": {
+                    "type": "string",
+                    "description": (
+                        "A justificativa técnica de por que este comando está sendo "
+                        "executado nesta etapa."
+                    ),
+                },
+            },
+            "required": ["command", "reason"],
+        },
+    },
+}
 
 
 @dataclass
@@ -25,21 +68,14 @@ class ToolExecution:
     exit_code: int
     success: bool
     blocked: bool = False
+    log_file_id: str = ""
+    tool: str = ""
 
 
 @dataclass
 class ChatResponse:
     message: str
     tool_executions: list[ToolExecution] = field(default_factory=list)
-
-
-def _build_contents(history: list[dict], user_message: str) -> list[types.Content]:
-    contents = []
-    for msg in history:
-        role = "user" if msg["role"] == "user" else "model"
-        contents.append(types.Content(role=role, parts=[types.Part(text=msg["content"])]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
-    return contents
 
 
 def _apply_preferred_tool(user_message: str, preferred_tool: str | None) -> str:
@@ -52,9 +88,36 @@ def _apply_preferred_tool(user_message: str, preferred_tool: str | None) -> str:
     )
 
 
-def _record_execution(command: str, reason: str, executions: list[ToolExecution]) -> str:
-    result = execute_in_kali(command, reason)
-    executions.append(ToolExecution(
+def _convert_history(history: list[dict]) -> list[dict]:
+    messages = []
+    trimmed = history[-MAX_HISTORY_MESSAGES:] if len(history) > MAX_HISTORY_MESSAGES else history
+    for msg in trimmed:
+        role = msg.get("role", "user")
+        if role not in ("system", "user", "assistant"):
+            role = "user"
+        messages.append({"role": role, "content": msg.get("content", "")})
+    return messages
+
+
+def _assistant_message_dict(message) -> dict:
+    data: dict = {"role": "assistant", "content": message.content}
+    if message.tool_calls:
+        data["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            }
+            for tc in message.tool_calls
+        ]
+    return data
+
+
+def _result_to_tool_execution(result: ExecutionResult) -> ToolExecution:
+    return ToolExecution(
         command=result.command,
         reason=result.reason,
         stdout=result.stdout,
@@ -62,150 +125,281 @@ def _record_execution(command: str, reason: str, executions: list[ToolExecution]
         exit_code=result.exit_code,
         success=result.success,
         blocked=result.blocked,
-    ))
-    return format_result_for_llm(result)
+        log_file_id=result.log_file_id,
+        tool=result.tool,
+    )
 
 
-def _parse_function_args(fc) -> dict:
-    if getattr(fc, "args", None):
-        return dict(fc.args)
-    inner = getattr(fc, "function_call", None)
-    if inner and getattr(inner, "args", None):
-        return dict(inner.args)
-    return {}
+def _record_execution(command: str, reason: str, executions: list[ToolExecution]) -> str:
+    result = execute_in_kali(command, reason)
+    summarized, truncated = summarize_output(result.stdout, result.stderr)
+    result.truncated_for_llm = truncated
+    executions.append(_result_to_tool_execution(result))
+    return format_result_for_llm(result, output_text=summarized if truncated else None)
 
 
-def _is_quota_error(error: str) -> bool:
-    return "429" in error or "RESOURCE_EXHAUSTED" in error
+def _is_retryable_error(error: str) -> bool:
+    lowered = error.lower()
+    return "429" in error or "rate" in lowered or "quota" in lowered or " overloaded" in lowered
 
 
-def _gemini_error_message(error: str) -> str:
-    if "API_KEY_INVALID" in error or "API key not valid" in error.lower():
-        return "Chave Gemini inválida. Gere uma nova em https://aistudio.google.com/apikey"
-    if _is_quota_error(error):
+def _openrouter_error_message(error: str) -> str:
+    lowered = error.lower()
+    if "401" in error or "invalid" in lowered and "key" in lowered:
         return (
-            "Cota do Gemini esgotada para este modelo/chave.\n\n"
+            "Chave OpenRouter inválida. Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
+            "Obtenha uma chave em: https://openrouter.ai/keys"
+        )
+    if _is_retryable_error(error):
+        return (
+            "Cota ou limite de requisições atingido no OpenRouter.\n\n"
             "O que fazer:\n"
-            "• No .env, use GEMINI_MODEL=gemini-2.5-flash-lite (mais cota no plano gratuito)\n"
-            "• Gere sua própria chave em https://aistudio.google.com/apikey (não compartilhe)\n"
             "• Aguarde alguns minutos se enviou muitas mensagens seguidas\n"
+            "• Verifique saldo/cota em https://openrouter.ai/\n"
+            "• O fallback tentará deepseek/deepseek-chat-v3.2 automaticamente\n"
             "• Cada comando no chat gera 2–6 chamadas à API (ferramentas + resposta)"
         )
-    return f"Erro ao chamar Gemini: {error}"
+    return f"Erro ao chamar OpenRouter: {error}"
 
 
-def _generate_content(client, model: str, contents, config):
-    models = [model]
-    if GEMINI_FALLBACK_MODEL not in models:
-        models.append(GEMINI_FALLBACK_MODEL)
+def _extract_vulnerabilities(tool_executions: list[dict]) -> list[dict]:
+    vulns: list[dict] = []
+    seen: set[str] = set()
 
-    last_error = None
-    for attempt, current_model in enumerate(models):
-        try:
-            return client.models.generate_content(
-                model=current_model,
-                contents=contents,
-                config=config,
-            )
-        except Exception as e:
-            last_error = e
-            if not _is_quota_error(str(e)) or attempt >= len(models) - 1:
-                raise
-            time.sleep(2)
+    for ex in tool_executions:
+        output = "\n".join(filter(None, [ex.get("stdout", ""), ex.get("stderr", "")]))
+        command = ex.get("command", "")
 
-    raise last_error  # type: ignore[misc]
+        for match in re.finditer(
+            r"\[(critical|high|medium|low|info)\][^\n]*",
+            output,
+            re.I,
+        ):
+            line = match.group(0).strip()
+            if line not in seen:
+                seen.add(line)
+                vulns.append({"severity": match.group(1).upper(), "detail": line, "source": command})
+
+        for match in re.finditer(
+            r"(\d+/tcp\s+open\s+\S+(?:\s+\S+)*)",
+            output,
+            re.I,
+        ):
+            line = match.group(1).strip()
+            if line not in seen:
+                seen.add(line)
+                vulns.append({"severity": "INFO", "detail": f"Porta aberta: {line}", "source": command})
+
+        for match in re.finditer(r"CVE-\d{4}-\d+", output, re.I):
+            cve = match.group(0).upper()
+            if cve not in seen:
+                seen.add(cve)
+                vulns.append({"severity": "HIGH", "detail": cve, "source": command})
+
+    return vulns
 
 
-def _run_gemini(history: list[dict], user_message: str) -> ChatResponse:
-    if not GEMINI_API_KEY:
+def generate_report(
+    history: list[dict],
+    tool_executions: list[dict],
+    title: str = "Relatório de Pentest",
+) -> str:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    vulns = _extract_vulnerabilities(tool_executions)
+
+    user_messages = [m["content"] for m in history if m.get("role") == "user"]
+    assistant_messages = [m["content"] for m in history if m.get("role") == "assistant"]
+
+    scope = user_messages[0][:200] if user_messages else "Não especificado"
+    executive = assistant_messages[-1][:800] if assistant_messages else "Sessão sem conclusões registradas."
+
+    lines = [
+        f"# {title}",
+        "",
+        f"**Data:** {now}  ",
+        f"**Ferramenta:** Chat IA Kali v2.0  ",
+        f"**Execuções registradas:** {len(tool_executions)}",
+        "",
+        "---",
+        "",
+        "## 1. Resumo Executivo",
+        "",
+        executive,
+        "",
+        f"**Escopo inicial (primeira solicitação):** {scope}",
+        "",
+        "---",
+        "",
+        "## 2. Resumo Técnico",
+        "",
+        "| # | Comando | Status | Motivo |",
+        "|---|---------|--------|--------|",
+    ]
+
+    for i, ex in enumerate(tool_executions, 1):
+        status = "OK" if ex.get("success") else ("BLOQUEADO" if ex.get("blocked") else f"EXIT {ex.get('exit_code')}")
+        cmd = ex.get("command", "").replace("|", "\\|")
+        reason = ex.get("reason", "").replace("|", "\\|")[:80]
+        lines.append(f"| {i} | `{cmd}` | {status} | {reason} |")
+
+    lines.extend(["", "---", "", "## 3. Tabela de Vulnerabilidades / Achados", ""])
+
+    if vulns:
+        lines.extend([
+            "| Severidade | Detalhe | Origem |",
+            "|------------|---------|--------|",
+        ])
+        for v in vulns[:50]:
+            detail = v["detail"].replace("|", "\\|")[:120]
+            source = v["source"].replace("|", "\\|")[:60]
+            lines.append(f"| {v['severity']} | {detail} | `{source}` |")
+    else:
+        lines.append("*Nenhuma vulnerabilidade crítica extraída automaticamente dos logs.*")
+
+    lines.extend([
+        "",
+        "---",
+        "",
+        "## 4. Recomendações de Mitigação",
+        "",
+        "1. **Patch Management:** Aplicar correções para CVEs e serviços desatualizados identificados.",
+        "2. **Hardening:** Fechar portas/serviços desnecessários expostos na varredura.",
+        "3. **Monitoramento:** Implementar detecção para tentativas de exploração nas superfícies encontradas.",
+        "4. **Reteste:** Validar mitigações com nova rodada de scans autorizados.",
+        "",
+        "---",
+        "",
+        "## 5. Anexo — Logs",
+        "",
+    ])
+
+    for ex in tool_executions:
+        log_id = ex.get("log_file_id", "")
+        cmd = ex.get("command", "")
+        if log_id:
+            lines.append(f"- `{cmd}` → log `{log_id}` (GET /api/logs/{log_id})")
+        else:
+            lines.append(f"- `{cmd}` → sem log persistido")
+
+    lines.extend(["", "*Relatório gerado automaticamente pelo Chat IA Kali. Revisão humana obrigatória.*", ""])
+    return "\n".join(lines)
+
+
+def _run_openrouter(
+    history: list[dict],
+    user_message: str,
+    model: str | None = None,
+    fallback_model: str | None = None,
+) -> ChatResponse:
+    if not OPENROUTER_API_KEY:
         return ChatResponse(
             message=(
-                "Configure GEMINI_API_KEY no arquivo .env.\n\n"
-                "Chave gratuita em: https://aistudio.google.com/apikey"
+                "Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
+                "Obtenha uma chave em: https://openrouter.ai/keys"
             )
         )
 
+    client = OpenAI(
+        base_url=OPENROUTER_BASE_URL,
+        api_key=OPENROUTER_API_KEY,
+    )
+
+    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.extend(_convert_history(history))
+    messages.append({"role": "user", "content": user_message})
+
     executions: list[ToolExecution] = []
+    model_to_use, fallback_to_use = resolve_model(model, fallback_model)
+    nudged = False
+    final_text = ""
 
-    def run_kali_tool(command: str, reason: str) -> str:
-        """Executa uma ferramenta de segurança no ambiente Kali Linux isolado via Docker.
+    for _ in range(MAX_TOOL_ITERATIONS):
+        try:
+            response = client.chat.completions.create(
+                model=model_to_use,
+                messages=messages,
+                tools=[KALI_TOOL_DEFINITION],
+                tool_choice="auto",
+                extra_headers=OPENROUTER_HEADERS,
+            )
+        except Exception as e:
+            err = str(e)
+            if model_to_use != fallback_to_use and _is_retryable_error(err):
+                time.sleep(1)
+                model_to_use = fallback_to_use
+                continue
+            return ChatResponse(message=_openrouter_error_message(err))
 
-        Args:
-            command: Comando completo (ex: nmap -sV scanme.nmap.org, dig example.com).
-            reason: Breve explicação do porquê este comando é necessário.
+        assistant_message = response.choices[0].message
 
-        Returns:
-            Saída do comando (stdout/stderr) para interpretação.
-        """
-        return _record_execution(command, reason, executions)
+        if not assistant_message.tool_calls:
+            if not nudged and not executions:
+                nudged = True
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Execute o comando AGORA com run_kali_tool. "
+                        "Não sugira — rode a ferramenta e interprete a saída."
+                    ),
+                })
+                continue
+
+            final_text = assistant_message.content or "Sem resposta da IA."
+            return ChatResponse(message=final_text, tool_executions=executions)
+
+        messages.append(_assistant_message_dict(assistant_message))
+
+        for tool_call in assistant_message.tool_calls:
+            if tool_call.function.name != "run_kali_tool":
+                continue
+
+            try:
+                arguments = json.loads(tool_call.function.arguments)
+                command = arguments.get("command", "")
+                reason = arguments.get("reason", "")
+            except Exception:
+                command = ""
+                reason = "Falha ao decodificar os argumentos fornecidos pela IA."
+
+            result_text = _record_execution(command, reason, executions)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": result_text,
+            })
+
+    messages.append({
+        "role": "user",
+        "content": (
+            "Por favor, conclua agora e gere a sua resposta/análise final "
+            "com base nas execuções realizadas acima."
+        ),
+    })
 
     try:
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        contents = _build_contents(history, user_message)
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
-            tools=[run_kali_tool],
-            tool_config=types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode=types.FunctionCallingConfigMode.VALIDATED,
-                ),
-            ),
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+        final_response = client.chat.completions.create(
+            model=model_to_use,
+            messages=messages,
+            extra_headers=OPENROUTER_HEADERS,
         )
-        nudged = False
-
-        for _ in range(MAX_TOOL_ITERATIONS):
-            response = _generate_content(client, GEMINI_MODEL, contents, config)
-
-            function_calls = response.function_calls or []
-
-            if not function_calls:
-                if not nudged and not executions:
-                    nudged = True
-                    contents.append(types.Content(
-                        role="user",
-                        parts=[types.Part(text=(
-                            "Execute o comando AGORA com run_kali_tool. "
-                            "Não sugira — rode a ferramenta e interprete a saída."
-                        ))],
-                    ))
-                    continue
-
-                text = response.text or "Sem resposta da IA."
-                return ChatResponse(message=text, tool_executions=executions)
-
-            if response.candidates and response.candidates[0].content:
-                contents.append(response.candidates[0].content)
-
-            response_parts = []
-            for fc in function_calls:
-                args = _parse_function_args(fc)
-                command = args.get("command", "")
-                reason = args.get("reason", "")
-                name = fc.name or "run_kali_tool"
-
-                try:
-                    result_text = _record_execution(command, reason, executions)
-                    response_parts.append(types.Part.from_function_response(
-                        name=name,
-                        response={"result": result_text},
-                    ))
-                except Exception as e:
-                    response_parts.append(types.Part.from_function_response(
-                        name=name,
-                        response={"error": str(e)},
-                    ))
-
-            contents.append(types.Content(role="user", parts=response_parts))
-
-        final = _generate_content(client, GEMINI_MODEL, contents, config)
-        text = final.text or "Limite de iterações de ferramentas atingido."
-        return ChatResponse(message=text, tool_executions=executions)
-
+        final_text = (
+            final_response.choices[0].message.content
+            or "Limite de iterações de ferramentas atingido."
+        )
     except Exception as e:
-        return ChatResponse(message=_gemini_error_message(str(e)))
+        final_text = f"Limite de iterações atingido. Erro na finalização: {e}"
+
+    return ChatResponse(message=final_text, tool_executions=executions)
 
 
-def chat(history: list[dict], user_message: str, preferred_tool: str | None = None) -> ChatResponse:
+def chat(
+    history: list[dict],
+    user_message: str,
+    preferred_tool: str | None = None,
+    model: str | None = None,
+    fallback_model: str | None = None,
+) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
-    return _run_gemini(history, user_message)
+    return _run_openrouter(history, user_message, model=model, fallback_model=fallback_model)
+
+

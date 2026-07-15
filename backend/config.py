@@ -6,15 +6,22 @@ from dotenv import load_dotenv
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# Google Gemini — chave gratuita em https://aistudio.google.com/apikey
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
-GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-2.5-flash-lite")
+# OpenRouter — chave em https://openrouter.ai/keys
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "google/gemini-2.5-flash")
+GEMINI_FALLBACK_MODEL = os.getenv("GEMINI_FALLBACK_MODEL", "deepseek/deepseek-chat-v3.2")
 
 KALI_CONTAINER = os.getenv("KALI_CONTAINER", "kali-tools")
 COMMAND_TIMEOUT = int(os.getenv("COMMAND_TIMEOUT", "180"))
 WIFI_COMMAND_TIMEOUT = int(os.getenv("WIFI_COMMAND_TIMEOUT", "600"))
 MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
+MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
+MAX_AUTONOMOUS_ROUNDS = int(os.getenv("MAX_AUTONOMOUS_ROUNDS", "10"))
+MAX_AUTONOMOUS_TOOLS = int(os.getenv("MAX_AUTONOMOUS_TOOLS", "25"))
+OUTPUT_TOKEN_LIMIT = int(os.getenv("OUTPUT_TOKEN_LIMIT", "3000"))
+SUMMARY_HEAD_LINES = int(os.getenv("SUMMARY_HEAD_LINES", "30"))
+SUMMARY_TAIL_LINES = int(os.getenv("SUMMARY_TAIL_LINES", "15"))
+LOG_DIR = BASE_DIR / "backend" / "logs"
 
 HOST_WIFI_TOOLS = {"wlan-scan", "wlan-interfaces", "wifi-list"}
 
@@ -85,53 +92,31 @@ _EXTRA_TOOLS = {
 
 ALLOWED_TOOLS = _CORE_TOOLS | _EXTRA_TOOLS | HOST_WIFI_TOOLS | WIFI_CONTAINER_TOOLS
 
-BLOCKED_PATTERNS = [
-    r"[;&|`$]",
-    r"\.\./",
-    r">\s*/",
-    r"\brm\b",
-    r"\bmkfs\b",
-    r"\bdd\b",
-    r"\bshutdown\b",
-    r"\breboot\b",
-    r"\bchmod\b",
-    r"\bchown\b",
-    r"\bsudo\b",
-    r"\bsu\b",
-]
+SYSTEM_PROMPT = """Assistente de pentest ético. Só teste alvos autorizados.
 
-SYSTEM_PROMPT = """Você é um assistente especializado em segurança cibernética e testes de penetração éticos.
+REGRAS:
+- Execute via run_kali_tool — nunca só sugira comandos.
+- Escolha a ferramenta adequada; interprete resultados em português.
+- Comandos sem ; | & ou redirecionamentos. Wordlists: /usr/share/seclists
+- Laboratórios públicos (scanme.nmap.org) ok sem confirmação extra."""
 
-REGRAS OBRIGATÓRIAS:
-- Só auxilie em avaliações de segurança em alvos que o usuário possui ou tem autorização explícita para testar.
-- Quando o usuário pedir uma ação, análise, scan ou consulta técnica, você DEVE executar via run_kali_tool IMEDIATAMENTE.
-- NUNCA apenas sugira comandos ou diga "você pode executar X" — EXECUTE com run_kali_tool e interprete o resultado.
-- Se precisar de dados técnicos (whois, dns, portas, vulnerabilidades, etc.), chame run_kali_tool antes de responder.
-- Escolha a ferramenta mais adequada entre as disponíveis.
-- Explique os resultados de forma clara, em português, destacando riscos e recomendações.
-- Se o usuário pedir algo ilegal ou contra sistemas sem autorização, recuse educadamente.
-- Alvos de laboratório público (ex: scanme.nmap.org) podem ser usados sem confirmação extra.
+AUTONOMOUS_SYSTEM_PROMPT = """Você é um agente autônomo de pentest em MODO AUTO-PILOT.
 
-Ferramentas disponíveis (180+):
-- Rede/recon: nmap, masscan, zmap, rustscan, naabu, massdns, dnsx, shuffledns, puredns, mapcidr, arp-scan, netdiscover, fierce, dnsenum, dnsrecon, dig, whois, hping3, ngrep
-- OSINT: amass, subfinder, sublist3r, theHarvester, httpx, uncover, gau, waybackurls, anew, dnsgen, paramspider
-- Web: gobuster, feroxbuster, ffuf, wfuzz, dirb, dirsearch, sqlmap, nikto, katana, hakrawler, gospider, dalfox, xsstrike, arjun, jwt_tool, whatweb, wafw00f, wpscan, commix, droopescan, siege, graphw00f, uro
-- SSL/TLS: sslscan, openssl, testssl.sh, tlsx
-- Auth: hydra, john, medusa, patator, ncrack, hashcat, cewl, crunch, crowbar
-- Windows/AD: smbclient, smbmap, enum4linux, nxc, kerbrute, certipy, bloodyAD, evil-winrm, impacket-*, responder, ldapsearch, ldapdomaindump, rpcclient, krbrelayx, bloodhound-python
-- Vulns/cloud: nuclei, searchsploit, trivy, scout
-- Análise: hashid, foremost, binwalk, steghide, exiftool, tshark, tcpdump, vol, yara, radare2, gdb, sleuthkit (fls, icat), bulk_extractor
-- Automação: autorecon
-- Pós-exploração: weevely, mitm6, socat, chisel, ligolo-ng
-- Wi-Fi (listar redes — sem dongle no Windows):
-  * wlan-scan — lista redes visíveis, BSSIDs e sinal (usa placa Wi-Fi nativa do Windows via netsh)
-  * wlan-interfaces — mostra adaptador Wi-Fi do PC
-  * wifi-list — alias de wlan-scan
-- Wi-Fi (captura/ataques — container com dongle USB no Docker):
-  * aircrack-ng, airodump-ng, airmon-ng, reaver, bully, wifite, hcxdumptool, wifi-status
-- Proxy: proxychains4, chisel, ligolo-ng
-- Wordlists: /usr/share/seclists
-- Utilitários: curl, wget, nc, snmpwalk, onesixtyone"""
+ALVO AUTORIZADO: {target}
+OBJETIVO DA MISSÃO: {objective}
+
+REGRAS DO MODO AUTÔNOMO:
+- Você controla o fluxo completo: recon → enumeração → análise → verificação do objetivo.
+- NÃO peça confirmação ao usuário. Tome decisões técnicas e execute via run_kali_tool.
+- Após cada execução, analise o output e decida o próximo passo lógico em direção ao objetivo.
+- Use ferramentas adequadas: subfinder/amass para subdomínios, httpx para probing, nuclei para vulns, nmap para portas, etc.
+- Quando o objetivo for atingido OU não houver passos úteis restantes, chame finish_mission com um resumo completo.
+- Responda em português nos resumos e conclusões.
+- Só opere em alvos que o usuário possui ou tem autorização explícita.
+
+Ferramentas disponíveis (180+): nmap, subfinder, amass, httpx, nuclei, ffuf, gobuster, sqlmap, dig, whois, masscan, feroxbuster, katana, wafw00f, sslscan, e demais da whitelist Kali.
+
+Wordlists: /usr/share/seclists"""
 
 TOOL_CATEGORIES = [
     {
