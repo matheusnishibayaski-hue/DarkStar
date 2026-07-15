@@ -1346,6 +1346,20 @@ body::after {
   border-color: #6699ff;
 }
 
+.term-btn-cancel {
+  border-color: #ff6644;
+  color: #ff9988;
+}
+
+.term-btn-cancel:hover {
+  color: #ffbbaa;
+  border-color: #ff8866;
+}
+
+.panel-narrow {
+  max-width: 420px;
+}
+
 .panel-wide {
   max-width: 520px;
 }

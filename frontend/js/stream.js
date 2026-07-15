@@ -115,7 +115,7 @@ export function finalizeToolExecutions(chatEl, toolExecutions) {
   }
 }
 
-export async function consumeChatStream(response, handlers) {
+export async function consumeChatStream(response, handlers, options = {}) {
   const mapped = {
     tool_start: handlers.onToolStart || handlers.tool_start,
     tool_done: handlers.onToolDone || handlers.tool_done,
@@ -124,5 +124,5 @@ export async function consumeChatStream(response, handlers) {
     done: handlers.onDone || handlers.done,
     error: handlers.onError || handlers.error,
   };
-  await consumeSseStream(response, mapped);
+  await consumeSseStream(response, mapped, options);
 }

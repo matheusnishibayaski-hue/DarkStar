@@ -27,6 +27,9 @@ GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
 UVICORN_HOST = os.getenv("UVICORN_HOST", "127.0.0.1")
 UVICORN_PORT = int(os.getenv("UVICORN_PORT", "8000"))
 CHAT_API_TOKEN = os.getenv("CHAT_API_TOKEN", "").strip()
+SESSION_TTL_HOURS = int(os.getenv("SESSION_TTL_HOURS", "24"))
+RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "30"))
+RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
 _cors_raw = os.getenv(
     "CORS_ORIGINS",
     "http://127.0.0.1:8000,http://localhost:8000",

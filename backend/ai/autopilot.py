@@ -28,7 +28,7 @@ from backend.config import (
     MAX_TOOL_ITERATIONS,
     OPENROUTER_API_KEY,
 )
-from backend.executor.recon_db import build_recon_context, normalize_target
+from backend.security.missions import get_mission_registry
 
 EmitFn = Callable[[str, dict], None]
 
@@ -94,6 +94,7 @@ def _run_autonomous_cycle(
     max_tool_calls: int,
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
+    mission_id: str | None = None,
 ) -> tuple[str, bool, bool, str]:
     """
     Uma rodada do auto-pilot.
@@ -104,6 +105,9 @@ def _run_autonomous_cycle(
     healing_attempts = 0
 
     while tool_calls_budget > 0:
+        if get_mission_registry().is_cancelled(mission_id):
+            return "Missão cancelada pelo usuário.", True, False, model_to_use
+
         try:
             response = _completion(client, model_to_use, messages, AUTONOMOUS_TOOLS)
         except Exception as e:
@@ -168,6 +172,7 @@ def _run_autonomous_cycle(
                     executions,
                     recon_targets=recon_targets,
                     emit=emit,
+                    mission_id=mission_id,
                 )
                 tool_calls_budget -= 1
                 messages.append({
@@ -203,6 +208,28 @@ def run_autonomous(
     model: str | None = None,
     fallback_model: str | None = None,
     emit: EmitFn | None = None,
+    mission_id: str | None = None,
+) -> AutonomousResponse:
+    registry = get_mission_registry()
+    if mission_id:
+        registry.register(mission_id)
+
+    try:
+        return _run_autonomous_body(
+            target, objective, model, fallback_model, emit, mission_id,
+        )
+    finally:
+        if mission_id:
+            registry.cleanup(mission_id)
+
+
+def _run_autonomous_body(
+    target: str,
+    objective: str,
+    model: str | None,
+    fallback_model: str | None,
+    emit: EmitFn | None,
+    mission_id: str | None,
 ) -> AutonomousResponse:
     if not OPENROUTER_API_KEY:
         return AutonomousResponse(
@@ -238,9 +265,17 @@ def run_autonomous(
     remaining_tools = MAX_AUTONOMOUS_TOOLS
 
     if emit:
-        emit("mission_start", {"target": target, "objective": objective})
+        payload = {"target": target, "objective": objective}
+        if mission_id:
+            payload["mission_id"] = mission_id
+        emit("mission_start", payload)
 
     for round_idx in range(MAX_AUTONOMOUS_ROUNDS):
+        if get_mission_registry().is_cancelled(mission_id):
+            stopped_reason = "cancelled"
+            final_message = "Missão cancelada pelo usuário."
+            break
+
         if remaining_tools <= 0:
             stopped_reason = "max_tools"
             break
@@ -276,6 +311,7 @@ def run_autonomous(
                 client, messages, executions, model_to_use, fallback_to_use, per_round,
                 recon_targets=[recon_target],
                 emit=emit,
+                mission_id=mission_id,
             )
         except RuntimeError as e:
             return AutonomousResponse(
@@ -292,7 +328,12 @@ def run_autonomous(
         if finished:
             final_message = text
             objective_met = met
-            stopped_reason = "objective_met" if met else "finished_early"
+            if get_mission_registry().is_cancelled(mission_id):
+                stopped_reason = "cancelled"
+            elif met:
+                stopped_reason = "objective_met"
+            else:
+                stopped_reason = "finished_early"
             break
 
         if text:
@@ -367,6 +408,7 @@ def run_autonomous_stream(
     objective: str,
     model: str | None = None,
     fallback_model: str | None = None,
+    mission_id: str | None = None,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -375,7 +417,14 @@ def run_autonomous_stream(
 
     def worker() -> None:
         try:
-            result = run_autonomous(target, objective, model=model, fallback_model=fallback_model, emit=emit)
+            result = run_autonomous(
+                target,
+                objective,
+                model=model,
+                fallback_model=fallback_model,
+                emit=emit,
+                mission_id=mission_id,
+            )
             event_queue.put(format_sse("done", {
                 "message": result.message,
                 "tool_executions": [_execution_dict(e) for e in result.tool_executions],

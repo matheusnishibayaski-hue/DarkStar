@@ -12,7 +12,7 @@ export function apiFetch(url, options = {}) {
   if (options.body && !headers["Content-Type"] && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
   }
-  return fetch(url, { ...options, headers });
+  return fetch(url, { ...options, headers, credentials: "include" });
 }
 
 export function logStreamUrl(executionId) {
@@ -24,43 +24,48 @@ export function logStreamUrl(executionId) {
 
 export async function checkClientConfig(toast) {
   try {
-    const res = await fetch("/api/client-config");
+    const res = await fetch("/api/client-config", { credentials: "include" });
     if (!res.ok) return;
     const cfg = await res.json();
-    if (cfg.authRequired && !localStorage.getItem(API_TOKEN_KEY)) {
-      toast(
-        "API protegida: configure CHAT_API_TOKEN no .env e salve o token no localStorage (chave chat-ia-kali-api-token)",
-        "warn"
-      );
+    if (cfg.authRequired) {
+      const { ensureAuth } = await import("./auth.js");
+      await ensureAuth(toast);
     }
   } catch { /* ignore */ }
 }
 
-export async function consumeSseStream(response, handlers) {
+export async function consumeSseStream(response, handlers, { signal } = {}) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split("\n\n");
-    buffer = parts.pop() || "";
+  try {
+    while (true) {
+      if (signal?.aborted) break;
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() || "";
 
-    for (const part of parts) {
-      if (!part.trim() || part.trim().startsWith(":")) continue;
-      let event = "message";
-      let dataStr = "";
-      for (const line of part.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
+      for (const part of parts) {
+        if (!part.trim() || part.trim().startsWith(":")) continue;
+        let event = "message";
+        let dataStr = "";
+        for (const line of part.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        try {
+          const data = JSON.parse(dataStr);
+          handlers[event]?.(data);
+        } catch { /* ignore malformed */ }
       }
-      if (!dataStr) continue;
-      try {
-        const data = JSON.parse(dataStr);
-        handlers[event]?.(data);
-      } catch { /* ignore malformed */ }
     }
+  } finally {
+    try {
+      reader.cancel();
+    } catch { /* ignore */ }
   }
 }

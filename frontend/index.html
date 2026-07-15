@@ -42,6 +42,7 @@
               tools:<span id="tool-badge">auto</span>
             </button>
             <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Auto-Pilot (Ctrl+P)">pilot</button>
+            <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar operação em andamento (chat ou auto-pilot)">cancel</button>
             <button type="button" class="term-btn" id="btn-report" title="Relatório (Ctrl+R)">report</button>
             <button type="button" class="term-btn" id="btn-help" title="Ajuda (Ctrl+/)">?</button>
             <button type="button" class="term-btn" id="btn-new" title="Novo chat (Ctrl+N)">+</button>
@@ -123,6 +124,22 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=1"></script>
+  <!-- Painel: login API -->
+  <div class="overlay" id="overlay-login" hidden>
+    <div class="panel panel-narrow" role="dialog" aria-label="Login API">
+      <div class="panel-head">
+        <span>// autenticação</span>
+        <button type="button" class="panel-close" id="login-cancel">esc</button>
+      </div>
+      <div class="panel-body autopilot-form">
+        <p class="autopilot-desc">Informe o <code>CHAT_API_TOKEN</code> do servidor. Uma sessão HttpOnly será criada no navegador.</p>
+        <label class="autopilot-label" for="login-token">Token de API</label>
+        <input type="password" id="login-token" class="panel-search autopilot-input" placeholder="token do .env" spellcheck="false" autocomplete="off" />
+        <button type="button" class="autopilot-start" id="login-submit">Entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/main.js?v=4"></script>
 </body>
 </html>

@@ -18,6 +18,7 @@ from backend.executor.logs import new_log_id, save_execution_log
 from backend.executor.result import ExecutionResult
 from backend.executor.stream_hub import get_stream_hub
 from backend.executor.wifi_scan import execute_host_wifi
+from backend.security.missions import get_mission_registry
 
 NON_INTERACTIVE_FLAGS: dict[str, list[str]] = {
     "sqlmap": ["--batch"],
@@ -114,6 +115,7 @@ def _run_docker_streaming(
     args: list[str],
     timeout: int,
     execution_id: str | None,
+    mission_id: str | None = None,
 ) -> tuple[int, str, str]:
     docker_cmd = [
         "docker", "exec",
@@ -131,6 +133,10 @@ def _run_docker_streaming(
         stdin=subprocess.DEVNULL,
         bufsize=1,
     )
+
+    registry = get_mission_registry()
+    if execution_id and mission_id:
+        registry.register_process(mission_id, execution_id, proc)
 
     stdout_parts: list[str] = []
     stderr_parts: list[str] = []
@@ -153,6 +159,10 @@ def _run_docker_streaming(
     closed: set[str] = set()
 
     while open_pipes > 0 or proc.poll() is None:
+        if mission_id and registry.is_cancelled(mission_id):
+            proc.kill()
+            raise InterruptedError("Execução cancelada pelo usuário.")
+
         if time.time() - start > timeout:
             proc.kill()
             raise subprocess.TimeoutExpired(docker_cmd, timeout)
@@ -175,6 +185,9 @@ def _run_docker_streaming(
 
         if execution_id:
             get_stream_hub().push_line(execution_id, stream_name, line.rstrip("\n"))
+
+    if execution_id and mission_id:
+        registry.unregister_process(mission_id, execution_id)
 
     return proc.wait(), "".join(stdout_parts), "".join(stderr_parts)
 
@@ -206,6 +219,7 @@ def execute_kali_command_stream(
     args: list[str],
     reason: str,
     execution_id: str | None = None,
+    mission_id: str | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     args = apply_non_interactive_flags(list(args))
     command_display = args_to_display(args)
@@ -278,7 +292,7 @@ def execute_kali_command_stream(
                 stdin=subprocess.DEVNULL,
             )
 
-        exit_code, stdout, stderr = _run_docker_streaming(args, timeout, execution_id)
+        exit_code, stdout, stderr = _run_docker_streaming(args, timeout, execution_id, mission_id)
         save_execution_log(command_display, reason, stdout, stderr, log_id=log_id)
 
         result = ExecutionResult(
@@ -293,6 +307,26 @@ def execute_kali_command_stream(
         )
         if execution_id:
             hub.finish(execution_id, exit_code=exit_code, success=result.success)
+            hub.cleanup(execution_id)
+        yield {"type": "done", "result": result}
+
+    except InterruptedError as e:
+        msg = str(e)
+        for line in _stream_text_lines(execution_id, "stderr", msg):
+            yield line
+        result = ExecutionResult(
+            command=command_display,
+            reason=reason,
+            stdout="",
+            stderr=msg,
+            exit_code=-1,
+            success=False,
+            tool=binary,
+            log_file_id=log_id,
+        )
+        save_execution_log(command_display, reason, "", msg, log_id=log_id)
+        if execution_id:
+            hub.finish(execution_id, exit_code=-1, success=False)
             hub.cleanup(execution_id)
         yield {"type": "done", "result": result}
 
@@ -359,7 +393,22 @@ def execute_in_kali(
     command: str,
     reason: str,
     execution_id: str | None = None,
+    mission_id: str | None = None,
 ) -> ExecutionResult:
     """Compatibilidade: converte string da IA em argv e executa sem shell."""
     args = parse_command_string(command)
-    return execute_kali_command(args, reason, execution_id=execution_id)
+    result: ExecutionResult | None = None
+    for event in execute_kali_command_stream(args, reason, execution_id=execution_id, mission_id=mission_id):
+        if event.get("type") == "done":
+            result = event["result"]
+    if result is None:
+        return ExecutionResult(
+            command=args_to_display(args),
+            reason=reason,
+            stdout="",
+            stderr="Falha interna na execução.",
+            exit_code=-1,
+            success=False,
+            tool=args[0].split("/")[-1] if args else "",
+        )
+    return result

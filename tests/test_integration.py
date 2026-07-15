@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from tests.auth_patch import patch_chat_api_token
+
 
 class TestApiIntegration(unittest.TestCase):
     def setUp(self):
@@ -32,10 +34,10 @@ class TestApiIntegration(unittest.TestCase):
         self.assertIn("tiers", res.json())
 
     def test_api_token_required(self):
-        import backend.main as main_mod
+        from backend.main import app
 
-        with patch.object(main_mod, "CHAT_API_TOKEN", "secret-test-token"):
-            client = TestClient(main_mod.app)
+        with patch_chat_api_token("secret-test-token"):
+            client = TestClient(app)
 
             res = client.get("/api/tools")
             self.assertEqual(res.status_code, 401)

@@ -30,6 +30,7 @@ A IA é alimentada via **OpenRouter** (modelos Gemini e DeepSeek), com seletor d
 - [Agente de IA (OpenRouter)](#agente-de-ia-openrouter)
 - [Solução de problemas](#solução-de-problemas)
 - [Desenvolvimento manual](#desenvolvimento-manual)
+- [Testes](#testes)
 - [Exemplos de uso](#exemplos-de-uso)
 - [Changelog](#changelog)
 - [Licença e responsabilidade](#licença-e-responsabilidade)
@@ -166,8 +167,13 @@ A IA recebe um *system prompt* compacto que a instrui a **sempre executar** ferr
 ```
 Chat IA Kali/
 ├── backend/
-│   ├── main.py                 # FastAPI: rotas, health, static files
+│   ├── main.py                 # Entry FastAPI (~60 linhas): monta app + routers
 │   ├── config.py               # .env, whitelist, system prompts
+│   ├── schemas.py              # Modelos Pydantic (requests/responses)
+│   ├── deps.py                 # Auth helpers, versão APP_VERSION
+│   ├── middleware.py           # Rate limit + guard de API token
+│   ├── routes/                 # auth, system, chat, autonomous
+│   ├── security/               # Sessões, rate limit, registro de missões
 │   ├── models_catalog.py       # Tiers Gemini/DeepSeek para UI
 │   ├── tool_catalog.py         # Resumo + exemplo por ferramenta (só UI)
 │   ├── ai/
@@ -178,18 +184,26 @@ Chat IA Kali/
 │   │   ├── wifi_scan.py        # Scan Wi-Fi nativo (Windows/Linux host)
 │   │   ├── result.py           # ExecutionResult e formatação para LLM
 │   │   ├── summarize.py        # Truncamento/resumo de output longo
-│   │   └── logs.py               # Persistência de logs em disco
+│   │   └── logs.py             # Persistência de logs em disco
+│   ├── data/                   # Sessões persistidas (gitignored)
 │   └── logs/                   # Logs de execução (gitignored)
 ├── frontend/
 │   ├── index.html              # Shell do terminal + painéis
 │   ├── styles.css              # Tema terminal, dashboards, scrollbars
 │   ├── js/
-│   │   ├── main.js             # Entry point (chat, sidebar, autopilot)
+│   │   ├── main.js             # Entry point — wiring dos módulos
+│   │   ├── chat.js             # Envio de mensagens + relatório + cancel
+│   │   ├── autopilot.js        # Modo Auto-Pilot
+│   │   ├── mission.js          # Cancel compartilhado (chat + pilot)
+│   │   ├── chat-view.js        # Renderização do terminal
+│   │   ├── ui.js               # Toasts, sidebar, overlays, health
+│   │   ├── sessions.js         # Store localStorage + sidebar de conversas
+│   │   ├── tools-panel.js      # Seletor de ferramentas + modelos IA
+│   │   ├── auth.js             # Login por sessão + cancelamento
 │   │   ├── api.js              # fetch + SSE + token
 │   │   ├── exec.js             # Blocos de execução + dashboards nmap/nuclei
 │   │   ├── stream.js           # Logs ao vivo [live]
 │   │   └── constants.js        # Chaves localStorage, prompts, ajuda
-│   └── app.js                  # Legado (monolito; substituído por js/main.js)
 ├── docker/
 │   ├── Dockerfile              # Imagem com 180+ ferramentas
 │   ├── docker-compose.yml      # Serviço kali-tools (privileged, host network)
@@ -198,6 +212,7 @@ Chat IA Kali/
 ├── scripts/
 │   └── docker-check.ps1        # Helper com timeout para Docker no Windows
 ├── start.bat                   # Script principal de inicialização (Windows)
+├── start.sh                    # Inicialização Linux/macOS
 ├── requirements.txt            # Dependências Python
 ├── .env.example                # Modelo de variáveis de ambiente
 └── .env                        # Suas chaves (não versionar)
@@ -209,7 +224,7 @@ Chat IA Kali/
 
 | Requisito | Versão / observação |
 |-----------|---------------------|
-| **Windows** | Ambiente principal (`start.bat`); Linux também funciona manualmente |
+| **Windows** | Ambiente principal (`start.bat`); Linux/macOS via `./start.sh` |
 | **Python** | 3.10 ou superior |
 | **Docker Desktop** | Para ferramentas Kali (opcional com `start.bat servidor`) |
 | **Chave OpenRouter** | Em [openrouter.ai/keys](https://openrouter.ai/keys) |
@@ -221,8 +236,17 @@ Chat IA Kali/
 
 ### Modo completo (recomendado)
 
+**Windows:**
+
 ```bat
 start.bat
+```
+
+**Linux / macOS:**
+
+```bash
+chmod +x start.sh
+./start.sh
 ```
 
 O script executa **6 etapas**:
@@ -232,9 +256,9 @@ O script executa **6 etapas**:
 3. **Container Kali** — `docker compose up -d --build` em `docker/`
 4. **Aguarda container** — verifica se `kali-tools` está running
 5. **Verifica ferramentas** — testa `which nmap` dentro do container
-6. **Servidor web** — `uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload`
+6. **Servidor web** — `uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload` (host lido do `.env`)
 
-Acesse: **http://localhost:8000**
+Acesse: **http://127.0.0.1:8000** (ou `http://localhost:8000`)
 
 ### Modos alternativos
 
@@ -243,6 +267,8 @@ Acesse: **http://localhost:8000**
 | `start.bat servidor` | Sobe só o chat, sem Docker. Wi-Fi nativo funciona; ferramentas Kali não |
 | `start.bat nodocker` | Alias de `servidor` |
 | `start.bat repair` | Reinicia Docker Desktop e limpa cache |
+| `./start.sh servidor` | Linux/macOS — só o chat, sem Docker |
+| `./start.sh repair` | Linux/macOS — limpa cache Docker (builder/system prune) |
 
 ---
 
@@ -723,7 +749,7 @@ copy .env.example .env
 
 cd docker && docker compose up -d --build   # opcional
 
-python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 ### Dependências Python
@@ -735,6 +761,26 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 | `openai` | Cliente OpenRouter (API compatível) |
 | `python-dotenv` | Carregar `.env` |
 | `pydantic` | Validação de request/response |
+
+---
+
+## Testes
+
+Suite unitária e de integração (sem Docker nem chamadas à OpenRouter):
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+| Arquivo | Cobertura |
+|---------|-----------|
+| `tests/test_core.py` | Whitelist kali, recon DB, Smart Healing |
+| `tests/test_integration.py` | Health, auth token, recon TTL, stream hub SSE |
+| `tests/test_sse.py` | `/api/chat/stream` e `/api/autonomous/stream` (agente mockado) |
+| `tests/test_security.py` | Sessão HttpOnly, rate limit, cancelamento, **persistência em disco** |
+| `tests/test_kali_mock.py` | Cancelamento Docker com `subprocess` mockado |
+
+CI: GitHub Actions (`.github/workflows/tests.yml`) roda a suite com `requirements-lock.txt` em push/PR para `main`/`master`.
 
 ---
 
@@ -754,10 +800,82 @@ python -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
 
 ## Changelog
 
+### v3.6 — Polimento pós-v3.5 (2026-07-15)
+
+#### Correções e docs
+- README alinhado: host padrão **`127.0.0.1`** (não `0.0.0.0`)
+- Removidos imports não usados (`backend/main.py`, `autopilot.js`)
+
+#### Testes
+- **`test_sessions_survive_store_reload`** — sessões persistidas em disco sobrevivem reload do store
+- **`test_chat_stream_cancelled_stopped_reason`** — SSE `done` com `stopped_reason: cancelled`
+
+#### DevOps
+- **`./start.sh repair`** — limpeza de cache Docker (paridade com `start.bat repair`)
+
+---
+
+### v3.5 — Arquitetura modular e cancel no chat (2026-07-15)
+
+#### Backend
+- `backend/main.py` enxuto (~60 linhas) — routers em `backend/routes/` (`auth`, `system`, `chat`, `autonomous`)
+- `backend/schemas.py`, `backend/deps.py`, `backend/middleware.py` — separação de responsabilidades
+- **Sessões persistidas** em `backend/data/sessions.json` (sobrevivem restart do servidor)
+- **Cancel no chat normal** — `mission_id` em `POST /api/chat/stream` interrompe execução Docker ativa
+
+#### Frontend ES modules
+- `frontend/js/chat.js` — envio de mensagens + relatório + cancel via `mission.js`
+- `frontend/js/autopilot.js` — modo Auto-Pilot isolado
+- `frontend/js/mission.js` — controle compartilhado chat/auto-pilot
+- `frontend/js/ui.js`, `frontend/js/chat-view.js` — UI e renderização do terminal
+- `frontend/js/main.js` — wiring fino (~250 linhas)
+
+#### DevOps e testes
+- **`start.sh`** — inicialização Linux/macOS (espelho simplificado do `start.bat`)
+- **`tests/test_kali_mock.py`** — cancelamento com `subprocess` mockado
+- **`tests/auth_patch.py`** — helper de mock para testes de auth pós-refactor
+
+---
+
+### v3.4 — Segurança, cancelamento e deps pinadas (2026-07-15)
+
+#### Auth por sessão HttpOnly
+- `POST /api/auth/login` — troca `CHAT_API_TOKEN` por cookie `kali_session`
+- `GET /api/auth/session`, `POST /api/auth/logout`
+- Retrocompatível com header `X-Chat-Token` e `?token=` no EventSource
+
+#### Rate limiting
+- Rotas caras (`/api/chat*`, `/api/autonomous*`) limitadas por IP
+- Config: `RATE_LIMIT_REQUESTS=30`, `RATE_LIMIT_WINDOW_SEC=60`
+
+#### Cancelar Auto-Pilot
+- Cliente envia `mission_id`; botão **cancel** na barra do terminal
+- `POST /api/missions/{id}/cancel` — interrompe missão e mata processo Docker ativo
+
+#### Dependências
+- `requirements.txt` com versões pinadas (deps diretas)
+- `requirements-lock.txt` — freeze completo para CI
+
+---
+
+### v3.3 — CI, testes SSE e modularização frontend (2026-07-15)
+
+#### GitHub Actions
+- `.github/workflows/tests.yml` — suite roda em push/PR para `main`/`master`
+
+#### Testes SSE
+- `tests/test_sse.py` — `/api/chat/stream` e `/api/autonomous/stream` com agente mockado
+
+#### Frontend ES modules (continuação)
+- `frontend/js/sessions.js` — store localStorage, sidebar, histórico de conversas
+- `frontend/js/tools-panel.js` — painel de ferramentas, seletor de modelos, objetivos rápidos
+
+---
+
 ### v3.2 — Frontend modular e streaming Auto-Pilot (2026-07-15)
 
 #### Frontend ES modules
-- Entry point: `frontend/js/main.js` (substitui `app.js` monolítico no HTML)
+- Entry point: `frontend/js/main.js` (ES modules no HTML)
 - Módulos: `constants.js`, `api.js`, `exec.js`, `stream.js`
 - SSE compartilhado via `consumeChatStream` / `createToolStreamHandlers`
 

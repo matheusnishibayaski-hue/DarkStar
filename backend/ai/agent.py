@@ -29,6 +29,7 @@ from backend.executor.recon_db import (
 )
 from backend.executor.result import ExecutionResult, format_result_for_llm
 from backend.executor.summarize import summarize_output
+from backend.security.missions import get_mission_registry
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
@@ -87,6 +88,7 @@ class ToolExecution:
 class ChatResponse:
     message: str
     tool_executions: list[ToolExecution] = field(default_factory=list)
+    stopped_reason: str = "completed"
 
 
 from backend.ai.sse import format_sse
@@ -180,6 +182,7 @@ def _record_execution(
     *,
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
+    mission_id: str | None = None,
 ) -> str:
     execution_id = new_log_id()
     get_stream_hub().create(execution_id, command or "(comando vazio)")
@@ -190,7 +193,7 @@ def _record_execution(
             "reason": reason,
         })
 
-    result = execute_in_kali(command, reason, execution_id=execution_id)
+    result = execute_in_kali(command, reason, execution_id=execution_id, mission_id=mission_id)
     summarized, truncated = summarize_output(result.stdout, result.stderr)
     result.truncated_for_llm = truncated
     execution = _result_to_tool_execution(result)
@@ -365,6 +368,7 @@ def _run_openrouter(
     fallback_model: str | None = None,
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
+    mission_id: str | None = None,
 ) -> ChatResponse:
     if not OPENROUTER_API_KEY:
         return ChatResponse(
@@ -374,6 +378,34 @@ def _run_openrouter(
             )
         )
 
+    registry = get_mission_registry()
+    if mission_id:
+        registry.register(mission_id)
+
+    try:
+        return _run_openrouter_body(
+            history,
+            user_message,
+            model,
+            fallback_model,
+            recon_targets,
+            emit,
+            mission_id,
+        )
+    finally:
+        if mission_id:
+            registry.cleanup(mission_id)
+
+
+def _run_openrouter_body(
+    history: list[dict],
+    user_message: str,
+    model: str | None,
+    fallback_model: str | None,
+    recon_targets: list[str] | None,
+    emit: EmitFn | None,
+    mission_id: str | None,
+) -> ChatResponse:
     client = OpenAI(
         base_url=OPENROUTER_BASE_URL,
         api_key=OPENROUTER_API_KEY,
@@ -390,6 +422,13 @@ def _run_openrouter(
     final_text = ""
 
     for _ in range(MAX_TOOL_ITERATIONS):
+        if get_mission_registry().is_cancelled(mission_id):
+            return ChatResponse(
+                message="Operação cancelada pelo usuário.",
+                tool_executions=executions,
+                stopped_reason="cancelled",
+            )
+
         try:
             response = client.chat.completions.create(
                 model=model_to_use,
@@ -443,6 +482,7 @@ def _run_openrouter(
                 executions,
                 recon_targets=recon_targets,
                 emit=emit,
+                mission_id=mission_id,
             )
             messages.append({
                 "role": "tool",
@@ -489,6 +529,7 @@ def chat(
     model: str | None = None,
     fallback_model: str | None = None,
     emit: EmitFn | None = None,
+    mission_id: str | None = None,
 ) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
     enriched, targets = _apply_recon_context(user_message, history)
@@ -499,6 +540,7 @@ def chat(
         fallback_model=fallback_model,
         recon_targets=targets,
         emit=emit,
+        mission_id=mission_id,
     )
 
 
@@ -508,6 +550,7 @@ def chat_stream(
     preferred_tool: str | None = None,
     model: str | None = None,
     fallback_model: str | None = None,
+    mission_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Gera eventos SSE durante o processamento do chat."""
     event_queue: Queue[str | None] = Queue()
@@ -524,10 +567,12 @@ def chat_stream(
                 model=model,
                 fallback_model=fallback_model,
                 emit=emit,
+                mission_id=mission_id,
             )
             event_queue.put(format_sse("done", {
                 "message": result.message,
                 "tool_executions": [asdict(e) for e in result.tool_executions],
+                "stopped_reason": result.stopped_reason,
             }))
         except Exception as e:
             event_queue.put(format_sse("error", {"detail": str(e)}))
