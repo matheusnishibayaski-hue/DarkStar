@@ -1,5 +1,7 @@
 # Chat IA Kali
 
+**Versão estável: 1.0.0** · Assistente local de pentest com IA + execução real no Kali Docker.
+
 Assistente de chat com interface de terminal para **testes de penetração éticos**. O usuário descreve o que precisa em linguagem natural; a IA interpreta o pedido, escolhe a ferramenta adequada e **executa comandos reais** em um ambiente Kali Linux isolado via Docker — em vez de apenas sugerir comandos.
 
 A IA é alimentada via **OpenRouter** (modelos Gemini e DeepSeek), com seletor de custo/qualidade na interface, modo **Auto-Pilot** para missões autônomas, dashboards visuais de resultados, relatórios Markdown e execução vectorizada sem shell.
@@ -8,8 +10,70 @@ A IA é alimentada via **OpenRouter** (modelos Gemini e DeepSeek), com seletor d
 
 ---
 
+## Início rápido
+
+```bat
+# 1. Clone ou baixe o projeto e entre na pasta
+
+# 2. Windows — sobe Docker, Kali e servidor
+start.bat
+
+# Linux/macOS
+chmod +x start.sh && ./start.sh
+
+# 3. Edite .env (criado automaticamente na 1ª execução)
+#    OPENROUTER_API_KEY=sk-or-v1-...   ← obrigatório
+#    CHAT_API_TOKEN=...                 ← recomendado se não for só localhost
+
+# 4. Abra no navegador
+#    http://127.0.0.1:8000
+```
+
+**Sem Docker** (só chat + Wi-Fi nativo Windows): `start.bat servidor` ou `./start.sh servidor`
+
+**Validar instalação:** `GET http://127.0.0.1:8000/api/health` → `"version": "1.0.0"`, `"status": "ok"`
+
+**Testes automatizados:** `python -m unittest discover -s tests -v` (29 testes, sem Docker/OpenRouter)
+
+---
+
+## Escopo do projeto (congelado em v1.0)
+
+Este release encerra o ciclo de desenvolvimento **como ferramenta local single-user**. Novas features grandes ficam para uma eventual v2 (playbooks, etc.).
+
+### Dentro do escopo ✅
+
+| Área | O que o projeto faz |
+|------|---------------------|
+| **Uso** | Pentest **autorizado**, lab, estudo, consultoria individual |
+| **IA** | Chat OpenRouter + function calling + Auto-Pilot |
+| **Execução** | Kali Docker, whitelist, logs, cancel, relatórios Markdown |
+| **Segurança local** | Auth por sessão, rate limit, bind `127.0.0.1` |
+| **Plataforma** | Windows (`start.bat`) e Linux/macOS (`start.sh`) |
+
+### Fora do escopo (v1.0) ❌
+
+| Não incluído | Motivo |
+|--------------|--------|
+| Multi-usuário / equipes / RBAC | Produto enterprise separado |
+| Dashboard consultoria / multi-cliente | Pivot comercial |
+| Mitigação automática / SIEM / SOC | Risco legal e operacional |
+| ML customizado / fine-tuning | Complexidade vs. benefício |
+| Multi-agentes paralelos | Custo e debugging |
+| Labs GNS3 / EVE-NG / VMs dinâmicas | Infraestrutura pesada |
+| Playbooks configuráveis | Planejado para v2 |
+
+### Próximo passo natural (v2, se retomar)
+
+Playbooks YAML no Auto-Pilot (recon → scan → report) + timeline visual da missão.
+
+---
+
 ## Sumário
 
+- [Início rápido](#início-rápido)
+- [Escopo do projeto (congelado em v1.0)](#escopo-do-projeto-congelado-em-v10)
+- [Checklist de validação (release)](#checklist-de-validação-release)
 - [Visão geral](#visão-geral)
 - [Funcionalidades](#funcionalidades)
 - [Arquitetura](#arquitetura)
@@ -32,6 +96,7 @@ A IA é alimentada via **OpenRouter** (modelos Gemini e DeepSeek), com seletor d
 - [Desenvolvimento manual](#desenvolvimento-manual)
 - [Testes](#testes)
 - [Exemplos de uso](#exemplos-de-uso)
+- [Release e versionamento](#release-e-versionamento)
 - [Changelog](#changelog)
 - [Licença e responsabilidade](#licença-e-responsabilidade)
 
@@ -784,6 +849,52 @@ CI: GitHub Actions (`.github/workflows/tests.yml`) roda a suite com `requirement
 
 ---
 
+## Checklist de validação (release)
+
+Use este checklist após instalar ou antes de marcar uma versão como estável.
+
+### Automatizado
+
+- [ ] `python -m unittest discover -s tests -v` — **29 testes OK**
+- [ ] CI GitHub Actions verde (se usar remote)
+
+### Infraestrutura
+
+- [ ] `start.bat` ou `./start.sh` — Python venv + deps instalados
+- [ ] Docker responde (`docker info`)
+- [ ] Container `kali-tools` running (`docker ps`)
+- [ ] `GET /api/health` → `version: "1.0.0"`, `status: "ok"`
+- [ ] `GET /api/client-config` → JSON válido
+
+### Chat e execução
+
+- [ ] Mensagem simples no chat — resposta da IA
+- [ ] Pedido com ferramenta (ex.: `nmap scanme.nmap.org`) — execução + dashboard ou bloco `[ok]`
+- [ ] Botão **cancel** durante execução longa — interrompe operação
+- [ ] Tentativa de comando fora da whitelist — bloqueado
+- [ ] Log persistido em `backend/logs/` após execução
+
+### Auto-Pilot e relatórios
+
+- [ ] **pilot** → alvo lab + objetivo — missão executa ou cancela limpo
+- [ ] Botão **report** — download `relatorio-pentest.md`
+- [ ] Auto-Pilot concluído — relatório `.md` baixado (se aplicável)
+
+### Segurança (recomendado)
+
+- [ ] `CHAT_API_TOKEN` definido no `.env`
+- [ ] Login via overlay — cookie `kali_session` criado
+- [ ] APIs `/api/tools` sem auth → 401; com sessão → 200
+- [ ] Reiniciar servidor — sessão ainda válida (persistência em `backend/data/`)
+
+### Frontend
+
+- [ ] Hard refresh (`Ctrl+Shift+R`) carrega JS atual (`main.js?v=4`)
+- [ ] Sidebar, ferramentas, seletor de modelo funcionam
+- [ ] Barra de status mostra Docker/Kali
+
+---
+
 ## Exemplos de uso
 
 | Pedido / ação | O que acontece |
@@ -798,7 +909,63 @@ CI: GitHub Actions (`.github/workflows/tests.yml`) roda a suite com `requirement
 
 ---
 
+## Release e versionamento
+
+### Versão atual
+
+| Campo | Valor |
+|-------|-------|
+| **Release estável** | `1.0.0` |
+| **API** | `/api/health` → `"version": "1.0.0"` |
+| **Testes** | 29 (`python -m unittest discover -s tests -v`) |
+
+Histórico de desenvolvimento interno: v2.x (features) → v3.x (hardening + modularização) → **v1.0.0** (release estável pública).
+
+### Marcar release no Git (opcional)
+
+```bash
+git add -A
+git commit -m "Release v1.0.0 — versão estável"
+git tag -a v1.0.0 -m "Chat IA Kali 1.0.0 — ferramenta local de pentest com IA"
+git push origin main --tags
+```
+
+### Arquivos que **não** versionar
+
+| Caminho | Motivo |
+|---------|--------|
+| `.env` | Chaves secretas |
+| `backend/data/` | Sessões HttpOnly |
+| `backend/logs/` | Logs de execução |
+| `backend/recon/` | Cache de recon |
+| `venv/` | Ambiente Python local |
+
+### Uso recomendado em produção local
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-...
+CHAT_API_TOKEN=um-token-forte-aqui
+UVICORN_HOST=127.0.0.1
+SESSION_TTL_HOURS=24
+RATE_LIMIT_REQUESTS=30
+```
+
+Não exponha `UVICORN_HOST=0.0.0.0` na internet sem reverse proxy, TLS e auth robusta.
+
+---
+
 ## Changelog
+
+### v1.0.0 — Release estável (2026-07-15)
+
+Consolidação do ciclo v3.x como **versão 1.0** pronta para uso contínuo.
+
+- README unificado: início rápido, escopo congelado, checklist de release, licença MIT
+- Versão da API unificada em **`1.0.0`**
+- Escopo documentado: ferramenta local single-user; v2 reservada para playbooks
+- 29 testes automatizados + checklist manual de validação
+
+---
 
 ### v3.6 — Polimento pós-v3.5 (2026-07-15)
 
@@ -1091,7 +1258,7 @@ Nenhuma variável nova obrigatória. Diretórios criados automaticamente:
 | GET | `/api/logs/{log_id}` | Log completo |
 | POST | `/api/generate-report` | Relatório `.md` |
 
-**Health:** campo `version: "2.0.0"`
+**Health (histórico v2.0):** campo `version` reflete a versão atual da API (`1.0.0` desde o release estável).
 
 #### Configuração v2.0
 
@@ -1101,7 +1268,9 @@ OUTPUT_TOKEN_LIMIT=5000
 
 Logs em `backend/logs/` (`.gitignore`)
 
-#### Checklist de validação v2.0
+#### Checklist de validação v2.0 (histórico)
+
+Substituído pelo [Checklist de validação (release)](#checklist-de-validação-release) acima.
 
 - [ ] Reiniciar servidor: `start.bat`
 - [ ] Testar `nmap scanme.nmap.org` — dashboard Nmap na UI
@@ -1114,4 +1283,36 @@ Logs em `backend/logs/` (`.gitignore`)
 
 ## Licença e responsabilidade
 
+### Uso ético
+
 Este software é fornecido para **fins educacionais e testes autorizados**. Os autores não se responsabilizam pelo uso indevido. Respeite leis locais (LGPD, Marco Civil, CFAA equivalentes) e obtenha autorização antes de testar qualquer sistema de terceiros.
+
+**Você é responsável** por garantir escopo, autorização por escrito e conformidade legal de cada teste executado.
+
+### Licença MIT
+
+```
+MIT License
+
+Copyright (c) 2026 Chat IA Kali
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+O aviso de uso ético acima **permanece válido** independentemente da licença MIT.
