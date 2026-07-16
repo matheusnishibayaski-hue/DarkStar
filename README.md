@@ -14,7 +14,6 @@ Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://o
 - [Escopo v1.1](#escopo-v11)
 - [Funcionalidades](#funcionalidades)
 - [Arquitetura](#arquitetura)
-- [Arquitetura técnica](docs/ARCHITECTURE.md)
 - [Estrutura do repositório](#estrutura-do-repositório)
 - [Instalação](#instalação)
 - [Configuração](#configuração)
@@ -141,6 +140,34 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 5. Frontend renderiza resposta, dashboards e blocos `[ok]` / `[exit N]` / `[blocked]`.
 6. Iterações até `MAX_TOOL_ITERATIONS`; Smart Healing em falhas; Recon DB atualizado em sucesso.
 
+### Backend — mapa de módulos
+
+```
+main.py ──► middleware (request_id, rate limit, auth)
+    │
+    ├── routes/* ──► ai/ · playbooks/ · security/ · executor/
+    │
+    ├── ai/          agent · autopilot · openrouter_common · report · healing · sse
+    ├── executor/    kali · logs · recon_db · files_store · stream_hub · summarize · wifi_scan
+    ├── security/    sessions · rate_limit · scope · audit · missions
+    ├── config.py    facade (env + reexports)
+    │     config_tools.py    ALLOWED_TOOLS · TOOL_CATEGORIES
+    │     config_prompts.py  SYSTEM_PROMPT · AUTONOMOUS_*
+    └── observability.py     logs JSON · métricas · timing
+```
+
+Sem ciclos de import estáticos. Contratos de API, SSE e UI inalterados no hardening pós-1.1.0.
+
+### Acoplamentos mitigados (pós-hardening)
+
+| # | Problema | Mitigação |
+|---|----------|-----------|
+| 1 | `config.py` God Object | Split em `config_tools` + `config_prompts`; facade estável |
+| 2 | `agent.py` orquestra tudo | `report.py` + `openrouter_common.py` extraídos |
+| 3 | `kali.py` ciclo de vida repetido | `_finalize_stream_result` |
+| 4 | Autopilot importava privados do agent | Imports públicos + `openrouter_common` |
+| 5 | Auth/config por valor (patch frágil em testes) | Mantido; helper `tests/auth_patch.py` |
+
 ---
 
 ## Estrutura do repositório
@@ -161,7 +188,6 @@ Chat IA Kali/
 │   ├── audit/               # eventos JSONL (gitignored)
 │   ├── data/                # sessões (gitignored)
 │   └── logs/ · recon/ · outputs/   # gitignored (outputs = volume Kali)
-├── docs/                    # ARCHITECTURE.md (mapa técnico pós-hardening)
 ├── frontend/
 │   ├── index.html · styles.css
 │   └── js/                  # main, chat, intel, files, audio, onboarding, timeline, …
@@ -640,7 +666,16 @@ npx playwright test -c e2e/playwright.config.js
 | `test_kali_mock.py` | Cancel mata processo Docker |
 | `test_coverage_*.py` | Cobertura restante (executor, rotas, agent, autopilot) |
 
-Arquitetura detalhada: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+### Matriz por módulo
+
+| Módulo | Cobertura | Arquivos de teste |
+|--------|-----------|-------------------|
+| `security/` (scope, auth, proxy, audit) | Alta | `test_security*`, `test_audit`, `test_core` |
+| `executor/` (kali, files, stream) | Alta | `test_kali_mock`, `test_observability`, `test_integration`, `test_coverage_*` |
+| `ai/` (agent, autopilot, healing) | Alta | `test_agent_unit`, `test_autopilot_unit`, `test_core`, `test_coverage_*` |
+| `routes/` + OpenAPI | Alta | `test_integration`, `test_openapi`, `test_playbooks` |
+| `observability` | Alta | `test_observability` + E2E `observability.spec.js` |
+| Frontend (smoke) | Básica | `e2e/smoke.spec.js` |
 
 ### CI/CD
 
@@ -722,7 +757,7 @@ git push origin main --tags
 
 ### Pós-1.1.0 — Robustez e qualidade (2026-07-16)
 
-Ciclo de hardening pós-release **1.1.0**: correções P0, refatoração do backend, observabilidade, Docker endurecido, CI ampliado e suíte de testes levada a **~100% de cobertura** no `backend/` (148 testes). Detalhes técnicos de dependências e matriz de testes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Ciclo de hardening pós-release **1.1.0**: correções P0, refatoração do backend, observabilidade, Docker endurecido, CI ampliado e suíte de testes levada a **~100% de cobertura** no `backend/` (148 testes). Mapa de módulos e acoplamentos: seção [Arquitetura](#arquitetura).
 
 #### Correções críticas
 
@@ -794,8 +829,7 @@ Novos grupos principais: `test_observability`, `test_agent_unit`, `test_autopilo
 
 #### Documentação
 
-- Novo [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — diagrama de dependências, acoplamentos, perfis Docker, matriz de testes
-- `.env.example` e este README atualizados (`TRUST_PROXY`, observabilidade, perfis Docker, contagens de testes)
+- `.env.example` e este README atualizados (`TRUST_PROXY`, observabilidade, perfis Docker, mapa de módulos, matriz de testes, contagens)
 
 ---
 
