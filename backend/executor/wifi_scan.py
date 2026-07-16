@@ -2,7 +2,6 @@ import re
 import subprocess
 import sys
 
-from backend.config import HOST_WIFI_TOOLS
 from backend.executor.logs import save_execution_log
 from backend.executor.result import ExecutionResult
 
@@ -91,7 +90,10 @@ def _scan_linux(command: str, reason: str, log_id: str | None = None) -> Executi
     if binary == "wlan-interfaces":
         cmds = [["iw", "dev"], ["iwconfig"]]
     else:
-        cmds = [["iw", "dev"], ["nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,SECURITY", "dev", "wifi", "list"]]
+        cmds = [
+            ["iw", "dev"],
+            ["nmcli", "-t", "-f", "SSID,BSSID,SIGNAL,SECURITY", "dev", "wifi", "list"],
+        ]
 
     sections: list[str] = []
     ok = False

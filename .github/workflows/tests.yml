@@ -6,41 +6,122 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
-  unit:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+
+      - name: Install Ruff
+        run: pip install "ruff==0.11.2"
+
+      - name: Ruff check
+        run: ruff check backend tests
+
+      - name: Ruff format check
+        run: ruff format --check backend tests
+
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Bandit
+        run: pip install "bandit==1.8.3"
+
+      # Bandit em Python 3.11 (CI). Em 3.14 local pode falhar ao parsear AST.
+      - name: Bandit (high/critical fail)
+        run: bandit -r backend -ll -ii -x tests,venv,node_modules
+
+      - name: Install Semgrep
+        run: pip install "semgrep==1.110.0"
+
+      - name: Semgrep (OWASP + secrets)
+        run: |
+          semgrep scan --error --config p/owasp-top-ten --config p/secrets \
+            --exclude tests --exclude venv --exclude node_modules \
+            backend
+
+  unit:
+    needs: [lint, security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements-lock.txt
+        run: |
+          pip install -r requirements-lock.txt
+          pip install "coverage==7.8.0"
 
-      - name: Run test suite
-        run: python -m unittest discover -s tests -v
+      - name: Run unit tests with coverage
+        run: |
+          coverage run -m unittest discover -s tests -v
+          coverage report
+          coverage xml
+
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  docker-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate compose (Wi-Fi profile)
+        working-directory: docker
+        run: docker compose -f docker-compose.yml config >/dev/null
+
+      - name: Validate compose (restricted profile)
+        working-directory: docker
+        run: docker compose -f docker-compose.restricted.yml config >/dev/null
 
   e2e:
     needs: unit
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
 
       - name: Install Python dependencies
         run: pip install -r requirements-lock.txt
 
       - name: Install Node dependencies
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
@@ -48,28 +129,35 @@ jobs:
       - name: Start API server
         run: |
           python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 &
-          sleep 3
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8000/api/health >/dev/null; then
+              echo "API ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "API failed to start"
+          exit 1
 
-      - name: Run E2E smoke tests
+      - name: Run E2E smoke + observability
         run: npx playwright test -c e2e/playwright.config.js
 
-  docker-integration:
-    needs: unit
+  # Build da imagem Kali é pesado (~GBs). Falha aqui não bloqueia merge;
+  # a sintaxe dos composes é bloqueante no job docker-config.
+  docker-build:
+    needs: [unit, docker-config]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
-      - name: Docker version
-        run: docker --version
-
-      - name: Build Kali image
+      - name: Build Kali image (restricted)
         working-directory: docker
-        run: docker compose build
+        run: docker compose -f docker-compose.restricted.yml build
 
-      - name: Start Kali container
+      - name: Start + nmap smoke
         working-directory: docker
-        run: docker compose up -d
-
-      - name: nmap version in container
-        run: docker exec kali-tools nmap --version
+        run: |
+          docker compose -f docker-compose.restricted.yml up -d
+          docker exec kali-tools nmap --version

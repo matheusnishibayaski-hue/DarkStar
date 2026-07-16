@@ -9,8 +9,11 @@ from fastapi.staticfiles import StaticFiles
 
 from backend.config import CORS_ORIGINS
 from backend.deps import APP_VERSION
-from backend.middleware import api_token_guard, rate_limit_guard
-from backend.routes import auth, autonomous, audit, chat, files, playbooks, system
+from backend.middleware import api_token_guard, rate_limit_guard, request_context_guard
+from backend.observability import configure_logging
+from backend.routes import audit, auth, autonomous, chat, files, playbooks, system
+
+configure_logging()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
@@ -25,6 +28,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(request_context_guard)
 app.middleware("http")(rate_limit_guard)
 app.middleware("http")(api_token_guard)
 

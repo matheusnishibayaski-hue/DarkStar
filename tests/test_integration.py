@@ -14,6 +14,7 @@ from tests.auth_patch import patch_chat_api_token
 class TestApiIntegration(unittest.TestCase):
     def setUp(self):
         from backend.main import app
+
         self.client = TestClient(app)
 
     def test_health(self):
@@ -55,9 +56,11 @@ class TestReconTtl(unittest.TestCase):
         import backend.executor.recon_db as recon_db
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(cfg, "RECON_DIR", Path(tmp)), patch.object(
-                recon_db, "RECON_DIR", Path(tmp)
-            ), patch.object(recon_db, "RECON_TTL_DAYS", 1):
+            with (
+                patch.object(cfg, "RECON_DIR", Path(tmp)),
+                patch.object(recon_db, "RECON_DIR", Path(tmp)),
+                patch.object(recon_db, "RECON_TTL_DAYS", 1),
+            ):
                 recon_db.save_recon_data("scanme.nmap.org", "open_ports", ["80/tcp open http"])
                 path = Path(tmp) / "scanme.nmap.org.json"
                 self.assertTrue(path.is_file())
@@ -76,8 +79,9 @@ class TestReconTtl(unittest.TestCase):
         import backend.executor.recon_db as recon_db
 
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(cfg, "RECON_DIR", Path(tmp)), patch.object(
-                recon_db, "RECON_DIR", Path(tmp)
+            with (
+                patch.object(cfg, "RECON_DIR", Path(tmp)),
+                patch.object(recon_db, "RECON_DIR", Path(tmp)),
             ):
                 recon_db.save_recon_data(
                     "lab.test",
@@ -110,8 +114,9 @@ class TestFilesApi(unittest.TestCase):
             root = Path(tmp)
             (root / "scan.xml").write_text("<nmaprun></nmaprun>", encoding="utf-8")
             (root / "capture.pcap").write_bytes(b"pcap")
-            with patch.object(cfg, "OUTPUTS_DIR", root), patch.object(
-                files_store, "OUTPUTS_DIR", root
+            with (
+                patch.object(cfg, "OUTPUTS_DIR", root),
+                patch.object(files_store, "OUTPUTS_DIR", root),
             ):
                 from backend.main import app
 

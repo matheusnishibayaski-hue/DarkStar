@@ -47,17 +47,23 @@ class TestSessionAuth(unittest.TestCase):
 
 class TestRateLimit(unittest.TestCase):
     def test_chat_stream_rate_limited(self):
+        import backend.security.rate_limit as rl
         from backend.main import app
-        from backend.security.rate_limit import get_rate_limiter
 
-        get_rate_limiter(2, 60).reset()
+        # Recria o limiter: get_rate_limiter ignora max_requests se já existir
+        rl._limiter = None
 
         def mock_chat_stream(*_args, **_kwargs):
-            yield "event: done\ndata: {\"message\":\"ok\",\"tool_executions\":[]}\n\n"
+            yield 'event: done\ndata: {"message":"ok","tool_executions":[]}\n\n'
 
         with patch_chat_api_token(""), patch(
+            "backend.middleware.RATE_LIMIT_REQUESTS", 2
+        ), patch(
+            "backend.middleware.RATE_LIMIT_WINDOW_SEC", 60
+        ), patch(
             "backend.routes.chat.chat_stream", mock_chat_stream
         ):
+            rl._limiter = None
             client = TestClient(app)
             payload = {"message": "teste", "history": []}
 

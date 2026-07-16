@@ -1,45 +1,48 @@
 import json
-import re
 import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
 from queue import Queue
 
 from openai import OpenAI
 
+from backend.ai.healing import healing_prompt, should_attempt_healing
+from backend.ai.openrouter_common import (
+    OPENROUTER_BASE_URL,
+    OPENROUTER_HEADERS,
+    assistant_message_dict,
+    is_retryable_error,
+    openrouter_error_message,
+)
+from backend.ai.report import generate_report
+from backend.ai.sse import format_sse
 from backend.config import (
-    GEMINI_FALLBACK_MODEL,
-    GEMINI_MODEL,
     MAX_HISTORY_MESSAGES,
     MAX_TOOL_ITERATIONS,
     OPENROUTER_API_KEY,
     SYSTEM_PROMPT,
 )
-from backend.deps import APP_VERSION
-from backend.models_catalog import resolve_model
-from backend.ai.healing import healing_prompt, should_attempt_healing
 from backend.executor.kali import execute_in_kali
 from backend.executor.logs import new_log_id
 from backend.executor.recon_db import (
     build_recon_context,
     extract_recon_from_output,
     extract_targets,
-    list_recon_summaries,
     merge_recon_update,
 )
-from backend.executor.files_store import list_output_files
 from backend.executor.result import ExecutionResult, format_result_for_llm
+from backend.executor.stream_hub import get_stream_hub
 from backend.executor.summarize import summarize_output
+from backend.models_catalog import resolve_model
+from backend.observability import incr, log_event, timed
 from backend.security.missions import get_mission_registry
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-
-OPENROUTER_HEADERS = {
-    "HTTP-Referer": "https://github.com/matheusnishibayaski-hue/Chat-IA-Kali",
-    "X-Title": "Chat IA Kali",
-}
+# Reexports — compatibilidade com autopilot/testes/rotas que importam de agent
+_assistant_message_dict = assistant_message_dict
+_is_retryable_error = is_retryable_error
+_openrouter_error_message = openrouter_error_message
+__all__ = ["chat", "chat_stream", "generate_report", "ChatResponse", "ToolExecution"]
 
 KALI_TOOL_DEFINITION = {
     "type": "function",
@@ -94,8 +97,6 @@ class ChatResponse:
     stopped_reason: str = "completed"
 
 
-from backend.ai.sse import format_sse
-
 EmitFn = Callable[[str, dict], None]
 
 
@@ -147,23 +148,6 @@ def _convert_history(history: list[dict]) -> list[dict]:
     return messages
 
 
-def _assistant_message_dict(message) -> dict:
-    data: dict = {"role": "assistant", "content": message.content}
-    if message.tool_calls:
-        data["tool_calls"] = [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            }
-            for tc in message.tool_calls
-        ]
-    return data
-
-
 def _result_to_tool_execution(result: ExecutionResult) -> ToolExecution:
     return ToolExecution(
         command=result.command,
@@ -190,13 +174,18 @@ def _record_execution(
     execution_id = new_log_id()
     get_stream_hub().create(execution_id, command or "(comando vazio)")
     if emit:
-        emit("tool_start", {
-            "execution_id": execution_id,
-            "command": command,
-            "reason": reason,
-        })
+        emit(
+            "tool_start",
+            {
+                "execution_id": execution_id,
+                "command": command,
+                "reason": reason,
+            },
+        )
 
-    result = execute_in_kali(command, reason, execution_id=execution_id, mission_id=mission_id)
+    incr("tool_executions_total")
+    with timed("tool_execution", tool=(command.split() or [""])[0]):
+        result = execute_in_kali(command, reason, execution_id=execution_id, mission_id=mission_id)
     summarized, truncated = summarize_output(result.stdout, result.stderr)
     result.truncated_for_llm = truncated
     execution = _result_to_tool_execution(result)
@@ -204,193 +193,20 @@ def _record_execution(
     _persist_recon(result, recon_targets or [])
 
     if emit:
-        emit("tool_done", {
-            "execution_id": execution_id,
-            "command": execution.command,
-            "success": execution.success,
-            "blocked": execution.blocked,
-            "exit_code": execution.exit_code,
-            "log_file_id": execution.log_file_id,
-            "tool": execution.tool,
-        })
+        emit(
+            "tool_done",
+            {
+                "execution_id": execution_id,
+                "command": execution.command,
+                "success": execution.success,
+                "blocked": execution.blocked,
+                "exit_code": execution.exit_code,
+                "log_file_id": execution.log_file_id,
+                "tool": execution.tool,
+            },
+        )
 
     return format_result_for_llm(result, output_text=summarized if truncated else None)
-
-
-def _is_retryable_error(error: str) -> bool:
-    lowered = error.lower()
-    return "429" in error or "rate" in lowered or "quota" in lowered or " overloaded" in lowered
-
-
-def _openrouter_error_message(error: str) -> str:
-    lowered = error.lower()
-    if "401" in error or "invalid" in lowered and "key" in lowered:
-        return (
-            "Chave OpenRouter inválida. Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
-            "Obtenha uma chave em: https://openrouter.ai/keys"
-        )
-    if _is_retryable_error(error):
-        return (
-            "Cota ou limite de requisições atingido no OpenRouter.\n\n"
-            "O que fazer:\n"
-            "• Aguarde alguns minutos se enviou muitas mensagens seguidas\n"
-            "• Verifique saldo/cota em https://openrouter.ai/\n"
-            "• O fallback tentará deepseek/deepseek-chat-v3.2 automaticamente\n"
-            "• Cada comando no chat gera 2–6 chamadas à API (ferramentas + resposta)"
-        )
-    return f"Erro ao chamar OpenRouter: {error}"
-
-
-def _extract_vulnerabilities(tool_executions: list[dict]) -> list[dict]:
-    vulns: list[dict] = []
-    seen: set[str] = set()
-
-    for ex in tool_executions:
-        output = "\n".join(filter(None, [ex.get("stdout", ""), ex.get("stderr", "")]))
-        command = ex.get("command", "")
-
-        for match in re.finditer(
-            r"\[(critical|high|medium|low|info)\][^\n]*",
-            output,
-            re.I,
-        ):
-            line = match.group(0).strip()
-            if line not in seen:
-                seen.add(line)
-                vulns.append({"severity": match.group(1).upper(), "detail": line, "source": command})
-
-        for match in re.finditer(
-            r"(\d+/tcp\s+open\s+\S+(?:\s+\S+)*)",
-            output,
-            re.I,
-        ):
-            line = match.group(1).strip()
-            if line not in seen:
-                seen.add(line)
-                vulns.append({"severity": "INFO", "detail": f"Porta aberta: {line}", "source": command})
-
-        for match in re.finditer(r"CVE-\d{4}-\d+", output, re.I):
-            cve = match.group(0).upper()
-            if cve not in seen:
-                seen.add(cve)
-                vulns.append({"severity": "HIGH", "detail": cve, "source": command})
-
-    return vulns
-
-
-def generate_report(
-    history: list[dict],
-    tool_executions: list[dict],
-    title: str = "Relatório de Pentest",
-) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    vulns = _extract_vulnerabilities(tool_executions)
-
-    user_messages = [m["content"] for m in history if m.get("role") == "user"]
-    assistant_messages = [m["content"] for m in history if m.get("role") == "assistant"]
-
-    scope = user_messages[0][:200] if user_messages else "Não especificado"
-    executive = assistant_messages[-1][:800] if assistant_messages else "Sessão sem conclusões registradas."
-
-    lines = [
-        f"# {title}",
-        "",
-        f"**Data:** {now}  ",
-        f"**Ferramenta:** Chat IA Kali v{APP_VERSION}  ",
-        f"**Execuções registradas:** {len(tool_executions)}",
-        "",
-        "---",
-        "",
-        "## 1. Resumo Executivo",
-        "",
-        executive,
-        "",
-        f"**Escopo inicial (primeira solicitação):** {scope}",
-        "",
-        "---",
-        "",
-        "## 2. Resumo Técnico",
-        "",
-        "| # | Comando | Status | Motivo |",
-        "|---|---------|--------|--------|",
-    ]
-
-    for i, ex in enumerate(tool_executions, 1):
-        status = "OK" if ex.get("success") else ("BLOQUEADO" if ex.get("blocked") else f"EXIT {ex.get('exit_code')}")
-        cmd = ex.get("command", "").replace("|", "\\|")
-        reason = ex.get("reason", "").replace("|", "\\|")[:80]
-        lines.append(f"| {i} | `{cmd}` | {status} | {reason} |")
-
-    lines.extend(["", "---", "", "## 3. Tabela de Vulnerabilidades / Achados", ""])
-
-    if vulns:
-        lines.extend([
-            "| Severidade | Detalhe | Origem |",
-            "|------------|---------|--------|",
-        ])
-        for v in vulns[:50]:
-            detail = v["detail"].replace("|", "\\|")[:120]
-            source = v["source"].replace("|", "\\|")[:60]
-            lines.append(f"| {v['severity']} | {detail} | `{source}` |")
-    else:
-        lines.append("*Nenhuma vulnerabilidade crítica extraída automaticamente dos logs.*")
-
-    lines.extend(["", "---", "", "## 4. Recon cacheado (/var/recon)", ""])
-    recon_summaries = list_recon_summaries()
-    if recon_summaries:
-        lines.extend([
-            "| Alvo | Portas | CVEs | Achados | Atualizado |",
-            "|------|--------|------|---------|------------|",
-        ])
-        for r in recon_summaries[:20]:
-            lines.append(
-                f"| {r.get('target', '')} | {r.get('open_ports_count', 0)} | "
-                f"{r.get('cves_count', 0)} | {r.get('vulnerabilities_count', 0)} | "
-                f"{r.get('updated_at', '')[:16]} |"
-            )
-    else:
-        lines.append("*Nenhum dado de recon persistido.*")
-
-    lines.extend(["", "---", "", "## 5. Artefatos (/tools/output)", ""])
-    artifacts = list_output_files()
-    if artifacts:
-        lines.append("| Arquivo | Tamanho | Modificado |")
-        lines.append("|---------|---------|------------|")
-        for f in artifacts[:30]:
-            size_kb = f.get("size", 0) // 1024
-            lines.append(
-                f"| `{f.get('name', '')}` | {size_kb} KB | {f.get('modified_at', '')[:16]} |"
-            )
-    else:
-        lines.append("*Nenhum artefato em /tools/output.*")
-
-    lines.extend([
-        "",
-        "---",
-        "",
-        "## 6. Recomendações de Mitigação",
-        "",
-        "1. **Patch Management:** Aplicar correções para CVEs e serviços desatualizados identificados.",
-        "2. **Hardening:** Fechar portas/serviços desnecessários expostos na varredura.",
-        "3. **Monitoramento:** Implementar detecção para tentativas de exploração nas superfícies encontradas.",
-        "4. **Reteste:** Validar mitigações com nova rodada de scans autorizados.",
-        "",
-        "---",
-        "",
-        "## 7. Anexo — Logs",
-        "",
-    ])
-
-    for ex in tool_executions:
-        log_id = ex.get("log_file_id", "")
-        cmd = ex.get("command", "")
-        if log_id:
-            lines.append(f"- `{cmd}` → log `{log_id}` (GET /api/logs/{log_id})")
-        else:
-            lines.append(f"- `{cmd}` → sem log persistido")
-
-    lines.extend(["", "*Relatório gerado automaticamente pelo Chat IA Kali. Revisão humana obrigatória.*", ""])
-    return "\n".join(lines)
 
 
 def _run_openrouter(
@@ -462,15 +278,18 @@ def _run_openrouter_body(
             )
 
         try:
-            response = client.chat.completions.create(
-                model=model_to_use,
-                messages=messages,
-                tools=[KALI_TOOL_DEFINITION],
-                tool_choice="auto",
-                extra_headers=OPENROUTER_HEADERS,
-            )
+            incr("llm_calls_total")
+            with timed("llm_call", tool=model_to_use):
+                response = client.chat.completions.create(
+                    model=model_to_use,
+                    messages=messages,
+                    tools=[KALI_TOOL_DEFINITION],
+                    tool_choice="auto",
+                    extra_headers=OPENROUTER_HEADERS,
+                )
         except Exception as e:
             err = str(e)
+            log_event("WARNING", "llm_call_failed", tool=model_to_use)
             if model_to_use != fallback_to_use and _is_retryable_error(err):
                 time.sleep(1)
                 model_to_use = fallback_to_use
@@ -482,13 +301,15 @@ def _run_openrouter_body(
         if not assistant_message.tool_calls:
             if not nudged and not executions:
                 nudged = True
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "Execute o comando AGORA com run_kali_tool. "
-                        "Não sugira — rode a ferramenta e interprete a saída."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Execute o comando AGORA com run_kali_tool. "
+                            "Não sugira — rode a ferramenta e interprete a saída."
+                        ),
+                    }
+                )
                 continue
 
             final_text = assistant_message.content or "Sem resposta da IA."
@@ -516,27 +337,33 @@ def _run_openrouter_body(
                 emit=emit,
                 mission_id=mission_id,
             )
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tool_call.id,
-                "content": result_text,
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result_text,
+                }
+            )
 
             last = executions[-1]
             if should_attempt_healing(last, healing_attempts):
                 healing_attempts += 1
-                messages.append({
-                    "role": "user",
-                    "content": healing_prompt(last),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": healing_prompt(last),
+                    }
+                )
 
-    messages.append({
-        "role": "user",
-        "content": (
-            "Por favor, conclua agora e gere a sua resposta/análise final "
-            "com base nas execuções realizadas acima."
-        ),
-    })
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                "Por favor, conclua agora e gere a sua resposta/análise final "
+                "com base nas execuções realizadas acima."
+            ),
+        }
+    )
 
     try:
         final_response = client.chat.completions.create(
@@ -601,11 +428,16 @@ def chat_stream(
                 emit=emit,
                 mission_id=mission_id,
             )
-            event_queue.put(format_sse("done", {
-                "message": result.message,
-                "tool_executions": [asdict(e) for e in result.tool_executions],
-                "stopped_reason": result.stopped_reason,
-            }))
+            event_queue.put(
+                format_sse(
+                    "done",
+                    {
+                        "message": result.message,
+                        "tool_executions": [asdict(e) for e in result.tool_executions],
+                        "stopped_reason": result.stopped_reason,
+                    },
+                )
+            )
         except Exception as e:
             event_queue.put(format_sse("error", {"detail": str(e)}))
         finally:
@@ -618,5 +450,3 @@ def chat_stream(
         if item is None:
             break
         yield item
-
-

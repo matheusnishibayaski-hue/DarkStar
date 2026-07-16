@@ -1,6 +1,5 @@
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
 from backend.config import LOG_DIR
 

@@ -38,7 +38,9 @@ class TestScopeLock(unittest.TestCase):
         from backend.security import scope as scope_mod
 
         with unittest.mock.patch.object(cfg, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
-            with unittest.mock.patch.object(scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+            with unittest.mock.patch.object(
+                scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})
+            ):
                 ok, msg = scope_mod.validate_command_scope(["nmap", "-sV", "evil.com"])
                 self.assertFalse(ok)
                 self.assertIn("ALLOWED_TARGETS", msg)
@@ -48,7 +50,9 @@ class TestScopeLock(unittest.TestCase):
         from backend.security import scope as scope_mod
 
         with unittest.mock.patch.object(cfg, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
-            with unittest.mock.patch.object(scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})):
+            with unittest.mock.patch.object(
+                scope_mod, "ALLOWED_TARGETS", frozenset({"scanme.nmap.org"})
+            ):
                 ok, msg = scope_mod.validate_command_scope(["nmap", "-sV", "scanme.nmap.org"])
                 self.assertTrue(ok)
                 self.assertEqual(msg, "")

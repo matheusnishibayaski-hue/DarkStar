@@ -4,31 +4,37 @@ from __future__ import annotations
 
 from fastapi import Request
 
-from backend.config import CHAT_API_TOKEN, SESSION_TTL_HOURS
+from backend.config import CHAT_API_TOKEN, SESSION_TTL_HOURS, TRUST_PROXY
 from backend.schemas import ToolExecutionResponse
 from backend.security.sessions import SESSION_COOKIE_NAME, get_session_store
 
 APP_VERSION = "1.1.0"
 
-PUBLIC_API_PATHS = frozenset({
-    "/api/health",
-    "/api/client-config",
-    "/api/auth/login",
-    "/api/auth/session",
-})
+PUBLIC_API_PATHS = frozenset(
+    {
+        "/api/health",
+        "/api/client-config",
+        "/api/auth/login",
+        "/api/auth/session",
+    }
+)
 
-RATE_LIMITED_PATHS = frozenset({
-    "/api/chat",
-    "/api/chat/stream",
-    "/api/autonomous",
-    "/api/autonomous/stream",
-})
+RATE_LIMITED_PATHS = frozenset(
+    {
+        "/api/chat",
+        "/api/chat/stream",
+        "/api/autonomous",
+        "/api/autonomous/stream",
+    }
+)
 
 
 def client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """IP do cliente. X-Forwarded-For só é lido com TRUST_PROXY=true."""
+    if TRUST_PROXY:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip() or "unknown"
     if request.client:
         return request.client.host
     return "unknown"
@@ -61,6 +67,8 @@ def tool_execution_response(e) -> ToolExecutionResponse:
 
 
 def valid_mission_id(mission_id: str) -> bool:
-    return bool(mission_id) and len(mission_id) <= 64 and all(
-        c.isalnum() or c in "-_" for c in mission_id
+    return (
+        bool(mission_id)
+        and len(mission_id) <= 64
+        and all(c.isalnum() or c in "-_" for c in mission_id)
     )

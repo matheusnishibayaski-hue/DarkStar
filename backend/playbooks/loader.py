@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 from backend.executor.kali import execute_kali_command
 from backend.security.scope import validate_autonomous_target, validate_command_scope
 
@@ -29,12 +28,14 @@ def list_playbooks() -> list[dict[str, Any]]:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         if not data.get("id"):
             continue
-        items.append({
-            "id": data["id"],
-            "name": data.get("name", data["id"]),
-            "description": data.get("description", ""),
-            "steps_count": len(data.get("steps") or []),
-        })
+        items.append(
+            {
+                "id": data["id"],
+                "name": data.get("name", data["id"]),
+                "description": data.get("description", ""),
+                "steps_count": len(data.get("steps") or []),
+            }
+        )
     return items
 
 
@@ -70,13 +71,15 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
 
         scope_cmd_ok, scope_cmd_err = validate_command_scope(args)
         if not scope_cmd_ok:
-            results.append({
-                "step": i,
-                "command": " ".join(args),
-                "success": False,
-                "blocked": True,
-                "stderr": scope_cmd_err,
-            })
+            results.append(
+                {
+                    "step": i,
+                    "command": " ".join(args),
+                    "success": False,
+                    "blocked": True,
+                    "stderr": scope_cmd_err,
+                }
+            )
             break
 
         result = execute_kali_command(
@@ -84,15 +87,17 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
             reason=f"Playbook {playbook_id} passo {i}",
             execution_id=None,
         )
-        results.append({
-            "step": i,
-            "command": result.command,
-            "success": result.success,
-            "blocked": result.blocked,
-            "exit_code": result.exit_code,
-            "log_file_id": result.log_file_id,
-            "stderr": (result.stderr or "")[:500],
-        })
+        results.append(
+            {
+                "step": i,
+                "command": result.command,
+                "success": result.success,
+                "blocked": result.blocked,
+                "exit_code": result.exit_code,
+                "log_file_id": result.log_file_id,
+                "stderr": (result.stderr or "")[:500],
+            }
+        )
         if not result.success or result.blocked:
             break
 

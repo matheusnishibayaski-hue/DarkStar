@@ -3,14 +3,14 @@
 import unittest
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from backend.executor.result import ExecutionResult
+from fastapi.testclient import TestClient
 
 
 class TestPlaybooks(unittest.TestCase):
     def setUp(self):
         from backend.main import app
+
         self.client = TestClient(app)
 
     def test_list_playbooks(self):

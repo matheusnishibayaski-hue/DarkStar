@@ -6,7 +6,6 @@ import json
 import secrets
 import threading
 import time
-from pathlib import Path
 
 from backend.config import BASE_DIR
 

@@ -18,6 +18,7 @@ class TestOpenApi(unittest.TestCase):
             "/api/audit",
             "/api/playbooks",
             "/api/playbooks/{playbook_id}/run",
+            "/api/metrics",
         ):
             self.assertIn(route, paths, f"Rota ausente no OpenAPI: {route}")
 

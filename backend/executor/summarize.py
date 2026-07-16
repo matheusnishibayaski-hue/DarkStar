@@ -49,7 +49,9 @@ def summarize_output(stdout: str, stderr: str = "") -> tuple[str, bool]:
 
     lines = combined.splitlines()
     head = lines[:SUMMARY_HEAD_LINES]
-    tail = lines[-SUMMARY_TAIL_LINES:] if len(lines) > SUMMARY_HEAD_LINES + SUMMARY_TAIL_LINES else []
+    tail = (
+        lines[-SUMMARY_TAIL_LINES:] if len(lines) > SUMMARY_HEAD_LINES + SUMMARY_TAIL_LINES else []
+    )
     critical = _extract_critical_lines(lines)
 
     sections = [TRUNCATION_NOTE, "", f"=== Início ({SUMMARY_HEAD_LINES} linhas) ==="]

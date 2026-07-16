@@ -8,14 +8,48 @@ from pathlib import Path
 
 from backend.config import OUTPUTS_DIR
 
-ALLOWED_EXTENSIONS = frozenset({
-    ".txt", ".log", ".json", ".xml", ".html", ".htm", ".md", ".csv", ".tsv",
-    ".pcap", ".pcapng", ".cap", ".nmap", ".gnmap",
-    ".pdf", ".zip", ".tar", ".gz", ".tgz", ".7z", ".bz2",
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
-    ".py", ".sh", ".rb", ".yml", ".yaml", ".conf", ".cfg",
-    ".dat", ".bin", ".out", ".results",
-})
+ALLOWED_EXTENSIONS = frozenset(
+    {
+        ".txt",
+        ".log",
+        ".json",
+        ".xml",
+        ".html",
+        ".htm",
+        ".md",
+        ".csv",
+        ".tsv",
+        ".pcap",
+        ".pcapng",
+        ".cap",
+        ".nmap",
+        ".gnmap",
+        ".pdf",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".tgz",
+        ".7z",
+        ".bz2",
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".webp",
+        ".svg",
+        ".py",
+        ".sh",
+        ".rb",
+        ".yml",
+        ".yaml",
+        ".conf",
+        ".cfg",
+        ".dat",
+        ".bin",
+        ".out",
+        ".results",
+    }
+)
 
 MAX_LIST_FILES = 500
 
@@ -86,13 +120,15 @@ def list_output_files() -> list[dict]:
             continue
         rel = path.relative_to(root).as_posix()
         stat = path.stat()
-        entries.append({
-            "name": rel,
-            "size": stat.st_size,
-            "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
-            "kind": _file_kind(path.suffix),
-            "extension": path.suffix.lower().lstrip("."),
-        })
+        entries.append(
+            {
+                "name": rel,
+                "size": stat.st_size,
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
+                "kind": _file_kind(path.suffix),
+                "extension": path.suffix.lower().lstrip("."),
+            }
+        )
         if len(entries) >= MAX_LIST_FILES:
             break
     return entries

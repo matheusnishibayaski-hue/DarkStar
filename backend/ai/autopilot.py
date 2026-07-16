@@ -2,32 +2,36 @@ import json
 import threading
 import time
 from collections.abc import Callable, Generator
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from queue import Queue
 
 from openai import OpenAI
 
 from backend.ai.agent import (
     KALI_TOOL_DEFINITION,
-    OPENROUTER_BASE_URL,
-    OPENROUTER_HEADERS,
     ToolExecution,
-    _assistant_message_dict,
-    _is_retryable_error,
-    _openrouter_error_message,
     _record_execution,
     generate_report,
 )
 from backend.ai.healing import healing_prompt, should_attempt_healing
+from backend.ai.openrouter_common import (
+    OPENROUTER_BASE_URL,
+    OPENROUTER_HEADERS,
+    assistant_message_dict,
+    is_retryable_error,
+    openrouter_error_message,
+)
 from backend.ai.sse import format_sse
 from backend.config import (
     AUTONOMOUS_SYSTEM_PROMPT,
-    GEMINI_MODEL,
     MAX_AUTONOMOUS_ROUNDS,
     MAX_AUTONOMOUS_TOOLS,
     MAX_TOOL_ITERATIONS,
     OPENROUTER_API_KEY,
 )
+from backend.executor.recon_db import build_recon_context, normalize_target
+from backend.models_catalog import resolve_model
+from backend.observability import timed
 from backend.security.missions import get_mission_registry
 
 EmitFn = Callable[[str, dict], None]
@@ -76,13 +80,17 @@ def _create_client() -> OpenAI:
 
 
 def _completion(client: OpenAI, model: str, messages: list[dict], tools: list[dict]):
-    return client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=tools,
-        tool_choice="auto",
-        extra_headers=OPENROUTER_HEADERS,
-    )
+    from backend.observability import incr
+
+    incr("llm_calls_total")
+    with timed("llm_call", tool=model):
+        return client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            extra_headers=OPENROUTER_HEADERS,
+        )
 
 
 def _run_autonomous_cycle(
@@ -112,31 +120,33 @@ def _run_autonomous_cycle(
             response = _completion(client, model_to_use, messages, AUTONOMOUS_TOOLS)
         except Exception as e:
             err = str(e)
-            if model_to_use != fallback_model and _is_retryable_error(err):
+            if model_to_use != fallback_model and is_retryable_error(err):
                 time.sleep(1)
                 model_to_use = fallback_model
                 continue
-            raise RuntimeError(_openrouter_error_message(err)) from e
+            raise RuntimeError(openrouter_error_message(err)) from e
 
         assistant_message = response.choices[0].message
 
         if not assistant_message.tool_calls:
             if not nudged and not executions:
                 nudged = True
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "Inicie AGORA executando run_kali_tool com o primeiro comando da missão. "
-                        "Não descreva o plano — execute."
-                    ),
-                })
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "Inicie AGORA executando run_kali_tool com o primeiro comando da missão. "
+                            "Não descreva o plano — execute."
+                        ),
+                    }
+                )
                 continue
 
             text = assistant_message.content or ""
             messages.append({"role": "assistant", "content": text or "(aguardando próxima etapa)"})
             return text, False, False, model_to_use
 
-        messages.append(_assistant_message_dict(assistant_message))
+        messages.append(assistant_message_dict(assistant_message))
 
         for tool_call in assistant_message.tool_calls:
             name = tool_call.function.name
@@ -150,11 +160,15 @@ def _run_autonomous_cycle(
                     summary = "Missão encerrada (erro ao ler parâmetros)."
                     objective_met = False
 
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": json.dumps({"status": "mission_finished", "objective_met": objective_met}),
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": json.dumps(
+                            {"status": "mission_finished", "objective_met": objective_met}
+                        ),
+                    }
+                )
                 return summary, True, objective_met, model_to_use
 
             if name == "run_kali_tool":
@@ -175,28 +189,34 @@ def _run_autonomous_cycle(
                     mission_id=mission_id,
                 )
                 tool_calls_budget -= 1
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result_text,
-                })
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": result_text,
+                    }
+                )
 
                 last = executions[-1]
                 if should_attempt_healing(last, healing_attempts):
                     healing_attempts += 1
-                    messages.append({
-                        "role": "user",
-                        "content": healing_prompt(last),
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": healing_prompt(last),
+                        }
+                    )
 
                 if tool_calls_budget <= 0:
-                    messages.append({
-                        "role": "user",
-                        "content": (
-                            "Limite de comandos nesta rodada atingido. "
-                            "Resuma o progresso e prossiga na próxima rodada ou chame finish_mission."
-                        ),
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Limite de comandos nesta rodada atingido. "
+                                "Resuma o progresso e prossiga na próxima rodada ou chame finish_mission."
+                            ),
+                        }
+                    )
                     return "", False, False, model_to_use
 
     return "", False, False, model_to_use
@@ -216,7 +236,12 @@ def run_autonomous(
 
     try:
         return _run_autonomous_body(
-            target, objective, model, fallback_model, emit, mission_id,
+            target,
+            objective,
+            model,
+            fallback_model,
+            emit,
+            mission_id,
         )
     finally:
         if mission_id:
@@ -300,15 +325,23 @@ def _run_autonomous_body(
         messages.append({"role": "user", "content": kickoff})
 
         if emit:
-            emit("round_start", {
-                "round": round_idx + 1,
-                "max_rounds": MAX_AUTONOMOUS_ROUNDS,
-                "tools_executed": len(executions),
-            })
+            emit(
+                "round_start",
+                {
+                    "round": round_idx + 1,
+                    "max_rounds": MAX_AUTONOMOUS_ROUNDS,
+                    "tools_executed": len(executions),
+                },
+            )
 
         try:
             text, finished, met, model_to_use = _run_autonomous_cycle(
-                client, messages, executions, model_to_use, fallback_to_use, per_round,
+                client,
+                messages,
+                executions,
+                model_to_use,
+                fallback_to_use,
+                per_round,
                 recon_targets=[recon_target],
                 emit=emit,
                 mission_id=mission_id,
@@ -425,15 +458,20 @@ def run_autonomous_stream(
                 emit=emit,
                 mission_id=mission_id,
             )
-            event_queue.put(format_sse("done", {
-                "message": result.message,
-                "tool_executions": [_execution_dict(e) for e in result.tool_executions],
-                "report": result.report,
-                "objective_met": result.objective_met,
-                "rounds": result.rounds,
-                "stopped_reason": result.stopped_reason,
-                "tools_executed": result.tools_executed,
-            }))
+            event_queue.put(
+                format_sse(
+                    "done",
+                    {
+                        "message": result.message,
+                        "tool_executions": [_execution_dict(e) for e in result.tool_executions],
+                        "report": result.report,
+                        "objective_met": result.objective_met,
+                        "rounds": result.rounds,
+                        "stopped_reason": result.stopped_reason,
+                        "tools_executed": result.tools_executed,
+                    },
+                )
+            )
         except Exception as e:
             event_queue.put(format_sse("error", {"detail": str(e)}))
         finally:

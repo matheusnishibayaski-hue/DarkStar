@@ -6,10 +6,18 @@ if /i "%~1"=="servidor" goto server_only
 if /i "%~1"=="nodocker" goto server_only
 if /i "%~1"=="repair" goto repair_docker
 
+set "COMPOSE_FILE=docker-compose.yml"
+if /i "%~1"=="restricted" set "COMPOSE_FILE=docker-compose.restricted.yml"
+
 title Chat IA Kali
 echo.
 echo  ============================================
 echo   Chat IA Kali - Inicializacao completa
+if /i "%COMPOSE_FILE%"=="docker-compose.restricted.yml" (
+  echo   Perfil Docker: RESTRITO ^(sem Wi-Fi^)
+) else (
+  echo   Perfil Docker: Wi-Fi / completo
+)
 echo  ============================================
 echo.
 
@@ -77,7 +85,7 @@ echo       Docker OK
 REM [3/6] Container Kali
 echo [3/6] Container Kali - build na 1a vez pode levar varios minutos...
 pushd docker
-docker compose up -d --build
+docker compose -f "!COMPOSE_FILE!" up -d --build
 set DOCKER_EXIT=!errorlevel!
 popd
 if !DOCKER_EXIT! neq 0 (

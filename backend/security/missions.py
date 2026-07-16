@@ -71,6 +71,12 @@ class MissionRegistry:
                 proc.kill()
             except OSError:
                 pass
+        try:
+            from backend.observability import incr
+
+            incr("cancellations_total")
+        except Exception:
+            pass
         return True
 
     def cleanup(self, mission_id: str) -> None:

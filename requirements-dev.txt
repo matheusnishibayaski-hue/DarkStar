@@ -1,0 +1,7 @@
+# Ferramentas de qualidade local / CI (não necessárias em runtime)
+-r requirements.txt
+ruff==0.11.2
+bandit==1.8.3
+coverage==7.8.0
+# Opcional — métricas CPU/memória mais precisas em GET /api/metrics
+psutil==7.0.0

@@ -186,5 +186,10 @@ RUN sed -i 's/\r$//' /tmp/wifi-scripts/* \
     && install -m755 /tmp/wifi-scripts/wifi-status.sh /usr/local/bin/wifi-status \
     && rm -rf /tmp/wifi-scripts
 
+# Usuário não-root (perfil restrito). docker exec do app ainda pode usar root.
+RUN useradd --create-home --uid 1000 --shell /bin/bash kaliuser \
+    && mkdir -p /tools/output \
+    && chown -R kaliuser:kaliuser /tools
+
 WORKDIR /tools
 ENTRYPOINT ["/usr/local/bin/wifi-entrypoint.sh"]

@@ -19,6 +19,7 @@ from backend.executor.recon_db import extract_targets
 from backend.executor.result import ExecutionResult
 from backend.executor.stream_hub import get_stream_hub
 from backend.executor.wifi_scan import execute_host_wifi
+from backend.observability import get_client_ip, incr, timed
 from backend.security.audit import record_tool_execution
 from backend.security.missions import get_mission_registry
 from backend.security.scope import validate_command_scope
@@ -112,7 +113,39 @@ def _audit_result(
         log_file_id=result.log_file_id or "",
         mission_id=mission_id,
         reason=reason,
+        client_ip=get_client_ip() or None,
     )
+
+
+def _finalize_stream_result(
+    *,
+    result: ExecutionResult,
+    args: list[str],
+    reason: str,
+    mission_id: str | None,
+    execution_id: str | None,
+    hub,
+    save_log: bool = False,
+) -> dict[str, Any]:
+    """Fecha hub SSE, persiste log opcional e registra auditoria."""
+    if save_log:
+        save_execution_log(
+            result.command,
+            reason,
+            result.stdout,
+            result.stderr,
+            log_id=result.log_file_id or None,
+        )
+    if execution_id:
+        hub.finish(
+            execution_id,
+            exit_code=result.exit_code,
+            success=result.success,
+            blocked=result.blocked,
+        )
+        hub.cleanup(execution_id)
+    _audit_result(result, args, reason, mission_id)
+    return {"type": "done", "result": result}
 
 
 def _emit_line(
@@ -141,8 +174,10 @@ def _run_docker_streaming(
     mission_id: str | None = None,
 ) -> tuple[int, str, str]:
     docker_cmd = [
-        "docker", "exec",
-        "--user", "root",
+        "docker",
+        "exec",
+        "--user",
+        "root",
         KALI_CONTAINER,
         *args,
     ]
@@ -276,11 +311,14 @@ def execute_kali_command_stream(
         )
         for line in _stream_text_lines(execution_id, "stderr", error):
             yield line
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+        )
         return
 
     scope_ok, scope_error = validate_command_scope(args)
@@ -299,11 +337,14 @@ def execute_kali_command_stream(
         )
         for line in _stream_text_lines(execution_id, "stderr", scope_error):
             yield line
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False, blocked=True)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+        )
         return
 
     if binary in HOST_WIFI_TOOLS:
@@ -311,20 +352,16 @@ def execute_kali_command_stream(
         combined = "\n".join(filter(None, [result.stdout, result.stderr]))
         for line in _stream_text_lines(execution_id, "stdout", combined):
             yield line
-        save_execution_log(
-            command_display, reason, result.stdout, result.stderr, log_id=log_id
-        )
         result.log_file_id = log_id
-        if execution_id:
-            hub.finish(
-                execution_id,
-                exit_code=result.exit_code,
-                success=result.success,
-                blocked=result.blocked,
-            )
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+            save_log=True,
+        )
         return
 
     wifi = _is_wifi_tool(args)
@@ -340,9 +377,11 @@ def execute_kali_command_stream(
                 stdin=subprocess.DEVNULL,
             )
 
-        exit_code, stdout, stderr = _run_docker_streaming(args, timeout, execution_id, mission_id)
-        save_execution_log(command_display, reason, stdout, stderr, log_id=log_id)
-
+        incr("docker_ops_total")
+        with timed("docker_exec", tool=binary):
+            exit_code, stdout, stderr = _run_docker_streaming(
+                args, timeout, execution_id, mission_id
+            )
         result = ExecutionResult(
             command=command_display,
             reason=reason,
@@ -353,11 +392,15 @@ def execute_kali_command_stream(
             log_file_id=log_id,
             tool=binary,
         )
-        if execution_id:
-            hub.finish(execution_id, exit_code=exit_code, success=result.success)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+            save_log=True,
+        )
 
     except InterruptedError as e:
         msg = str(e)
@@ -373,12 +416,15 @@ def execute_kali_command_stream(
             tool=binary,
             log_file_id=log_id,
         )
-        save_execution_log(command_display, reason, "", msg, log_id=log_id)
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+            save_log=True,
+        )
 
     except subprocess.TimeoutExpired:
         msg = f"Timeout após {timeout}s"
@@ -394,12 +440,15 @@ def execute_kali_command_stream(
             tool=binary,
             log_file_id=log_id,
         )
-        save_execution_log(command_display, reason, "", msg, log_id=log_id)
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+            save_log=True,
+        )
 
     except FileNotFoundError:
         msg = "Docker não encontrado. Instale o Docker Desktop e inicie o container kali-tools."
@@ -415,11 +464,14 @@ def execute_kali_command_stream(
             tool=binary,
             log_file_id=log_id,
         )
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+        )
 
     except Exception as e:
         msg = str(e)
@@ -435,11 +487,14 @@ def execute_kali_command_stream(
             tool=binary,
             log_file_id=log_id,
         )
-        if execution_id:
-            hub.finish(execution_id, exit_code=-1, success=False)
-            hub.cleanup(execution_id)
-        _audit_result(result, args, reason, mission_id)
-        yield {"type": "done", "result": result}
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+        )
 
 
 def execute_in_kali(
@@ -451,7 +506,9 @@ def execute_in_kali(
     """Compatibilidade: converte string da IA em argv e executa sem shell."""
     args = parse_command_string(command)
     result: ExecutionResult | None = None
-    for event in execute_kali_command_stream(args, reason, execution_id=execution_id, mission_id=mission_id):
+    for event in execute_kali_command_stream(
+        args, reason, execution_id=execution_id, mission_id=mission_id
+    ):
         if event.get("type") == "done":
             result = event["result"]
     if result is None:

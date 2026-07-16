@@ -25,9 +25,10 @@ class TestKaliCancelMock(unittest.TestCase):
         mock_proc.poll.return_value = None
         mock_proc.wait.return_value = -9
 
-        with patch.object(kali_mod, "KALI_CONTAINER", "kali-test"), patch.object(
-            kali_mod.subprocess, "Popen", return_value=mock_proc
-        ) as popen_mock:
+        with (
+            patch.object(kali_mod, "KALI_CONTAINER", "kali-test"),
+            patch.object(kali_mod.subprocess, "Popen", return_value=mock_proc) as popen_mock,
+        ):
             registry.cancel(mission_id)
             with self.assertRaises(InterruptedError):
                 kali_mod._run_docker_streaming(
@@ -54,8 +55,9 @@ class TestKaliCancelMock(unittest.TestCase):
         mock_proc.poll.side_effect = [None, 0]
         mock_proc.wait.return_value = 0
 
-        with patch.object(kali_mod, "KALI_CONTAINER", "kali-test"), patch.object(
-            kali_mod.subprocess, "Popen", return_value=mock_proc
+        with (
+            patch.object(kali_mod, "KALI_CONTAINER", "kali-test"),
+            patch.object(kali_mod.subprocess, "Popen", return_value=mock_proc),
         ):
             code, out, err = kali_mod._run_docker_streaming(
                 ["echo", "ok"],

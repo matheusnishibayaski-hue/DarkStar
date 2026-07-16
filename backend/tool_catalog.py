@@ -336,14 +336,18 @@ def enrich_categories(categories: list[dict]) -> list[dict]:
         tools = []
         for tool_id in cat.get("tools", []):
             meta = get_tool_info(tool_id)
-            tools.append({
-                "id": tool_id,
-                "summary": meta["summary"],
-                "example": meta["example"],
-            })
-        enriched.append({
-            "id": cat["id"],
-            "name": cat["name"],
-            "tools": tools,
-        })
+            tools.append(
+                {
+                    "id": tool_id,
+                    "summary": meta["summary"],
+                    "example": meta["example"],
+                }
+            )
+        enriched.append(
+            {
+                "id": cat["id"],
+                "name": cat["name"],
+                "tools": tools,
+            }
+        )
     return enriched

@@ -8,7 +8,13 @@ import sys
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from backend.config import ALLOWED_TARGETS, CHAT_API_TOKEN, KALI_CONTAINER, TOOL_CATEGORIES, UVICORN_HOST, UVICORN_PORT
+from backend.config import (
+    CHAT_API_TOKEN,
+    KALI_CONTAINER,
+    TOOL_CATEGORIES,
+    UVICORN_HOST,
+    UVICORN_PORT,
+)
 from backend.deps import APP_VERSION
 from backend.executor.logs import read_execution_log
 from backend.executor.recon_db import get_recon_data, list_recon_summaries
@@ -54,7 +60,9 @@ def health():
         docker_ok = proc.returncode == 0
         kali_ok = KALI_CONTAINER in proc.stdout
         if docker_ok and not kali_ok:
-            kali_error = f"Container '{KALI_CONTAINER}' não está rodando. Execute: start.bat ou ./start.sh"
+            kali_error = (
+                f"Container '{KALI_CONTAINER}' não está rodando. Execute: start.bat ou ./start.sh"
+            )
         elif not docker_ok:
             kali_error = (proc.stderr or "Docker não está disponível.").strip()
     except FileNotFoundError:
@@ -65,6 +73,7 @@ def health():
     if sys.platform == "win32":
         try:
             from backend.executor.wifi_scan import windows_wifi_health
+
             wifi_ok, wifi_interfaces, wifi_message = windows_wifi_health()
         except Exception as e:
             wifi_message = str(e)
@@ -102,6 +111,14 @@ def health():
         "scope_lock_enabled": scope_lock_enabled(),
         "scope_warning": not scope_lock_enabled(),
     }
+
+
+@router.get("/metrics")
+def api_metrics():
+    """Métricas leves em memória (protegidas por auth quando CHAT_API_TOKEN está ativo)."""
+    from backend.observability import get_metrics
+
+    return get_metrics()
 
 
 @router.get("/tools")

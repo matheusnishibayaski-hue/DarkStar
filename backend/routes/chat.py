@@ -29,7 +29,7 @@ def api_chat_stream(req: ChatRequest):
                 mission_id=req.mission_id or None,
             )
         except Exception as e:
-            yield f"event: error\ndata: {{\"detail\": {json.dumps(str(e))}}}\n\n"
+            yield f'event: error\ndata: {{"detail": {json.dumps(str(e))}}}\n\n'
 
     return StreamingResponse(
         event_generator(),

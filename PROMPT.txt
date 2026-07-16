@@ -1,0 +1,39 @@
+Faça um Code Review completo.
+
+Aja como um Staff Engineer da Microsoft.
+
+Ignore estilo.
+
+Ignore comentários.
+
+Ignore documentação.
+
+Avalie apenas:
+
+Arquitetura
+
+Escalabilidade
+
+Performance
+
+Segurança
+
+Manutenibilidade
+
+Testabilidade
+
+SOLID
+
+Clean Code
+
+Acoplamento
+
+Duplicação
+
+Complexidade
+
+Priorize os 10 maiores problemas.
+
+Não escreva código.
+
+Somente análise.

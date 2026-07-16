@@ -1,6 +1,5 @@
 """Testes da trilha de auditoria."""
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -14,6 +13,7 @@ from tests.auth_patch import patch_chat_api_token
 class TestAudit(unittest.TestCase):
     def setUp(self):
         from backend.main import app
+
         self.client = TestClient(app)
 
     def test_record_and_list_events(self):
@@ -22,8 +22,9 @@ class TestAudit(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             audit_dir = Path(tmp)
-            with patch.object(cfg, "AUDIT_DIR", audit_dir), patch.object(
-                audit_mod, "AUDIT_DIR", audit_dir
+            with (
+                patch.object(cfg, "AUDIT_DIR", audit_dir),
+                patch.object(audit_mod, "AUDIT_DIR", audit_dir),
             ):
                 audit_mod.record_tool_execution(
                     command="nmap -sV scanme.nmap.org",
@@ -44,12 +45,16 @@ class TestAudit(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             audit_dir = Path(tmp)
-            with patch.object(cfg, "AUDIT_DIR", audit_dir), patch.object(
-                audit_mod, "AUDIT_DIR", audit_dir
+            with (
+                patch.object(cfg, "AUDIT_DIR", audit_dir),
+                patch.object(audit_mod, "AUDIT_DIR", audit_dir),
             ):
-                audit_mod.record_event("test", {
-                    "command": "curl -H Authorization: Bearer sk-secret1234567890abcdef",
-                })
+                audit_mod.record_event(
+                    "test",
+                    {
+                        "command": "curl -H Authorization: Bearer sk-secret1234567890abcdef",
+                    },
+                )
                 path = next(audit_dir.glob("events-*.jsonl"))
                 raw = path.read_text(encoding="utf-8")
                 self.assertNotIn("sk-secret", raw)
@@ -60,8 +65,9 @@ class TestAudit(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             audit_dir = Path(tmp)
-            with patch.object(cfg, "AUDIT_DIR", audit_dir), patch.object(
-                audit_mod, "AUDIT_DIR", audit_dir
+            with (
+                patch.object(cfg, "AUDIT_DIR", audit_dir),
+                patch.object(audit_mod, "AUDIT_DIR", audit_dir),
             ):
                 audit_mod.record_tool_execution(
                     command="whois example.com",

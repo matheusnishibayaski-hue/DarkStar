@@ -11,9 +11,7 @@ OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
 # Aliases novos (preferidos) com retrocompatibilidade GEMINI_*
 PRIMARY_MODEL = (
-    os.getenv("OPENROUTER_PRIMARY_MODEL")
-    or os.getenv("GEMINI_MODEL")
-    or "google/gemini-2.5-flash"
+    os.getenv("OPENROUTER_PRIMARY_MODEL") or os.getenv("GEMINI_MODEL") or "google/gemini-2.5-flash"
 )
 FALLBACK_MODEL = (
     os.getenv("OPENROUTER_FALLBACK_MODEL")
@@ -27,6 +25,8 @@ GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
 UVICORN_HOST = os.getenv("UVICORN_HOST", "127.0.0.1")
 UVICORN_PORT = int(os.getenv("UVICORN_PORT", "8000"))
 CHAT_API_TOKEN = os.getenv("CHAT_API_TOKEN", "").strip()
+# Só confie em X-Forwarded-For atrás de reverse proxy que limpa o header do cliente.
+TRUST_PROXY = os.getenv("TRUST_PROXY", "").strip().lower() in {"1", "true", "yes", "on"}
 SESSION_TTL_HOURS = int(os.getenv("SESSION_TTL_HOURS", "24"))
 RATE_LIMIT_REQUESTS = int(os.getenv("RATE_LIMIT_REQUESTS", "30"))
 RATE_LIMIT_WINDOW_SEC = int(os.getenv("RATE_LIMIT_WINDOW_SEC", "60"))
@@ -80,168 +80,53 @@ ALLOWED_TARGETS: frozenset[str] = (
     else frozenset()
 )
 
-HOST_WIFI_TOOLS = {"wlan-scan", "wlan-interfaces", "wifi-list"}
+from backend.config_prompts import AUTONOMOUS_SYSTEM_PROMPT, SYSTEM_PROMPT
+from backend.config_tools import (
+    ALLOWED_TOOLS,
+    HOST_WIFI_TOOLS,
+    TOOL_CATEGORIES,
+    WIFI_CONTAINER_TOOLS,
+    WIFI_TOOLS,
+)
 
-WIFI_CONTAINER_TOOLS = {
-    "aircrack-ng", "airodump-ng", "aireplay-ng", "airmon-ng", "airbase-ng", "airtun-ng",
-    "airdecap-ng", "packetforge-ng", "ivstools", "reaver", "bully", "wifite", "wash",
-    "pixiewps", "hcxdumptool", "hcxpcapngtool", "hcxhashtool", "hcxpsktool", "hcxeiutool",
-    "mdk4", "iw", "iwconfig", "wifi-status",
-}
-
-WIFI_TOOLS = WIFI_CONTAINER_TOOLS
-
-_CORE_TOOLS = {
-    # Rede / reconhecimento
-    "nmap", "masscan", "zmap", "rustscan", "naabu", "arp-scan", "nbtscan", "netdiscover",
-    "fierce", "dnsenum", "dnsrecon", "dig", "host", "nslookup", "whois",
-    "ping", "traceroute", "hping3", "ngrep", "massdns", "dnsx", "shuffledns",
-    # OSINT / subdomínios
-    "subfinder", "sublist3r", "theHarvester", "theharvester", "httpx", "amass", "uncover",
-    "gau", "waybackurls", "anew", "qsreplace", "dnsgen",
-    # Web / crawling
-    "gobuster", "feroxbuster", "ffuf", "wfuzz", "dirb", "dirsearch", "sqlmap", "nikto",
-    "whatweb", "wafw00f", "wpscan", "siege", "commix", "katana", "hakrawler", "gospider",
-    "dalfox", "xsstrike", "arjun", "jwt_tool", "droopescan",
-    # SSL/TLS
-    "sslscan", "openssl", "testssl.sh", "tlsx",
-    # SNMP / serviços
-    "onesixtyone", "snmpwalk", "snmpget", "snmpbulkwalk", "snmpstatus",
-    # Auth / senhas
-    "hydra", "john", "medusa", "patator", "hashcat", "cewl", "crunch", "ncrack", "crowbar",
-    # Windows / SMB / AD
-    "smbclient", "smbmap", "enum4linux", "enum4linux-ng", "nxc", "responder",
-    "ldapsearch", "ldapwhoami", "ldapdomaindump", "rpcclient",
-    "kerbrute", "certipy", "bloodyAD", "evil-winrm",
-    # Impacket
-    "impacket-smbclient", "impacket-secretsdump", "impacket-psexec",
-    "impacket-wmiexec", "impacket-smbexec", "impacket-atexec",
-    "impacket-getnpusers", "impacket-getadusers", "impacket-GetUserSPNs",
-    "impacket-getTGT", "impacket-ticketer", "impacket-rbcd",
-    "impacket-rpcdump", "impacket-samrdump", "impacket-nbtexec", "impacket-dcomexec",
-    "impacket-ntlmrelayx", "impacket-mssqlclient", "impacket-lookupsid",
-    # Vulnerabilidades / cloud
-    "nuclei", "searchsploit", "trivy", "scout",
-    # Análise / forense
-    "hashid", "foremost", "binwalk", "file", "exiftool", "tshark", "tcpdump",
-    "steghide", "strings", "vol",
-    # Proxy / tunneling
-    "proxychains4", "chisel", "ligolo-ng",
-    # Utilitários
-    "curl", "wget", "nc", "netcat", "ncat",
-}
-
-_EXTRA_TOOLS = {
-    # Rede / tunneling
-    "socat", "mitm6", "puredns", "mapcidr",
-    # Web / OSINT extras
-    "paramspider", "graphw00f", "uro",
-    # Windows / AD extras
-    "krbrelayx", "bloodhound-python",
-    # Automação
-    "autorecon",
-    # Shells / pós-exploração
-    "weevely",
-    # Forense / reversing
-    "radare2", "r2", "gdb", "strace", "ltrace", "yara",
-    "fls", "mmls", "icat", "fsstat", "bulk_extractor",
-}
-
-ALLOWED_TOOLS = _CORE_TOOLS | _EXTRA_TOOLS | HOST_WIFI_TOOLS | WIFI_CONTAINER_TOOLS
-
-SYSTEM_PROMPT = """Assistente de pentest ético. Só teste alvos autorizados.
-
-REGRAS:
-- Execute via run_kali_tool — nunca só sugira comandos.
-- Escolha a ferramenta adequada; interprete resultados em português.
-- Comandos sem ; | & ou redirecionamentos. Wordlists: /usr/share/seclists
-- Artefatos de saída: salve em /tools/output/ (ex: nmap -oA /tools/output/scan, gobuster -o /tools/output/dirs.txt).
-- Laboratórios públicos (scanme.nmap.org) ok sem confirmação extra."""
-
-AUTONOMOUS_SYSTEM_PROMPT = """Você é um agente autônomo de pentest em MODO AUTO-PILOT.
-
-ALVO AUTORIZADO: {target}
-OBJETIVO DA MISSÃO: {objective}
-
-REGRAS DO MODO AUTÔNOMO:
-- Você controla o fluxo completo: recon → enumeração → análise → verificação do objetivo.
-- NÃO peça confirmação ao usuário. Tome decisões técnicas e execute via run_kali_tool.
-- Após cada execução, analise o output e decida o próximo passo lógico em direção ao objetivo.
-- Use ferramentas adequadas: subfinder/amass para subdomínios, httpx para probing, nuclei para vulns, nmap para portas, etc.
-- Quando o objetivo for atingido OU não houver passos úteis restantes, chame finish_mission com um resumo completo.
-- Responda em português nos resumos e conclusões.
-- Só opere em alvos que o usuário possui ou tem autorização explícita.
-
-Ferramentas disponíveis (180+): nmap, subfinder, amass, httpx, nuclei, ffuf, gobuster, sqlmap, dig, whois, masscan, feroxbuster, katana, wafw00f, sslscan, e demais da whitelist Kali.
-
-Wordlists: /usr/share/seclists"""
-
-TOOL_CATEGORIES = [
-    {
-        "id": "rede",
-        "name": "Rede & Recon",
-        "tools": [
-            "nmap", "masscan", "zmap", "rustscan", "naabu", "dig", "whois",
-            "dnsenum", "dnsrecon", "dnsx", "massdns", "fierce", "ping", "traceroute",
-        ],
-    },
-    {
-        "id": "osint",
-        "name": "OSINT",
-        "tools": [
-            "amass", "subfinder", "sublist3r", "theHarvester", "httpx",
-            "gau", "waybackurls", "uncover", "shuffledns",
-        ],
-    },
-    {
-        "id": "web",
-        "name": "Web",
-        "tools": [
-            "nuclei", "ffuf", "feroxbuster", "gobuster", "dirsearch", "nikto",
-            "sqlmap", "katana", "dalfox", "whatweb", "wafw00f", "wpscan", "arjun",
-        ],
-    },
-    {
-        "id": "ssl",
-        "name": "SSL/TLS",
-        "tools": ["sslscan", "testssl.sh", "tlsx", "openssl"],
-    },
-    {
-        "id": "auth",
-        "name": "Senhas & Auth",
-        "tools": ["hydra", "john", "hashcat", "ncrack", "medusa", "patator"],
-    },
-    {
-        "id": "ad",
-        "name": "Windows / AD",
-        "tools": [
-            "nxc", "enum4linux", "smbmap", "kerbrute", "certipy",
-            "responder", "impacket-secretsdump", "evil-winrm",
-        ],
-    },
-    {
-        "id": "wifi",
-        "name": "Wi-Fi",
-        "tools": ["wlan-scan", "wlan-interfaces", "aircrack-ng", "airodump-ng", "wifite"],
-    },
-    {
-        "id": "vuln",
-        "name": "Vulnerabilidades",
-        "tools": ["nuclei", "searchsploit", "trivy", "scout"],
-    },
-    {
-        "id": "forense",
-        "name": "Forense",
-        "tools": ["tshark", "tcpdump", "binwalk", "foremost", "vol", "yara", "radare2", "fls", "bulk_extractor"],
-    },
-    {
-        "id": "auto",
-        "name": "Automação",
-        "tools": ["autorecon", "nuclei", "nmap"],
-    },
-    {
-        "id": "utils",
-        "name": "Utilitários",
-        "tools": ["curl", "wget", "nc", "snmpwalk", "socat", "mitm6"],
-    },
+__all__ = [
+    "BASE_DIR",
+    "OPENROUTER_API_KEY",
+    "PRIMARY_MODEL",
+    "FALLBACK_MODEL",
+    "GEMINI_MODEL",
+    "GEMINI_FALLBACK_MODEL",
+    "UVICORN_HOST",
+    "UVICORN_PORT",
+    "CHAT_API_TOKEN",
+    "TRUST_PROXY",
+    "SESSION_TTL_HOURS",
+    "RATE_LIMIT_REQUESTS",
+    "RATE_LIMIT_WINDOW_SEC",
+    "CORS_ORIGINS",
+    "KALI_CONTAINER",
+    "COMMAND_TIMEOUT",
+    "WIFI_COMMAND_TIMEOUT",
+    "MAX_TOOL_ITERATIONS",
+    "MAX_HEALING_ATTEMPTS",
+    "MAX_HISTORY_MESSAGES",
+    "MAX_AUTONOMOUS_ROUNDS",
+    "MAX_AUTONOMOUS_TOOLS",
+    "OUTPUT_TOKEN_LIMIT",
+    "SUMMARY_HEAD_LINES",
+    "SUMMARY_TAIL_LINES",
+    "LOG_DIR",
+    "RECON_DIR",
+    "OUTPUTS_DIR",
+    "RECON_TTL_DAYS",
+    "AUDIT_DIR",
+    "MAX_FILE_DOWNLOAD_BYTES",
+    "ALLOWED_TARGETS",
+    "HOST_WIFI_TOOLS",
+    "WIFI_CONTAINER_TOOLS",
+    "WIFI_TOOLS",
+    "ALLOWED_TOOLS",
+    "SYSTEM_PROMPT",
+    "AUTONOMOUS_SYSTEM_PROMPT",
+    "TOOL_CATEGORIES",
 ]

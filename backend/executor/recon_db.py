@@ -22,20 +22,22 @@ _CVE_RE = re.compile(r"CVE-\d{4}-\d+", re.I)
 _SEV_RE = re.compile(r"\[(critical|high|medium|low|info)\][^\n]*", re.I)
 
 # Domínios genéricos / exemplos — não persistir recon
-IGNORED_RECON_TARGETS = frozenset({
-    "example.com",
-    "example.org",
-    "example.net",
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
-    "google.com",
-    "github.com",
-    "openrouter.ai",
-    "aistudio.google.com",
-    "docker.com",
-    "wikipedia.org",
-})
+IGNORED_RECON_TARGETS = frozenset(
+    {
+        "example.com",
+        "example.org",
+        "example.net",
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "google.com",
+        "github.com",
+        "openrouter.ai",
+        "aistudio.google.com",
+        "docker.com",
+        "wikipedia.org",
+    }
+)
 
 
 def is_recon_target(alvo: str) -> bool:
@@ -140,7 +142,10 @@ def merge_recon_update(alvo: str, patch: dict[str, Any]) -> dict[str, Any]:
 
 def extract_recon_from_output(stdout: str, stderr: str, tool: str = "") -> dict[str, Any]:
     output = "\n".join(filter(None, [stdout, stderr]))
-    patch: dict[str, Any] = {"last_tool": tool, "last_scan_at": datetime.now(timezone.utc).isoformat()}
+    patch: dict[str, Any] = {
+        "last_tool": tool,
+        "last_scan_at": datetime.now(timezone.utc).isoformat(),
+    }
 
     ports = list(dict.fromkeys(_PORT_RE.findall(output)))
     if ports:
@@ -199,14 +204,16 @@ def list_recon_summaries() -> list[dict[str, Any]]:
                 pass
             continue
         target = str(data.get("target") or path.stem)
-        summaries.append({
-            "target": target,
-            "updated_at": data.get("updated_at"),
-            "last_tool": data.get("last_tool"),
-            "open_ports_count": len(data.get("open_ports") or []),
-            "cves_count": len(data.get("cves") or []),
-            "vulnerabilities_count": len(data.get("vulnerabilities") or []),
-        })
+        summaries.append(
+            {
+                "target": target,
+                "updated_at": data.get("updated_at"),
+                "last_tool": data.get("last_tool"),
+                "open_ports_count": len(data.get("open_ports") or []),
+                "cves_count": len(data.get("cves") or []),
+                "vulnerabilities_count": len(data.get("vulnerabilities") or []),
+            }
+        )
 
     summaries.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
     return summaries

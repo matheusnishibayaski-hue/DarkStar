@@ -42,11 +42,13 @@ def _audit_path(date: datetime | None = None) -> Path:
 
 
 def record_event(event_type: str, payload: dict[str, Any]) -> None:
-    entry = _redact({
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "event": event_type,
-        **payload,
-    })
+    entry = _redact(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "event": event_type,
+            **payload,
+        }
+    )
     path = _audit_path()
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -65,18 +67,21 @@ def record_tool_execution(
     reason: str = "",
     client_ip: str | None = None,
 ) -> None:
-    record_event("tool_execution", {
-        "mission_id": mission_id or "",
-        "tool": tool,
-        "command": command,
-        "targets": targets or [],
-        "success": success,
-        "blocked": blocked,
-        "exit_code": exit_code,
-        "log_file_id": log_file_id,
-        "reason": reason[:200] if reason else "",
-        "client_ip": client_ip or "",
-    })
+    record_event(
+        "tool_execution",
+        {
+            "mission_id": mission_id or "",
+            "tool": tool,
+            "command": command,
+            "targets": targets or [],
+            "success": success,
+            "blocked": blocked,
+            "exit_code": exit_code,
+            "log_file_id": log_file_id,
+            "reason": reason[:200] if reason else "",
+            "client_ip": client_ip or "",
+        },
+    )
 
 
 def list_events(

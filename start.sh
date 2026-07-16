@@ -43,9 +43,19 @@ if [[ "$MODE" == "servidor" || "$MODE" == "nodocker" ]]; then
   exec "$0" --server-only
 fi
 
+COMPOSE_FILE="docker-compose.yml"
+if [[ "$MODE" == "restricted" ]]; then
+  COMPOSE_FILE="docker-compose.restricted.yml"
+fi
+
 echo
 echo " ============================================"
 echo "  Chat IA Kali - Inicialização"
+if [[ "$COMPOSE_FILE" == "docker-compose.restricted.yml" ]]; then
+  echo "  Perfil Docker: RESTRITO (sem Wi-Fi)"
+else
+  echo "  Perfil Docker: Wi-Fi / completo"
+fi
 echo " ============================================"
 echo
 
@@ -118,7 +128,7 @@ echo "      Docker OK"
 # [3] Container Kali
 echo "[3/4] Container Kali (build na 1ª vez pode demorar)..."
 pushd docker >/dev/null
-docker compose up -d --build
+docker compose -f "$COMPOSE_FILE" up -d --build
 popd >/dev/null
 echo "      Container OK"
 

@@ -4,11 +4,11 @@ services:
     container_name: kali-tools
     hostname: kali-tools
     restart: unless-stopped
-    # Perfil completo — necessário para monitor mode, airmon-ng e Wi-Fi
+    # Perfil A (padrão) — Wi-Fi / pentest completo.
+    # Necessário para monitor mode, airmon-ng e USB Wi-Fi.
+    # Trade-off: privilégios elevados ≈ controle próximo ao host.
     privileged: true
     network_mode: host
-    # Perfil restrito (sem Wi-Fi): comente privileged + network_mode: host,
-    # use rede bridge e remova SYS_ADMIN — ver README (Segurança e hardening)
     cap_add:
       - NET_ADMIN
       - NET_RAW
@@ -19,3 +19,17 @@ services:
       - /sys/class/net:/sys/class/net:ro
       - /sys/devices:/sys/devices:ro
       - ../backend/outputs:/tools/output
+    # Limites (ambos os perfis) — contêm runaway sem quebrar Wi-Fi
+    mem_limit: 4g
+    cpus: 2.0
+    pids_limit: 512
+    healthcheck:
+      test: ["CMD", "nmap", "--version"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    # Secrets: OPENROUTER_API_KEY / CHAT_API_TOKEN ficam no .env do host (nunca na imagem).
+    # Docker Swarm secrets não são usados — app é single-user local.
+    # Perfil B (restrito, sem Wi-Fi):
+    #   docker compose -f docker-compose.restricted.yml up -d

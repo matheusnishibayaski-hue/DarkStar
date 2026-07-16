@@ -66,6 +66,5 @@ def _scope_error_message(target: str) -> str:
     allowed = ", ".join(sorted(ALLOWED_TARGETS)[:10])
     extra = "…" if len(ALLOWED_TARGETS) > 10 else ""
     return (
-        f"Alvo '{target}' fora do escopo autorizado (ALLOWED_TARGETS). "
-        f"Permitidos: {allowed}{extra}"
+        f"Alvo '{target}' fora do escopo autorizado (ALLOWED_TARGETS). Permitidos: {allowed}{extra}"
     )
