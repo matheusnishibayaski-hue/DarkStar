@@ -1,4 +1,5 @@
 import { STORAGE_KEY } from "./constants.js";
+import { deleteSessionLogs } from "./data-admin.js";
 import { escapeHtml } from "./exec.js";
 
 /** @type {{ sessionsEl: HTMLElement, sessionTitleEl: HTMLElement, onChanged?: () => void }} */
@@ -98,8 +99,19 @@ export function updateSessionTitle() {
   document.title = `${title} — kali@pentest`;
 }
 
+export function collectSessionLogIds(session) {
+  const ids = new Set();
+  for (const ex of collectSessionExecutions(session)) {
+    if (ex.log_file_id) ids.add(ex.log_file_id);
+  }
+  return [...ids];
+}
+
 export function deleteSession(id, e) {
   e?.stopPropagation();
+  const session = store.sessions.find((s) => s.id === id);
+  const logIds = session ? collectSessionLogIds(session) : [];
+  ctx.beforeDeleteSession?.(id, logIds);
   store.sessions = store.sessions.filter((s) => s.id !== id);
   if (store.activeId === id) {
     store.activeId = store.sessions[0]?.id || null;

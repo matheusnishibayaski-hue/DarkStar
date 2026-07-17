@@ -159,3 +159,27 @@ export async function deleteLog(logId) {
   }
   return res.json();
 }
+
+export async function deleteSessionLogs(sessionId, logIds = []) {
+  const res = await apiFetch("/api/data/logs/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, log_ids: logIds }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Falha ao excluir logs da conversa");
+  }
+  return res.json();
+}
+
+export async function deleteIntelSession(sessionId) {
+  const res = await apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Falha ao excluir intel da conversa");
+  }
+  return res.json();
+}

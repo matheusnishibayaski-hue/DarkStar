@@ -52,7 +52,7 @@ def _expand_args(args: list[str], target: str) -> list[str]:
     return [a.replace("{target}", target).replace("{target_safe}", safe) for a in args]
 
 
-def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -> dict[str, Any]:
+def run_playbook(playbook_id: str, target: str, mission_id: str | None = None, chat_session_id: str | None = None) -> dict[str, Any]:
     playbook = load_playbook(playbook_id)
     if not playbook:
         raise ValueError(f"Playbook '{playbook_id}' não encontrado.")
@@ -86,6 +86,7 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
             args,
             reason=f"Playbook {playbook_id} passo {i}",
             execution_id=None,
+            chat_session_id=chat_session_id,
         )
         # Alimenta Attack Surface Graph + auto-verify leve
         try:
@@ -105,6 +106,7 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
                 success=bool(result.success),
                 blocked=bool(result.blocked),
                 exit_code=int(result.exit_code or 0),
+                chat_session_id=chat_session_id,
             )
             auto_verify_from_execution(
                 target,

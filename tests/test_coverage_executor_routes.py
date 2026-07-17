@@ -320,15 +320,15 @@ class TestRoutesCoverage(unittest.TestCase):
             res = client.post("/api/chat", json={"message": "oi", "history": []})
             self.assertEqual(res.status_code, 500)
 
-        with patch("backend.routes.chat.generate_report", return_value="# ok"):
+        with patch("backend.routes.chat.generate_report_pdf", return_value=b"%PDF-1.4 test"):
             res = client.post(
                 "/api/generate-report",
                 json={"history": [], "tool_executions": [], "title": "T"},
             )
             self.assertEqual(res.status_code, 200)
-            self.assertIn("markdown", res.headers.get("content-type", ""))
+            self.assertIn("pdf", res.headers.get("content-type", ""))
 
-        with patch("backend.routes.chat.generate_report", side_effect=RuntimeError("r")):
+        with patch("backend.routes.chat.generate_report_pdf", side_effect=RuntimeError("r")):
             res = client.post(
                 "/api/generate-report",
                 json={"history": [], "tool_executions": []},

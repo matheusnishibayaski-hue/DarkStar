@@ -38,6 +38,7 @@ class EngagementPatchRequest(BaseModel):
     client: str | None = Field(default=None, max_length=200)
     scope_notes: str | None = Field(default=None, max_length=4000)
     brand_name: str | None = Field(default=None, max_length=120)
+    label: str | None = Field(default=None, max_length=120)
 
 
 class PhasePatchRequest(BaseModel):
@@ -110,9 +111,12 @@ def api_engagement_patch(target: str, req: EngagementPatchRequest):
         data["scope_notes"] = req.scope_notes
     if req.brand_name is not None:
         data["brand_name"] = req.brand_name or REPORT_BRAND_NAME
+    if req.label is not None:
+        data["label"] = req.label.strip()[:120]
     save_surface(target, data)
     return {
         "target": normalize_target(target),
+        "label": data.get("label"),
         "client": data.get("client"),
         "scope_notes": data.get("scope_notes"),
         "brand_name": data.get("brand_name"),
@@ -123,9 +127,11 @@ def api_engagement_patch(target: str, req: EngagementPatchRequest):
 
 @router.delete("/engagements/{target}")
 def api_engagement_delete(target: str):
-    from backend.executor.data_cleanup import delete_surface
+    from backend.executor.data_cleanup import delete_recon, delete_surface
 
-    if not delete_surface(target):
+    removed_surface = delete_surface(target)
+    delete_recon(target)
+    if not removed_surface:
         raise HTTPException(status_code=404, detail="Engajamento não encontrado.")
     return {"deleted": True, "target": target}
 
@@ -218,17 +224,17 @@ def api_engagement_baseline(target: str):
 @router.get("/engagements/{target}/report")
 def api_engagement_report(
     target: str,
-    format: str = Query(default="md", pattern="^(md|html|zip)$"),
+    format: str = Query(default="pdf", pattern="^(pdf|md|html|zip)$"),
 ):
-    """Export do relatório assertivo (Markdown, HTML/PDF ou ZIP de entrega)."""
+    """Export do relatório — padrão PDF."""
     from fastapi.responses import Response
 
     data = load_surface(target)
     if not data:
         raise HTTPException(status_code=404, detail="Engajamento não encontrado.")
-    from backend.ai.report import generate_report, generate_report_html
 
-    title = f"Relatório — {data.get('client') or target}"
+    display = str(data.get("label") or data.get("client") or target).strip()
+    title = f"Relatório — {display}"
     history = [
         {
             "role": "user",
@@ -247,6 +253,21 @@ def api_engagement_report(
             ),
         },
     ]
+
+    if format == "pdf":
+        from backend.ai.pdf_report import generate_report_pdf
+        from backend.executor.recon_db import normalize_target as _nt
+
+        raw = generate_report_pdf(surface_target=target, title=title)
+        fname = f"{_nt(target)}-relatorio.pdf"
+        return Response(
+            content=raw,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+        )
+
+    from backend.ai.report import generate_report, generate_report_html
+
     if format == "zip":
         from backend.ai.delivery import build_delivery_bundle
         from backend.executor.recon_db import normalize_target as _nt

@@ -4,3 +4,4 @@ openai==2.45.0
 python-dotenv==1.2.2
 pydantic==2.13.4
 PyYAML==6.0.3
+reportlab==4.4.1

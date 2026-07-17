@@ -207,7 +207,11 @@ async function runSelectedPlaybook() {
   appendLine("info", `Roteiro “${label}” → ${target} …`);
 
   try {
-    const res = await runPlaybook(id, { target, mission_id: createMissionId() });
+    const res = await runPlaybook(id, {
+      target,
+      mission_id: createMissionId(),
+      chat_session_id: getActiveSession()?.id || "",
+    });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       showToastError(data.detail || "Falha ao executar roteiro");
@@ -271,6 +275,7 @@ export async function startAutopilot() {
         target,
         objective,
         mission_id: missionId,
+        chat_session_id: session.id,
         ...getModelPayload(),
       }),
       signal: abortController.signal,

@@ -49,6 +49,14 @@ python -m pip install -q -r requirements.txt
 if errorlevel 1 (
     echo [AVISO] Algumas dependencias pip falharam - continuando...
 )
+python -c "import reportlab" >nul 2>&1
+if errorlevel 1 (
+    echo       Instalando reportlab ^(relatorios PDF^)...
+    python -m pip install -q reportlab==4.4.1
+    if errorlevel 1 (
+        echo [AVISO] reportlab nao instalado - geracao de PDF falhara
+    )
+)
 echo       Python OK
 
 REM [2/6] Docker (com timeout - nao trava se estiver carregando)
@@ -208,6 +216,8 @@ if not exist "venv\Scripts\python.exe" (
 
 call "venv\Scripts\activate.bat"
 python -m pip install -q -r requirements.txt >nul 2>&1
+python -c "import reportlab" >nul 2>&1
+if errorlevel 1 python -m pip install -q reportlab==4.4.1 >nul 2>&1
 goto run_server
 
 :repair_docker

@@ -120,6 +120,7 @@ def _run_autonomous_cycle(
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
     *,
     phase: str = "recon",
     risk_profile: str = "safe-active",
@@ -227,6 +228,7 @@ def _run_autonomous_cycle(
                     recon_targets=recon_targets,
                     emit=emit,
                     mission_id=mission_id,
+                    chat_session_id=chat_session_id,
                 )
                 tool_calls_budget -= 1
                 messages.append(
@@ -270,6 +272,7 @@ def run_autonomous(
     emit: EmitFn | None = None,
     mission_id: str | None = None,
     risk_profile: str | None = None,
+    chat_session_id: str | None = None,
 ) -> AutonomousResponse:
     registry = get_mission_registry()
     if mission_id:
@@ -284,6 +287,7 @@ def run_autonomous(
             emit,
             mission_id,
             risk_profile=risk_profile,
+            chat_session_id=chat_session_id,
         )
     finally:
         if mission_id:
@@ -298,6 +302,7 @@ def _run_autonomous_body(
     emit: EmitFn | None,
     mission_id: str | None,
     risk_profile: str | None = None,
+    chat_session_id: str | None = None,
 ) -> AutonomousResponse:
     if not OPENROUTER_API_KEY:
         return AutonomousResponse(
@@ -407,6 +412,7 @@ def _run_autonomous_body(
                 recon_targets=[recon_target],
                 emit=emit,
                 mission_id=mission_id,
+                chat_session_id=chat_session_id,
                 phase=current_phase,
                 risk_profile=profile,
             )
@@ -599,6 +605,7 @@ def run_autonomous_stream(
     fallback_model: str | None = None,
     mission_id: str | None = None,
     risk_profile: str | None = None,
+    chat_session_id: str | None = None,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -615,6 +622,7 @@ def run_autonomous_stream(
                 emit=emit,
                 mission_id=mission_id,
                 risk_profile=risk_profile,
+                chat_session_id=chat_session_id,
             )
             event_queue.put(
                 format_sse(

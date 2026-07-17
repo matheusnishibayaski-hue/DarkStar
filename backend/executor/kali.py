@@ -126,6 +126,7 @@ def _finalize_stream_result(
     execution_id: str | None,
     hub,
     save_log: bool = False,
+    chat_session_id: str | None = None,
 ) -> dict[str, Any]:
     """Fecha hub SSE, persiste log opcional e registra auditoria."""
     if save_log:
@@ -135,6 +136,7 @@ def _finalize_stream_result(
             result.stdout,
             result.stderr,
             log_id=result.log_file_id or None,
+            chat_session_id=chat_session_id,
         )
     if execution_id:
         hub.finish(
@@ -254,10 +256,13 @@ def execute_kali_command(
     args: list[str],
     reason: str,
     execution_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> ExecutionResult:
     """Executa comando e consome o gerador interno, retornando o resultado final."""
     result: ExecutionResult | None = None
-    for event in execute_kali_command_stream(args, reason, execution_id=execution_id):
+    for event in execute_kali_command_stream(
+        args, reason, execution_id=execution_id, chat_session_id=chat_session_id
+    ):
         if event.get("type") == "done":
             result = event["result"]
     if result is None:
@@ -278,6 +283,7 @@ def execute_kali_command_stream(
     reason: str,
     execution_id: str | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> Generator[dict[str, Any], None, None]:
     args = apply_non_interactive_flags(list(args))
     command_display = args_to_display(args)
@@ -318,6 +324,7 @@ def execute_kali_command_stream(
             mission_id=mission_id,
             execution_id=execution_id,
             hub=hub,
+            chat_session_id=chat_session_id,
         )
         return
 
@@ -344,6 +351,7 @@ def execute_kali_command_stream(
             mission_id=mission_id,
             execution_id=execution_id,
             hub=hub,
+            chat_session_id=chat_session_id,
         )
         return
 
@@ -361,6 +369,7 @@ def execute_kali_command_stream(
             execution_id=execution_id,
             hub=hub,
             save_log=True,
+            chat_session_id=chat_session_id,
         )
         return
 
@@ -400,6 +409,7 @@ def execute_kali_command_stream(
             execution_id=execution_id,
             hub=hub,
             save_log=True,
+            chat_session_id=chat_session_id,
         )
 
     except InterruptedError as e:
@@ -424,6 +434,7 @@ def execute_kali_command_stream(
             execution_id=execution_id,
             hub=hub,
             save_log=True,
+            chat_session_id=chat_session_id,
         )
 
     except subprocess.TimeoutExpired:
@@ -448,6 +459,7 @@ def execute_kali_command_stream(
             execution_id=execution_id,
             hub=hub,
             save_log=True,
+            chat_session_id=chat_session_id,
         )
 
     except FileNotFoundError:
@@ -471,6 +483,7 @@ def execute_kali_command_stream(
             mission_id=mission_id,
             execution_id=execution_id,
             hub=hub,
+            chat_session_id=chat_session_id,
         )
 
     except Exception as e:
@@ -494,6 +507,7 @@ def execute_kali_command_stream(
             mission_id=mission_id,
             execution_id=execution_id,
             hub=hub,
+            chat_session_id=chat_session_id,
         )
 
 
@@ -502,12 +516,13 @@ def execute_in_kali(
     reason: str,
     execution_id: str | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> ExecutionResult:
     """Compatibilidade: converte string da IA em argv e executa sem shell."""
     args = parse_command_string(command)
     result: ExecutionResult | None = None
     for event in execute_kali_command_stream(
-        args, reason, execution_id=execution_id, mission_id=mission_id
+        args, reason, execution_id=execution_id, mission_id=mission_id, chat_session_id=chat_session_id
     ):
         if event.get("type") == "done":
             result = event["result"]

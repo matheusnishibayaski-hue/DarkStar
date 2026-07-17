@@ -20,7 +20,12 @@ def api_playbook_run(playbook_id: str, req: PlaybookRunRequest):
     if not playbook_id or len(playbook_id) > 64:
         raise HTTPException(status_code=400, detail="ID de playbook inválido.")
     try:
-        return run_playbook(playbook_id, req.target.strip(), mission_id=req.mission_id)
+        return run_playbook(
+            playbook_id,
+            req.target.strip(),
+            mission_id=req.mission_id,
+            chat_session_id=req.chat_session_id or None,
+        )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     except PermissionError as e:

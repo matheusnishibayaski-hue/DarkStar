@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from backend.executor.data_cleanup import (
     PURGE_CATEGORIES,
     delete_execution_log,
+    delete_logs_for_session,
     delete_output_file,
     delete_recon,
     delete_surface,
@@ -25,16 +26,30 @@ class PurgeRequest(BaseModel):
     confirm: bool = Field(default=False)
 
 
+class SessionLogsDeleteRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
+    log_ids: list[str] = Field(default_factory=list, max_length=200)
+
+
 @router.get("/summary")
 def api_data_summary():
     return storage_summary()
 
 
 @router.get("/logs")
-def api_data_logs_list(limit: int = Query(default=100, ge=1, le=500)):
+def api_data_logs_list(
+    limit: int = Query(default=100, ge=1, le=500),
+    session_id: str | None = Query(default=None, max_length=128),
+):
     from backend.executor.logs import list_execution_logs
 
-    return {"logs": list_execution_logs(limit=limit)}
+    return {"logs": list_execution_logs(limit=limit, session_id=session_id or None)}
+
+
+@router.post("/logs/session")
+def api_delete_session_logs(req: SessionLogsDeleteRequest):
+    result = delete_logs_for_session(req.session_id, extra_log_ids=req.log_ids)
+    return result
 
 
 @router.post("/purge")

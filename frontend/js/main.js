@@ -54,6 +54,7 @@ import { initThreatIntel, openThreatsPanel } from "./threatmap.js";
 import { initAudio, bindSoundButton } from "./audio.js";
 import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 import { initGuidedTour, startGuidedTour, stopGuidedTour, isGuidedTourActive } from "./guided-tour.js";
+import { deleteSessionLogs, deleteIntelSession } from "./data-admin.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -215,44 +216,14 @@ initMissionControl(btnCancelMission);
 
 initIntelPanel({
   overlayIntel,
-  intelSubtitle: document.getElementById("intel-subtitle"),
-  paneHub: document.getElementById("intel-pane-hub"),
-  paneTimeline: document.getElementById("intel-pane-timeline"),
-  paneLogs: document.getElementById("intel-pane-logs"),
-  paneAudit: document.getElementById("intel-pane-audit"),
-  paneData: document.getElementById("intel-pane-data"),
-  hubBack: document.getElementById("hub-back"),
   hubListEl: document.getElementById("hub-list"),
   hubDetailEl: document.getElementById("hub-detail"),
   hubMetaEl: document.getElementById("hub-meta"),
   hubSearch: document.getElementById("hub-search"),
   hubRefresh: document.getElementById("hub-refresh"),
-  hubVerify: document.getElementById("hub-verify"),
-  hubReportMd: document.getElementById("hub-report-md"),
-  hubReportHtml: document.getElementById("hub-report-html"),
-  hubReportZip: document.getElementById("hub-report-zip"),
-  hubFiles: document.getElementById("hub-files"),
-  hubChat: document.getElementById("hub-chat"),
+  hubReportPdf: document.getElementById("hub-report-pdf"),
   hubDelete: document.getElementById("hub-delete"),
-  timelineEl: document.getElementById("intel-timeline"),
-  logsListEl: document.getElementById("logs-list"),
-  logsMetaEl: document.getElementById("logs-meta"),
-  logsRefresh: document.getElementById("logs-refresh"),
-  logsSearch: document.getElementById("logs-search"),
-  auditTableEl: document.getElementById("audit-table"),
-  auditMetaEl: document.getElementById("audit-meta"),
-  auditRefresh: document.getElementById("audit-refresh"),
-  auditPurge: document.getElementById("audit-purge"),
-  dataBodyEl: document.getElementById("data-body"),
-  dataMetaEl: document.getElementById("data-meta"),
-  dataRefresh: document.getElementById("data-refresh"),
-  input,
   toast,
-  onOpenFiles: (filter) => openFilesPanel(filter),
-  onDataChanged: () => {
-    document.getElementById("audit-table")?.removeAttribute("data-loaded");
-    import("./logs-panel.js").then((m) => m.loadLogsTab(true)).catch(() => {});
-  },
 });
 
 initFilesPanel({
@@ -288,6 +259,10 @@ initSessions({
     renderChat();
     syncToolFromSession();
     toast("conversa excluída");
+  },
+  beforeDeleteSession: (sessionId, logIds) => {
+    deleteSessionLogs(sessionId, logIds).catch(() => {});
+    deleteIntelSession(sessionId).catch(() => {});
   },
 });
 

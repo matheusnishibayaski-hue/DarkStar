@@ -87,6 +87,7 @@ def empty_surface(
     client: str = "",
     scope_notes: str = "",
     brand_name: str = "",
+    label: str = "",
 ) -> dict[str, Any]:
     return {
         "target": normalize_target(target),
@@ -96,6 +97,7 @@ def empty_surface(
         "client": client,
         "scope_notes": scope_notes,
         "brand_name": brand_name or "Chat IA Kali",
+        "label": label,
         "phase": "recon",
         "phases_completed": [],
         "hosts": [normalize_target(target)],
@@ -288,7 +290,14 @@ def _merge_finding(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
         existing["confidence"] = "medium"
 
 
-def _upsert_finding(data: dict[str, Any], finding: dict[str, Any]) -> None:
+def _upsert_finding(
+    data: dict[str, Any],
+    finding: dict[str, Any],
+    *,
+    chat_session_id: str = "",
+) -> None:
+    if chat_session_id:
+        finding = {**finding, "chat_session_id": chat_session_id}
     key = finding.get("canonical_key") or _canonical_finding_key(
         title=str(finding.get("title") or ""),
         severity=str(finding.get("severity") or "unknown"),
@@ -329,6 +338,8 @@ def surface_summary(data: dict[str, Any]) -> dict[str, Any]:
     findings = data.get("findings") or []
     return {
         "target": data.get("target"),
+        "label": data.get("label") or "",
+        "client": data.get("client") or "",
         "phase": data.get("phase"),
         "risk_profile": data.get("risk_profile"),
         "hosts_count": len(data.get("hosts") or []),
@@ -382,9 +393,19 @@ def update_surface_from_execution(
     success: bool,
     blocked: bool,
     exit_code: int = 0,
+    chat_session_id: str | None = None,
 ) -> dict[str, Any]:
     """Atualiza o grafo a partir de uma execução (sucesso ou falha parcial)."""
     data = get_or_create_surface(target)
+    if chat_session_id:
+        from backend.executor.session_intel import touch_session
+
+        touch_session(chat_session_id, target)
+    session_tag = chat_session_id or ""
+
+    def _add_finding(payload: dict[str, Any]) -> None:
+        _upsert_finding(data, payload, chat_session_id=session_tag)
+
     output = "\n".join(filter(None, [stdout or "", stderr or ""]))
     tool_name = (tool or (command.split() or [""])[0]).split("/")[-1]
     if tool_name and tool_name not in data["tools_run"]:
@@ -444,7 +465,7 @@ def update_surface_from_execution(
             patch["host"] = normalize_target(target)
             patch["created_at"] = _now()
             patch["verified_at"] = None
-            _upsert_finding(data, patch)
+            _add_finding(patch)
 
     # URLs próximas a linhas de finding (matched-at)
     line_urls = _URL_RE.findall(output)
@@ -463,8 +484,7 @@ def update_surface_from_execution(
         seen_lines.add(match.group(0))
         cve = _extract_cve(title) or (_extract_cve(tid) if tid.startswith("cve-") else "")
         url_hit = line_urls[0] if line_urls else ""
-        _upsert_finding(
-            data,
+        _add_finding(
             {
                 "title": title if not tid.startswith("cve-") else (cve or title),
                 "severity": sev,
@@ -496,8 +516,7 @@ def update_surface_from_execution(
             continue
         cve = _extract_cve(title)
         tid = _extract_template_id(title, tool_name)
-        _upsert_finding(
-            data,
+        _add_finding(
             {
                 "title": title,
                 "severity": sev,
@@ -514,8 +533,7 @@ def update_surface_from_execution(
         )
 
     for cve in dict.fromkeys(m.upper() for m in _CVE_RE.findall(output)):
-        _upsert_finding(
-            data,
+        _add_finding(
             {
                 "title": cve,
                 "severity": "unknown",
@@ -537,6 +555,7 @@ def update_surface_from_execution(
         tool_name=tool_name,
         command=command,
         output=output,
+        chat_session_id=session_tag,
     )
 
     # Hipótese leve quando comando falhou / WAF
@@ -575,19 +594,22 @@ def _extract_tool_specific_findings(
     tool_name: str,
     command: str,
     output: str,
+    chat_session_id: str = "",
 ) -> None:
     """Extrai achados de nmap/nikto/gobuster que não usam formato [sev] Nuclei."""
     host = normalize_target(target)
     tool = (tool_name or "").lower()
     cmd = (command or "").lower()
 
+    def _add(payload: dict[str, Any]) -> None:
+        _upsert_finding(data, payload, chat_session_id=chat_session_id)
+
     # --- nmap: cookie HttpOnly / banners ---
     if tool == "nmap" or "nmap" in cmd or "httponly flag not set" in output.lower():
         for match in _HTTPONLY_RE.finditer(output):
             cookie = match.group("cookie")
             title = f"Cookie sem flag HttpOnly: {cookie}"
-            _upsert_finding(
-                data,
+            _add(
                 {
                     "title": title,
                     "severity": "medium",
@@ -613,8 +635,7 @@ def _extract_tool_specific_findings(
                 re.I,
             ):
                 continue
-            _upsert_finding(
-                data,
+            _add(
                 {
                     "title": f"Server banner exposto: {header}",
                     "severity": "info",
@@ -648,8 +669,7 @@ def _extract_tool_specific_findings(
                 title = "Header Strict-Transport-Security ausente"
             elif re.search(r"osvdb|cve-|vulnerable|outdated|xss|sql", title, re.I):
                 sev = "medium"
-            _upsert_finding(
-                data,
+            _add(
                 {
                     "title": title,
                     "severity": sev,
@@ -667,8 +687,7 @@ def _extract_tool_specific_findings(
 
     # Headers ausentes mencionados em qualquer output
     if _XFRAME_RE.search(output) and tool not in {"nikto"}:
-        _upsert_finding(
-            data,
+        _add(
             {
                 "title": "Header X-Frame-Options ausente",
                 "severity": "medium",
@@ -694,8 +713,7 @@ def _extract_tool_specific_findings(
             code = match.group("code")
             if not any(k in path.lower() for k in interesting):
                 continue
-            _upsert_finding(
-                data,
+            _add(
                 {
                     "title": f"Caminho exposto ({code}): {path}",
                     "severity": "low" if code != "200" else "medium",

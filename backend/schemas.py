@@ -15,6 +15,7 @@ class ChatRequest(BaseModel):
     model: str = Field(default="", max_length=128)
     fallback_model: str = Field(default="", max_length=128)
     mission_id: str = Field(default="", max_length=64)
+    chat_session_id: str = Field(default="", max_length=128)
 
 
 class ToolExecutionResponse(BaseModel):
@@ -43,6 +44,11 @@ class ReportRequest(BaseModel):
         max_length=253,
         description="Alvo do Attack Surface — usa findings confirmados no relatório comercial",
     )
+    chat_session_id: str = Field(
+        default="",
+        max_length=128,
+        description="Conversa — agrega achados de todos os alvos testados neste chat",
+    )
 
 
 class AutonomousRequest(BaseModel):
@@ -51,6 +57,7 @@ class AutonomousRequest(BaseModel):
     model: str = Field(default="", max_length=128)
     fallback_model: str = Field(default="", max_length=128)
     mission_id: str = Field(default="", max_length=64)
+    chat_session_id: str = Field(default="", max_length=128)
     risk_profile: str = Field(
         default="",
         max_length=32,
@@ -65,6 +72,12 @@ class LoginRequest(BaseModel):
 class PlaybookRunRequest(BaseModel):
     target: str = Field(..., min_length=1, max_length=253)
     mission_id: str = Field(default="", max_length=64)
+    chat_session_id: str = Field(default="", max_length=128)
+
+
+class SessionLogsDeleteRequest(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
+    log_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
 class AutonomousResponseModel(BaseModel):

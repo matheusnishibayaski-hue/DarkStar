@@ -85,6 +85,43 @@ export function verifyEngagement(target, maxFindings) {
   });
 }
 
-export function getEngagementReportUrl(target, format = "md") {
+export function getEngagementReportUrl(target, format = "pdf") {
   return `/api/engagements/${encodeURIComponent(target)}/report?format=${format}`;
+}
+
+export function listIntelSessions() {
+  return apiFetch("/api/intel/sessions");
+}
+
+export function getIntelSession(sessionId) {
+  return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function patchIntelSession(sessionId, body) {
+  return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteIntelSession(sessionId) {
+  return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
+export function patchSessionFinding(sessionId, findingId, body) {
+  return apiFetch(
+    `/api/intel/sessions/${encodeURIComponent(sessionId)}/findings/${encodeURIComponent(findingId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+export function getIntelSessionReportUrl(sessionId, format = "pdf") {
+  return `/api/intel/sessions/${encodeURIComponent(sessionId)}/report?format=${format}`;
 }

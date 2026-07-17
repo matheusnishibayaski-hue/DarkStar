@@ -7,7 +7,8 @@ import json
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 
-from backend.ai.agent import chat, chat_stream, generate_report
+from backend.ai.agent import chat, chat_stream
+from backend.ai.pdf_report import generate_report_pdf
 from backend.deps import tool_execution_response
 from backend.schemas import ChatRequest, ChatResponseModel, ReportRequest
 
@@ -27,6 +28,7 @@ def api_chat_stream(req: ChatRequest):
                 model=req.model or None,
                 fallback_model=req.fallback_model or None,
                 mission_id=req.mission_id or None,
+                chat_session_id=req.chat_session_id or None,
             )
         except Exception as e:
             yield f'event: error\ndata: {{"detail": {json.dumps(str(e))}}}\n\n'
@@ -53,6 +55,7 @@ def api_chat(req: ChatRequest):
             model=req.model or None,
             fallback_model=req.fallback_model or None,
             mission_id=req.mission_id or None,
+            chat_session_id=req.chat_session_id or None,
         )
         return ChatResponseModel(
             message=result.message,
@@ -67,26 +70,34 @@ def api_generate_report(req: ReportRequest):
     try:
         history = [{"role": m.role, "content": m.content} for m in req.history]
         executions = [e.model_dump() for e in req.tool_executions]
+        session_id = (req.chat_session_id or "").strip()
         target = (req.surface_target or "").strip()
-        if not target:
-            # Inferir alvo a partir do histórico / executions
-            from backend.executor.recon_db import extract_targets, is_recon_target
 
-            texts = [m.content for m in req.history] + [
-                e.command for e in req.tool_executions
-            ]
-            found = [t for t in extract_targets(*texts) if is_recon_target(t)]
-            target = found[0] if found else ""
-        markdown = generate_report(
-            history,
-            executions,
-            title=req.title,
-            surface_target=target or None,
-        )
-        filename = "relatorio-pentest.md"
+        if session_id:
+            raw = generate_report_pdf(
+                session_id=session_id,
+                title=req.title,
+                tool_executions=executions or None,
+            )
+        else:
+            if not target:
+                from backend.executor.recon_db import extract_targets, is_recon_target
+
+                texts = [m.content for m in req.history] + [
+                    e.command for e in req.tool_executions
+                ]
+                found = [t for t in extract_targets(*texts) if is_recon_target(t)]
+                target = found[0] if found else ""
+
+            raw = generate_report_pdf(
+                surface_target=target or None,
+                title=req.title,
+                tool_executions=executions,
+            )
+        filename = "relatorio-pentest.pdf"
         return Response(
-            content=markdown,
-            media_type="text/markdown; charset=utf-8",
+            content=raw,
+            media_type="application/pdf",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     except Exception as e:

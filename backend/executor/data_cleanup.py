@@ -101,7 +101,7 @@ def storage_summary() -> dict[str, Any]:
 
 
 def delete_execution_log(log_id: str) -> dict[str, Any]:
-    """Remove arquivo .log e/ou referências na auditoria."""
+    """Remove arquivo .log, meta e/ou referências na auditoria."""
     if not log_id or not log_id.isalnum():
         return {"ok": False, "file_deleted": False, "audit_removed": 0}
 
@@ -110,6 +110,9 @@ def delete_execution_log(log_id: str) -> dict[str, Any]:
     if path.is_file():
         path.unlink()
         file_deleted = True
+    meta = LOG_DIR / f"{log_id}.meta.json"
+    if meta.is_file():
+        meta.unlink()
 
     from backend.security.audit import remove_entries_by_log_id
 
@@ -120,6 +123,31 @@ def delete_execution_log(log_id: str) -> dict[str, Any]:
         "file_deleted": file_deleted,
         "audit_removed": audit_removed,
     }
+
+
+def delete_logs_for_session(session_id: str, extra_log_ids: list[str] | None = None) -> dict[str, Any]:
+    """Remove todos os logs vinculados a um chat (sessão do navegador)."""
+    from backend.executor.logs import list_log_ids_for_session
+
+    if not session_id or len(session_id) > 128:
+        return {"deleted": 0, "session_id": session_id or ""}
+
+    ids: set[str] = set(list_log_ids_for_session(session_id))
+    for lid in extra_log_ids or []:
+        if lid and str(lid).isalnum():
+            ids.add(str(lid))
+
+    deleted = 0
+    for log_id in ids:
+        result = delete_execution_log(log_id)
+        if result.get("ok"):
+            deleted += 1
+
+    index = LOG_DIR / "by_session" / f"{session_id}.json"
+    if index.is_file():
+        index.unlink()
+
+    return {"deleted": deleted, "session_id": session_id}
 
 
 def delete_recon(target: str) -> bool:

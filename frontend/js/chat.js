@@ -100,6 +100,7 @@ export async function downloadReport() {
         history,
         tool_executions: toolExecutions,
         title: `Relatório — ${sessionTitle(session)}`,
+        chat_session_id: session.id,
         surface_target: surfaceTarget,
       }),
     });
@@ -114,7 +115,7 @@ export async function downloadReport() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "relatorio-pentest.md";
+    a.download = "relatorio-pentest.pdf";
     a.click();
     URL.revokeObjectURL(url);
     toast("relatório baixado");
@@ -123,7 +124,7 @@ export async function downloadReport() {
   } finally {
     if (btnReport) {
       btnReport.disabled = false;
-      btnReport.textContent = "report";
+      btnReport.textContent = "pdf";
     }
     ctx.updateStatusBar?.();
   }
@@ -173,6 +174,7 @@ export async function sendMessage(text) {
         history,
         preferred_tool: preferredTool,
         mission_id: missionId,
+        chat_session_id: session.id,
         ...getModelPayload(),
       }),
       signal: abortController.signal,

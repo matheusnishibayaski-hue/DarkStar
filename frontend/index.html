@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>kali@pentest</title>
-  <link rel="stylesheet" href="/static/styles.css?v=30" />
+  <link rel="stylesheet" href="/static/styles.css?v=32" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
@@ -54,7 +54,7 @@
               <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I — alvos e relatórios">intel</button>
               <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F — artefatos">files</button>
               <button type="button" class="term-btn term-btn-threats" id="btn-threats" title="Alt+C — mapa mundial">mapa</button>
-              <button type="button" class="term-btn" id="btn-report" title="Alt+R">report</button>
+              <button type="button" class="term-btn" id="btn-report" title="Alt+R — relatório PDF">pdf</button>
             </span>
             <button type="button" class="term-btn term-btn-more" id="btn-toolbar-more" title="Mais" aria-haspopup="true">⋯</button>
             <span class="term-bar-divider" aria-hidden="true"></span>
@@ -192,14 +192,13 @@
     </div>
   </div>
 
-  <!-- INTEL: hub simples (sem mapa) -->
+  <!-- INTEL: pentest simplificado -->
   <div class="overlay overlay-intel" id="overlay-intel" hidden>
-    <div class="panel panel-intel panel-hub crt-panel" id="intel-panel" role="dialog" aria-modal="true" aria-label="Intel">
+    <div class="panel panel-intel panel-intel-simple crt-panel" id="intel-panel" role="dialog" aria-modal="true" aria-label="Intel">
       <div class="panel-head panel-head-intel">
         <div class="panel-head-text">
-          <button type="button" class="hub-back" id="hub-back" hidden title="Voltar">← alvos</button>
           <span class="panel-title-main">Intel</span>
-          <span class="panel-title-sub" id="intel-subtitle">escolha um alvo · verifique · baixe o relatório</span>
+          <span class="panel-title-sub" id="intel-subtitle">achados da conversa · classifique · baixe o PDF</span>
         </div>
         <div class="panel-head-right intel-head-actions">
           <span class="intel-meta" id="hub-meta">—</span>
@@ -207,65 +206,22 @@
         </div>
       </div>
 
-      <div class="intel-pane hub-pane" id="intel-pane-hub">
-        <div class="hub-layout">
-          <aside class="hub-sidebar">
-            <div class="hub-sidebar-tools">
-              <input type="search" class="panel-search hub-search" id="hub-search" placeholder="Buscar alvo…" spellcheck="false" />
-              <button type="button" class="hub-icon-btn" id="hub-refresh" title="Atualizar">↻</button>
-            </div>
-            <div class="hub-list" id="hub-list"></div>
-            <nav class="hub-more" aria-label="Mais opções">
-              <button type="button" data-intel-more="logs">Logs</button>
-              <button type="button" data-intel-more="timeline">Timeline</button>
-              <button type="button" data-intel-more="audit">Auditoria</button>
-              <button type="button" data-intel-more="data">Limpar dados</button>
-            </nav>
-          </aside>
-
-          <div class="hub-main">
-            <div class="hub-actions" id="hub-actions">
-              <button type="button" class="hub-btn hub-btn--primary" id="hub-verify" disabled>Verificar</button>
-              <button type="button" class="hub-btn" id="hub-report-md" disabled>Relatório .md</button>
-              <button type="button" class="hub-btn" id="hub-report-html" disabled>.html</button>
-              <button type="button" class="hub-btn" id="hub-report-zip" disabled>.zip</button>
-              <button type="button" class="hub-btn" id="hub-files" disabled>Arquivos</button>
-              <button type="button" class="hub-btn" id="hub-chat" disabled>Usar no chat</button>
-              <button type="button" class="hub-btn hub-btn--danger" id="hub-delete" disabled>Excluir</button>
-            </div>
-            <div class="hub-detail" id="hub-detail"></div>
+      <div class="intel-simple-layout">
+        <aside class="intel-simple-side">
+          <div class="intel-simple-tools">
+            <input type="search" class="panel-search hub-search" id="hub-search" placeholder="Buscar conversa…" spellcheck="false" />
+            <button type="button" class="hub-icon-btn" id="hub-refresh" title="Atualizar">↻</button>
           </div>
-        </div>
-      </div>
+          <div class="intel-simple-list" id="hub-list"></div>
+        </aside>
 
-      <div class="intel-pane hidden" id="intel-pane-logs" hidden>
-        <div class="intel-toolbar">
-          <input type="text" class="panel-search intel-search" id="logs-search" placeholder="buscar log…" spellcheck="false" />
-          <button type="button" class="intel-refresh-btn" id="logs-refresh">atualizar</button>
-          <span class="intel-meta" id="logs-meta"></span>
+        <div class="intel-simple-main">
+          <div class="intel-simple-actions">
+            <button type="button" class="hub-btn hub-btn--primary" id="hub-report-pdf" disabled>Baixar PDF</button>
+            <button type="button" class="hub-btn hub-btn--danger" id="hub-delete" disabled>Excluir</button>
+          </div>
+          <div class="intel-simple-detail" id="hub-detail"></div>
         </div>
-        <div class="intel-pane-body logs-list-wrap" id="logs-list"></div>
-      </div>
-
-      <div class="intel-pane hidden" id="intel-pane-timeline" hidden>
-        <div class="intel-pane-body timeline-wrap" id="intel-timeline"></div>
-      </div>
-
-      <div class="intel-pane hidden" id="intel-pane-audit" hidden>
-        <div class="intel-toolbar">
-          <button type="button" class="intel-refresh-btn" id="audit-refresh">atualizar</button>
-          <button type="button" class="intel-refresh-btn row-action--danger" id="audit-purge">limpar audit</button>
-          <span class="intel-meta" id="audit-meta"></span>
-        </div>
-        <div class="intel-pane-body audit-table-wrap" id="audit-table"></div>
-      </div>
-
-      <div class="intel-pane hidden" id="intel-pane-data" hidden>
-        <div class="intel-toolbar">
-          <button type="button" class="intel-refresh-btn" id="data-refresh">atualizar</button>
-          <span class="intel-meta" id="data-meta"></span>
-        </div>
-        <div class="intel-pane-body data-body" id="data-body"></div>
       </div>
     </div>
   </div>
@@ -358,6 +314,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=21"></script>
+  <script type="module" src="/static/js/main.js?v=23"></script>
 </body>
 </html>

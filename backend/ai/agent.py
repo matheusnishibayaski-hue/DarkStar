@@ -119,7 +119,12 @@ def _apply_recon_context(user_message: str, history: list[dict]) -> tuple[str, l
     return f"{chr(10).join(parts)}\n\n{user_message}", targets
 
 
-def _persist_recon(result: ExecutionResult, session_targets: list[str]) -> None:
+def _persist_recon(
+    result: ExecutionResult,
+    session_targets: list[str],
+    *,
+    chat_session_id: str | None = None,
+) -> None:
     from backend.ai.findings import auto_verify_from_execution
     from backend.executor.recon_db import extract_targets, is_recon_target
     from backend.executor.surface import update_surface_from_execution
@@ -141,6 +146,7 @@ def _persist_recon(result: ExecutionResult, session_targets: list[str]) -> None:
                 success=result.success,
                 blocked=result.blocked,
                 exit_code=result.exit_code,
+                chat_session_id=chat_session_id,
             )
             if result.success:
                 auto_verify_from_execution(
@@ -204,6 +210,7 @@ def _record_execution(
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> str:
     execution_id = new_log_id()
     get_stream_hub().create(execution_id, command or "(comando vazio)")
@@ -219,12 +226,14 @@ def _record_execution(
 
     incr("tool_executions_total")
     with timed("tool_execution", tool=(command.split() or [""])[0]):
-        result = execute_in_kali(command, reason, execution_id=execution_id, mission_id=mission_id)
+        result = execute_in_kali(
+            command, reason, execution_id=execution_id, mission_id=mission_id, chat_session_id=chat_session_id
+        )
     summarized, truncated = summarize_output(result.stdout, result.stderr)
     result.truncated_for_llm = truncated
     execution = _result_to_tool_execution(result)
     executions.append(execution)
-    _persist_recon(result, recon_targets or [])
+    _persist_recon(result, recon_targets or [], chat_session_id=chat_session_id)
 
     if emit:
         emit(
@@ -251,6 +260,7 @@ def _run_openrouter(
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> ChatResponse:
     if not OPENROUTER_API_KEY:
         return ChatResponse(
@@ -273,6 +283,7 @@ def _run_openrouter(
             recon_targets,
             emit,
             mission_id,
+            chat_session_id,
         )
     finally:
         if mission_id:
@@ -287,6 +298,7 @@ def _run_openrouter_body(
     recon_targets: list[str] | None,
     emit: EmitFn | None,
     mission_id: str | None,
+    chat_session_id: str | None = None,
 ) -> ChatResponse:
     client = OpenAI(
         base_url=OPENROUTER_BASE_URL,
@@ -370,6 +382,7 @@ def _run_openrouter_body(
                 recon_targets=recon_targets,
                 emit=emit,
                 mission_id=mission_id,
+                chat_session_id=chat_session_id,
             )
             messages.append(
                 {
@@ -423,6 +436,7 @@ def chat(
     fallback_model: str | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
     enriched, targets = _apply_recon_context(user_message, history)
@@ -434,6 +448,7 @@ def chat(
         recon_targets=targets,
         emit=emit,
         mission_id=mission_id,
+        chat_session_id=chat_session_id,
     )
 
 
@@ -444,6 +459,7 @@ def chat_stream(
     model: str | None = None,
     fallback_model: str | None = None,
     mission_id: str | None = None,
+    chat_session_id: str | None = None,
 ) -> Generator[str, None, None]:
     """Gera eventos SSE durante o processamento do chat."""
     event_queue: Queue[str | None] = Queue()
@@ -461,6 +477,7 @@ def chat_stream(
                 fallback_model=fallback_model,
                 emit=emit,
                 mission_id=mission_id,
+                chat_session_id=chat_session_id,
             )
             event_queue.put(
                 format_sse(

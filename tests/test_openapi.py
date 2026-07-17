@@ -27,6 +27,9 @@ class TestOpenApi(unittest.TestCase):
             "/api/engagements/{target}/delta",
             "/api/engagements/{target}/baseline",
             "/api/engagements/{target}/risk",
+            "/api/intel/sessions",
+            "/api/intel/sessions/{session_id}",
+            "/api/intel/sessions/{session_id}/report",
             "/api/data/summary",
             "/api/data/purge",
         ):
