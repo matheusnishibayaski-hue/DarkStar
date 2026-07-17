@@ -136,13 +136,61 @@ def api_recon_list():
     return {"targets": list_recon_summaries()}
 
 
+@router.delete("/recon/{target}")
+def api_recon_delete(target: str):
+    from backend.executor.data_cleanup import delete_recon
+
+    if not delete_recon(target):
+        raise HTTPException(status_code=404, detail="Nenhum recon salvo para este alvo.")
+    return {"deleted": True, "target": target}
+
+
 @router.get("/recon/{target}")
 def api_recon_detail(target: str):
     if not target or len(target) > 128 or ".." in target:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
+    from backend.executor.surface import load_surface, repair_surface_from_stored_output
+    from backend.executor.recon_db import sync_recon_counts_from_surface
+
+    try:
+        repair_surface_from_stored_output(target)
+    except Exception:
+        pass
+    surface = load_surface(target) or {}
     data = get_recon_data(target)
-    if not data:
+    if surface:
+        sync_recon_counts_from_surface(target, surface)
+        data = get_recon_data(target) or data or {"target": target}
+    if not data and not surface:
         raise HTTPException(status_code=404, detail="Nenhum recon salvo para este alvo.")
+    if not data:
+        data = {"target": target}
+
+    findings = surface.get("findings") or []
+    data = dict(data)
+    data["findings"] = findings
+    data["findings_summary"] = {
+        "total": len(findings),
+        "confirmed": sum(1 for f in findings if f.get("status") == "confirmed"),
+        "candidates": sum(1 for f in findings if f.get("status") == "candidate"),
+        "inconclusive": sum(1 for f in findings if f.get("status") == "inconclusive"),
+    }
+    data["surface_ports"] = surface.get("ports") or []
+    data["tools_run"] = surface.get("tools_run") or []
+    data["commands_run"] = surface.get("commands_run") or 0
+    data["phase"] = surface.get("phase")
+    data["has_surface"] = bool(surface)
+    # Preferir portas limpas do surface
+    if surface.get("ports"):
+        data["open_ports"] = [
+            f"{p.get('port')}/tcp open {p.get('service') or p.get('product') or ''}".strip()
+            for p in surface["ports"]
+            if p.get("port")
+        ]
+    if findings and not data.get("vulnerabilities"):
+        data["vulnerabilities"] = [
+            f"[{f.get('severity') or 'info'}] {f.get('title') or ''}" for f in findings
+        ]
     return data
 
 
@@ -165,6 +213,16 @@ def api_log_stream(execution_id: str):
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.delete("/logs/{log_id}")
+def api_log_delete(log_id: str):
+    from backend.executor.data_cleanup import delete_execution_log
+
+    result = delete_execution_log(log_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail="Log não encontrado.")
+    return {"deleted": True, "log_id": log_id, **result}
 
 
 @router.get("/logs/{log_id}")

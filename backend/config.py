@@ -16,7 +16,7 @@ PRIMARY_MODEL = (
 FALLBACK_MODEL = (
     os.getenv("OPENROUTER_FALLBACK_MODEL")
     or os.getenv("GEMINI_FALLBACK_MODEL")
-    or "deepseek/deepseek-chat-v3.2"
+    or "deepseek/deepseek-v3.2"
 )
 GEMINI_MODEL = PRIMARY_MODEL
 GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
@@ -57,6 +57,15 @@ OUTPUTS_DIR = (
 )
 RECON_TTL_DAYS = int(os.getenv("RECON_TTL_DAYS", "30"))
 AUDIT_DIR = BASE_DIR / "backend" / "audit"
+SURFACE_DIR = BASE_DIR / "backend" / "surface"
+# Perfil Auto-Pilot: passive | safe-active | full
+RISK_PROFILE = (os.getenv("RISK_PROFILE", "safe-active") or "safe-active").strip().lower()
+if RISK_PROFILE not in {"passive", "safe-active", "full"}:
+    RISK_PROFILE = "safe-active"
+# Teto do pipeline PoC (high/critical sempre entram; hard-cap 80 no verify)
+VERIFY_MAX_FINDINGS = int(os.getenv("VERIFY_MAX_FINDINGS", "40"))
+VERIFY_MAX_FINDINGS = max(12, min(VERIFY_MAX_FINDINGS, 80))
+REPORT_BRAND_NAME = os.getenv("REPORT_BRAND_NAME", "Chat IA Kali").strip() or "Chat IA Kali"
 _max_dl_mb = int(os.getenv("MAX_FILE_DOWNLOAD_MB", "50"))
 MAX_FILE_DOWNLOAD_BYTES = _max_dl_mb * 1024 * 1024
 
@@ -120,6 +129,8 @@ __all__ = [
     "OUTPUTS_DIR",
     "RECON_TTL_DAYS",
     "AUDIT_DIR",
+    "SURFACE_DIR",
+    "RISK_PROFILE",
     "MAX_FILE_DOWNLOAD_BYTES",
     "ALLOWED_TARGETS",
     "HOST_WIFI_TOOLS",

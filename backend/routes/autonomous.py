@@ -32,6 +32,7 @@ def api_autonomous_stream(req: AutonomousRequest):
                 model=req.model or None,
                 fallback_model=req.fallback_model or None,
                 mission_id=req.mission_id or None,
+                risk_profile=req.risk_profile or None,
             )
         except Exception as e:
             yield format_sse("error", {"detail": str(e)})
@@ -57,6 +58,7 @@ def api_autonomous(req: AutonomousRequest):
             model=req.model or None,
             fallback_model=req.fallback_model or None,
             mission_id=req.mission_id or None,
+            risk_profile=req.risk_profile or None,
         )
         return AutonomousResponseModel(
             message=result.message,

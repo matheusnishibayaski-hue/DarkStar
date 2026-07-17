@@ -2,7 +2,7 @@
 
 **Versão estável 1.1.0** — assistente local de pentest com IA que **executa ferramentas reais** no Kali Linux (Docker), não apenas sugere comandos.
 
-Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://openrouter.ai)) interpreta, escolhe a ferramenta, roda no container isolado e devolve análise, dashboards visuais e relatórios Markdown. Inclui modo **Auto-Pilot** para missões autônomas multi-etapa, streaming de logs ao vivo, cancelamento de execuções e auth por sessão HttpOnly.
+Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://openrouter.ai)) interpreta, escolhe a ferramenta, roda no container isolado e devolve análise, dashboards visuais e **relatórios assertivos** (PoC, CVSS, evidências, bundle ZIP). Inclui modo **Auto-Pilot** com metodologia por fases, **Attack Surface Graph**, pipeline de verificação automática, triagem no Intel e auth por sessão HttpOnly.
 
 > **Uso exclusivamente autorizado.** Teste somente sistemas, redes ou aplicações que você possui ou para os quais tem **permissão explícita por escrito**. Uso não autorizado é ilegal. Você é responsável por escopo, conformidade (LGPD, Marco Civil, CFAA equivalentes) e cada comando executado.
 
@@ -19,6 +19,7 @@ Você descreve o objetivo em linguagem natural; a IA (via [OpenRouter](https://o
 - [Configuração](#configuração)
 - [Interface](#interface)
 - [Modos de uso](#modos-de-uso)
+- [Assertividade e relatório comercial](#assertividade-e-relatório-comercial)
 - [Playbooks](#playbooks)
 - [IA, modelos e economia de tokens](#ia-modelos-e-economia-de-tokens)
 - [Motor de execução](#motor-de-execução)
@@ -54,7 +55,7 @@ start.bat servidor          # ou: ./start.sh servidor
 
 **Recomendado:** defina `CHAT_API_TOKEN` no `.env` para proteger a API local.
 
-**Testes:** `python -m unittest discover -s tests -v` (148 testes, cobertura ~100%, sem Docker/OpenRouter) · E2E: `npm install && npx playwright test -c e2e/playwright.config.js`
+**Testes:** `python -m unittest discover -s tests -v` (180+ testes, cobertura alta, sem Docker/OpenRouter) · E2E: `npm install && npx playwright test -c e2e/playwright.config.js`
 
 ---
 
@@ -69,7 +70,7 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 | **Auditoria** JSONL, **playbooks**, **timeline** | ML customizado, multi-agentes paralelos |
 | Auth sessão, rate limit, bind `127.0.0.1` | Labs GNS3 / EVE-NG / VMs dinâmicas |
 | Intel (recon + threats + audit), file manager, onboarding | — |
-| **Pós-1.1.0:** observabilidade (`/api/metrics`), Docker perfil B, CI Ruff/Bandit/Semgrep, **148 testes ~100% cover** | Prometheus/Grafana, load tests |
+| **Pós-1.1.0:** observabilidade, metodologia, teto de assertividade, **180+ testes** | Prometheus/Grafana, load tests |
 
 ---
 
@@ -84,14 +85,16 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 | **Dashboards** | Parser Nmap (tabela portas) e Nuclei/vulns (cards por severidade) |
 | **Smart Healing** | Até `MAX_HEALING_ATTEMPTS` retentativas automáticas após falha de comando |
 | **Recon DB** | Memória local por alvo (`backend/recon/`), TTL configurável, contexto injetado em chats futuros |
-| **Intel** | Painel `/sys/intel`: **recon**, **threats**, **timeline** (execuções da sessão), **audit** (trilha JSONL) |
+| **Intel** | Painel `/sys/intel`: **recon**, **threats**, **timeline**, **audit**, **triage** (Attack Surface) |
 | **File manager** | Artefatos em `/tools/output` (volume Docker); listar, filtrar por alvo e baixar via UI e `GET /api/files` |
 | **Playbooks** | Presets `recon-web` e `port-scan` — execução sequencial via API ou Auto-Pilot |
 | **Auditoria** | Log append-only em `backend/audit/`; consulta `GET /api/audit` e aba **audit** no Intel |
 | **Onboarding** | Guia de 3 passos na primeira visita (health, escopo, primeiro scan) |
-| **Auto-Pilot** | Alvo + objetivo → loop autônomo de ferramentas + relatório `.md` |
+| **Auto-Pilot** | Alvo + objetivo → **metodologia por fases** + Attack Surface Graph + relatório `.md` |
+| **Attack Surface** | Grafo por alvo com dedup (CVE/template-id), findings, baseline de reteste |
+| **Triagem** | Aba **triage** no Intel: risk score, cadeias A+B, executivo / fila humana / arquivo; verify; export `.md` / `.html` / `.zip` |
 | **Cancel** | Botão **cancel** interrompe chat stream e Auto-Pilot; mata processo Docker ativo |
-| **Relatórios** | Botão **report** ou fim do Auto-Pilot → Markdown estruturado |
+| **Relatórios** | Gate rígido (só confirmados no executivo), CVSS/impacto, remediação, delta reteste, metodologia, limitações, ZIP de entrega |
 | **Modelos** | Tiers Economia / Equilibrado / Raciocínio; seletor CRT `llm:`; Gemini ↔ DeepSeek; fallback em 429 |
 | **Sons CRT** | Bipes sintetizados (Web Audio API); toggle `snd:on`/`snd:off` na status bar |
 | **Segurança** | Sessão HttpOnly, rate limit, CORS localhost, `CHAT_API_TOKEN`, **`ALLOWED_TARGETS`** (scope lock) |
@@ -105,13 +108,13 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 ┌─────────────────────────────────────────────────────────────┐
 │  Frontend (frontend/)                                       │
 │  index.html · styles.css · js/main.js + módulos ES6        │
-│  (chat, intel, files, audio, threatmap, markdown, …)       │
+│  (chat, intel, triage, files, audio, threatmap, markdown, …) │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / SSE
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Backend FastAPI (backend/main.py → routes/)                │
-│  auth · system · chat · autonomous · files · audit · playbooks │
+│  auth · system · chat · autonomous · engagements · files · audit · playbooks │
 │  middleware: request context · rate limit · auth            │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
@@ -119,8 +122,11 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 ┌──────────────────────────┐  ┌─────────────────────────────┐
 │  IA (backend/ai/)        │  │  Executor (backend/executor/)│
 │  agent · autopilot       │  │  kali · logs · summarize     │
-│  openrouter_common       │  │  recon_db · stream_hub       │
-│  report · healing · sse  │  │  files_store · wifi_scan     │
+│  phases · findings       │  │  recon_db · surface          │
+│  verify · nuclei_json    │  │  files_store · stream_hub    │
+│  cvss · evidence         │  │  wifi_scan                   │
+│  risk_score · chains     │  │                              │
+│  delivery · report · …   │  │                              │
 │  OpenRouter + tools      │  │                              │
 └──────────────────────────┘  └──────────────┬──────────────┘
                │                              │ docker exec
@@ -138,7 +144,7 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 3. `kali.py` valida whitelist → executa no Docker ou Wi-Fi host → salva log → resume output para IA.
 4. Eventos SSE: `tool_start`, linhas ao vivo, `tool_done`, `done` (ou `error`).
 5. Frontend renderiza resposta, dashboards e blocos `[ok]` / `[exit N]` / `[blocked]`.
-6. Iterações até `MAX_TOOL_ITERATIONS`; Smart Healing em falhas; Recon DB atualizado em sucesso.
+6. Iterações até `MAX_TOOL_ITERATIONS`; Smart Healing em falhas; Recon DB e **Attack Surface** atualizados em sucesso.
 
 ### Backend — mapa de módulos
 
@@ -147,8 +153,11 @@ main.py ──► middleware (request_id, rate limit, auth)
     │
     ├── routes/* ──► ai/ · playbooks/ · security/ · executor/
     │
-    ├── ai/          agent · autopilot · openrouter_common · report · healing · sse
-    ├── executor/    kali · logs · recon_db · files_store · stream_hub · summarize · wifi_scan
+    ├── ai/          agent · autopilot · phases · findings · verify
+    │                nuclei_json · cvss · evidence · risk_score · chains
+    │                delivery · remediation · delta · report · …
+    ├── executor/    kali · logs · recon_db · surface · files_store · …
+    ├── routes/      auth · chat · autonomous · engagements · …
     ├── security/    sessions · rate_limit · scope · audit · missions
     ├── config.py    facade (env + reexports)
     │     config_tools.py    ALLOWED_TOOLS · TOOL_CATEGORIES
@@ -156,7 +165,7 @@ main.py ──► middleware (request_id, rate limit, auth)
     └── observability.py     logs JSON · métricas · timing
 ```
 
-Sem ciclos de import estáticos. Contratos de API, SSE e UI inalterados no hardening pós-1.1.0.
+Sem ciclos de import estáticos. API estendida com `/api/engagements` e `/api/surface` (assertividade).
 
 ### Acoplamentos mitigados (pós-hardening)
 
@@ -180,20 +189,21 @@ Chat IA Kali/
 │   ├── config_tools.py · config_prompts.py
 │   ├── observability.py     # logs JSON, request ID, métricas
 │   ├── schemas.py · deps.py · middleware.py
-│   ├── routes/              # auth, system, chat, autonomous, files, audit, playbooks
+│   ├── routes/              # auth, system, chat, autonomous, engagements, files, audit, playbooks
 │   ├── security/            # sessions, rate_limit, missions, scope, audit
 │   ├── playbooks/           # recon-web.yaml, port-scan.yaml, loader.py
-│   ├── ai/                  # agent, autopilot, openrouter_common, report, healing, sse
-│   ├── executor/            # kali, logs, summarize, recon_db, files_store, …
+│   ├── ai/                  # agent, autopilot, phases, verify, nuclei_json, cvss,
+│   │                        # evidence, risk_score, chains, delivery, report, …
+│   ├── executor/            # kali, logs, summarize, recon_db, surface, files_store, …
 │   ├── audit/               # eventos JSONL (gitignored)
 │   ├── data/                # sessões (gitignored)
-│   └── logs/ · recon/ · outputs/   # gitignored (outputs = volume Kali)
+│   └── logs/ · recon/ · surface/ · outputs/   # gitignored (evidence/ e delivery/ em outputs/)
 ├── frontend/
 │   ├── index.html · styles.css
-│   └── js/                  # main, chat, intel, files, audio, onboarding, timeline, …
+│   └── js/                  # main, chat, intel, triage, files, audio, onboarding, …
 ├── docker/                  # Dockerfile, compose (+ volume outputs)
 ├── e2e/                     # Playwright smoke tests
-├── tests/                   # 148 testes unitários + auth_patch helper
+├── tests/                   # 180+ testes unitários + auth_patch helper
 ├── scripts/docker-check.ps1 # Docker com timeout (Windows)
 ├── start.bat · start.sh
 ├── package.json             # ESLint + Playwright (dev)
@@ -253,7 +263,7 @@ Copie `.env.example` → `.env`. Variáveis principais:
 |----------|--------|-----------|
 | `OPENROUTER_API_KEY` | — | **Obrigatória.** Chave OpenRouter |
 | `OPENROUTER_PRIMARY_MODEL` | `google/gemini-2.5-flash` | Modelo principal |
-| `OPENROUTER_FALLBACK_MODEL` | `deepseek/deepseek-chat-v3.2` | Fallback em erro/cota |
+| `OPENROUTER_FALLBACK_MODEL` | `deepseek/deepseek-v3.2` | Fallback em erro/cota |
 | `UVICORN_HOST` | `127.0.0.1` | Use `0.0.0.0` só em LAN confiável |
 | `UVICORN_PORT` | `8000` | Porta do servidor |
 | `CHAT_API_TOKEN` | vazio | Se definido, protege `/api/*` (sessão HttpOnly) |
@@ -268,6 +278,9 @@ Copie `.env.example` → `.env`. Variáveis principais:
 | `OUTPUT_TOKEN_LIMIT` | `3000` | Limite antes de resumir output |
 | `RECON_TTL_DAYS` | `30` | Expiração cache recon |
 | `ALLOWED_TARGETS` | vazio | Scope lock: lista de alvos permitidos (vazio = sem restrição + aviso na UI) |
+| `RISK_PROFILE` | `safe-active` | Auto-Pilot: `passive` / `safe-active` / `full` (bloqueia tools agressivas) |
+| `VERIFY_MAX_FINDINGS` | `40` | Teto do pipeline PoC (high/critical sempre entram; máx 80) |
+| `REPORT_BRAND_NAME` | `Chat IA Kali` | Marca padrão nos relatórios HTML/Markdown |
 | `TRUST_PROXY` | off | Se `true`, usa `X-Forwarded-For` para IP (só atrás de proxy confiável) |
 | `LOG_LEVEL` | `INFO` | Nível dos logs JSON (`DEBUG`/`INFO`/`WARNING`/`ERROR`) |
 | `OUTPUTS_DIR` | `backend/outputs` | Pasta host dos artefatos (montada em `/tools/output` no Kali) |
@@ -298,7 +311,7 @@ Interface estilo terminal fosforescente (`kali@pentest:~$`), scanlines, boot seq
 
 ### Painel Intel (`intel` · `Alt+I`)
 
-Painel unificado **`/sys/intel`** com quatro abas:
+Painel unificado **`/sys/intel`** com cinco abas:
 
 | Aba | Função |
 |-----|--------|
@@ -306,6 +319,16 @@ Painel unificado **`/sys/intel`** com quatro abas:
 | **threats** (`Alt+C`) | Mapa global [Kaspersky Cybermap](https://cybermap.kaspersky.com/pt). Modos **live** e **globe**. |
 | **timeline** | Linha do tempo das execuções da sessão ativa — comando, status, link para log e artefatos. |
 | **audit** | Últimos eventos da trilha de auditoria (`GET /api/audit`) com link para logs de execução. |
+| **triage** | **Attack Surface** por alvo: risk score, cadeias A+B, buckets executivo / fila humana / arquivo; **verify**; export `.md` / `.html` / `.zip`; promoção manual ✓/FP/✕. |
+
+### Fluxo consultoria (resumo)
+
+```
+Auto-Pilot ou playbook → surface.json (findings candidatos)
+        → pipeline PoC (até 3 passes; WAF → fila humana)
+        → gate rígido → relatório executivo
+        → intel/triage → revisão → .zip para o cliente
+```
 
 ### Painel Files (`files` · `Alt+F`)
 
@@ -359,19 +382,124 @@ Digite no prompt ou use o painel **tools** para fixar ferramenta e preencher exe
 
 Durante chat ou Auto-Pilot, o botão **cancel** envia `AbortController` no cliente e `POST /api/missions/{mission_id}/cancel` no servidor, matando o processo Docker registrado.
 
-### Auto-Pilot
+### Auto-Pilot (metodologia + assertividade)
 
-1. `Alt+P` → informe **alvo** e **objetivo** (ou escolha um **playbook** + alvo)
-2. Agente roda loop (`autopilot.py`) até objetivo, limite de rodadas ou cancel
-3. Relatório Markdown baixado automaticamente ao concluir
+1. `Alt+P` → informe **alvo**, **objetivo** e opcionalmente **risk_profile** (ou playbook + alvo)
+2. O agente segue fases fixas e atualiza o **Attack Surface Graph** (`backend/surface/`) a cada comando
+3. Ao encerrar: pipeline PoC automático → relatório comercial → revisão na aba **triage**
 
-**Endpoint:** `POST /api/autonomous/stream` (SSE) ou `POST /api/autonomous` (JSON). Playbooks também no painel Auto-Pilot — ver [Playbooks](#playbooks).
+| Fase | O que faz | Ferramentas típicas |
+|------|-----------|---------------------|
+| `recon` | Hosts / subdomínios / OSINT | subfinder, amass, dig, whois, httpx |
+| `enumerate` | Portas, serviços, URLs | nmap, httpx, gobuster, ffuf, whatweb |
+| `vuln_scan` | Candidatos a vulnerabilidade | nuclei **`-jsonl`**, nikto, sslscan, wpscan |
+| `verify` | Confirma ou descarta candidatos | curl, httpx, nuclei, nmap |
+| `report` | Resumo → `finish_mission` | (sem novas tools) |
 
-### Relatório de sessão
+**Perfis de risco** (`RISK_PROFILE` ou body `risk_profile`):
 
-Botão **report** → `POST /api/generate-report` com histórico e execuções da sessão → download `relatorio-pentest.md`.
+| Perfil | Uso |
+|--------|-----|
+| `passive` | Só OSINT — sem nmap/nuclei/brute |
+| `safe-active` (**padrão**) | Scans ativos sem sqlmap/hydra/metasploit |
+| `full` | Whitelist completa (ainda limitado por `ALLOWED_TARGETS`) |
 
-Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Recon cacheado → Artefatos → Mitigação → Anexo logs.
+Eventos SSE: `phase_change`, `verify_start`, `verify_done`, `verify_summary`.
+
+**Endpoint:** `POST /api/autonomous/stream` (SSE) ou `POST /api/autonomous` (JSON).
+
+---
+
+## Assertividade e relatório comercial
+
+Pipeline pensado para **consultoria solo**: máximo de automação mecânica, revisão humana só na fila crítica.
+
+### Ciclo de um finding
+
+```
+candidate → PoC pass 1 → confirmed | false_positive | inconclusive
+inconclusive → PoC pass 2 → confirmed | false_positive | discarded | inconclusive (WAF)
+WAF/inconclusivo → PoC pass 3 (UA alternativo) → fila humana ou fechamento
+```
+
+| Status | No executivo do cliente? |
+|--------|--------------------------|
+| `confirmed` (gate rígido) | **Sim** — high, ou medium + template/CVE + PoC/multi-fonte |
+| `confirmed` (confiança baixa) | Não — vai para **fila humana** na triagem |
+| `false_positive` | Não — anexo técnico |
+| `discarded` | Não — anexo técnico |
+| `inconclusive` / WAF | Não — **fila humana** (revisar antes de entregar) |
+
+### O que o pipeline extrai e prova
+
+| Camada | Detalhe |
+|--------|---------|
+| **Nuclei JSON** | `-jsonl` → `template-id`, `matched-at`, `curl-command`, CVSS do template |
+| **Dedup** | Correlação por CVE → template-id → título; merge de fontes (`sources`) |
+| **PoC tipado** | `nuclei -id <template>`; pass 2 pode usar `curl-command` do JSON |
+| **CVE × versão** | Versões do `nmap -sV` no surface; correlação heurística (sem NVD online) |
+| **Evidências** | Arquivo por finding: `outputs/evidence/{alvo}/{id}.txt` |
+| **CVSS / impacto / esforço** | Por achado confirmado |
+| **Risk score** | 0–100 + faixa (Crítico / Alto / Médio / Baixo) |
+| **Cadeias A+B** | Hipóteses compostas (ex.: exposição + HSTS + CVE) — sinal, não confirmação |
+| **Delta reteste** | Baseline vs confirmados atuais (corrigidos / novos / abertos) |
+
+### Gate executivo (rígido)
+
+Entra no sumário para o cliente apenas se:
+- `confidence: high`, **ou**
+- `confidence: medium` **e** (`template_id` ou CVE) **e** PoC registrado **ou** `sources ≥ 2`
+
+### Estrutura do relatório (`GET /api/engagements/{alvo}/report`)
+
+1. Escopo e **limitações** (o que a automação não cobre)
+2. Metodologia (PTES / OWASP WSTG)
+3. **Resumo executivo** (derivado dos confirmados — não do chat)
+4. Comandos executados
+5. Achados confirmados (CVSS, impacto, esforço, PoC, pacote de evidência)
+6. Fila humana (se houver)
+7. Hipóteses de cadeia
+8. Delta de reteste
+9. Remediações por achado
+10. Anexo — FP e descartados
+11. Recon · artefatos · logs · disclaimer
+
+### Entrega ao cliente
+
+| Formato | Como |
+|---------|------|
+| **Markdown** | `?format=md` ou botão **report** da sessão |
+| **HTML / PDF** | `?format=html` ou **triage → .html** → imprimir (Ctrl+P) |
+| **ZIP bundle** | `?format=zip` ou **triage → .zip** — `relatorio.md`, `relatorio.html`, `evidencias/`, `delta.json`, `surface.json`, `meta.json` |
+
+### Engajamento (metadados)
+
+```json
+POST /api/engagements
+{
+  "target": "lab.cliente.com",
+  "objective": "Pentest externo web",
+  "client": "Empresa XYZ",
+  "scope_notes": "Apenas *.cliente.com em produção",
+  "risk_profile": "safe-active",
+  "brand_name": "Sua Marca Consultoria"
+}
+```
+
+`POST /api/engagements/{alvo}/baseline` congela confirmados para o **próximo reteste**.
+
+### O que ainda exige você
+
+- Credenciais / testes autenticados
+- Impacto de negócio e validação de críticos
+- IDOR, lógica de aplicação, cadeias complexas
+- Revisão da **fila humana** antes de enviar ao cliente
+
+---
+
+### Relatório de sessão (chat)
+
+Botão **report** → `POST /api/generate-report` com histórico da sessão. Se houver Attack Surface para o alvo, usa o mesmo motor assertivo; caso contrário, fallback por regex nos logs.
 
 ### Exemplos práticos
 
@@ -380,7 +508,8 @@ Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Recon cacheado
 | *"Liste redes Wi-Fi"* | `wlan-scan` via `netsh` (Windows host) |
 | *"Scan SYN em scanme.nmap.org"* | `nmap` no container + dashboard |
 | *"Subdomínios de example.com"* | `subfinder` / `amass` |
-| **pilot** + alvo lab | Missão autônoma + relatório |
+| **pilot** + alvo lab | Missão autônoma → triage → relatório/ZIP |
+| **intel → triage** | Risk score, verify, export `.zip` para cliente |
 | Tier **Economia** | Modelo mais barato (Flash-Lite / DeepSeek V3.2) |
 
 ---
@@ -388,6 +517,8 @@ Estrutura: Resumo Executivo → Técnico → Vulnerabilidades → Recon cacheado
 ## Playbooks
 
 Presets em `backend/playbooks/*.yaml` (schema em `playbook.schema.json` — **não** é Ansible). Disponíveis no Auto-Pilot ou via API.
+
+Ao final de cada playbook: atualiza o **Attack Surface Graph** e dispara o **pipeline PoC** (mesmo motor do Auto-Pilot).
 
 | ID | Descrição |
 |----|-----------|
@@ -527,13 +658,20 @@ Trade-off do perfil A: privilégios elevados ≈ controle próximo ao host — u
 | Caminho | Conteúdo | Versionado |
 |---------|----------|------------|
 | `backend/logs/{id}.log` | Output completo de cada execução | Não |
-| `backend/recon/{alvo}.json` | Portas, CVEs, achados por alvo | Não |
-| `backend/outputs/` | Artefatos de ferramentas (`/tools/output` no Kali) | Não |
+| `backend/recon/{alvo}.json` | Portas, CVEs, achados por alvo (cache legado para chat) | Não |
+| `backend/surface/{alvo}.json` | Attack Surface Graph (fases, findings, baseline, engajamento) | Não |
+| `backend/outputs/evidence/` | Pacotes de prova por finding (`{id}.txt`) | Não |
+| `backend/outputs/delivery/` | ZIPs de entrega gerados | Não |
+| `backend/outputs/` | Demais artefatos (`/tools/output` no Kali) | Não |
 | `backend/audit/` | Trilha de auditoria (JSONL por dia) | Não |
 | `backend/data/sessions.json` | Sessões auth HttpOnly | Não |
 | `localStorage` (browser) | Conversas, modelo e preferência de som | N/A |
 
 Recon: extraído após execuções bem-sucedidas; injetado no prompt quando o usuário menciona o mesmo alvo. Entradas expiradas removidas por `RECON_TTL_DAYS`.
+
+Surface: atualizado a cada execução (chat, Auto-Pilot, playbook); alimenta triagem, verify e relatório comercial.
+
+**Não versionar:** além dos paths acima, `backend/surface/*.json` e `backend/outputs/**` (exceto `.gitkeep`).
 
 ---
 
@@ -552,6 +690,19 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | GET | `/api/models` | Tiers Gemini/DeepSeek |
 | GET | `/api/recon` | Lista alvos com recon em cache |
 | GET | `/api/recon/{target}` | Detalhe recon (portas, CVEs, achados) |
+| GET | `/api/surface` | Lista Attack Surface Graphs |
+| GET | `/api/surface/{target}` | Grafo completo (hosts, ports, urls, findings) |
+| POST | `/api/engagements` | Cria engajamento (cliente, escopo, marca, perfil) |
+| GET | `/api/engagements/{target}` | Estado + surface + gate + delta |
+| PATCH | `/api/engagements/{target}` | Atualiza cliente/escopo/marca/objetivo |
+| PATCH | `/api/engagements/{target}/phase` | Força fase (debug/manual) |
+| GET | `/api/engagements/{target}/triage` | Buckets: executive / human_queue / archive |
+| GET | `/api/engagements/{target}/delta` | Delta vs baseline (corrigidos/novos/abertos) |
+| POST | `/api/engagements/{target}/baseline` | Congela confirmados como baseline |
+| GET | `/api/engagements/{target}/report` | Relatório `?format=md\|html\|zip` (HTML→PDF; ZIP=bundle) |
+| GET | `/api/engagements/{target}/risk` | Risk score 0–100 do engajamento |
+| POST | `/api/engagements/{target}/findings/{id}` | Marca finding (`confirmed` / `false_positive` / `discarded` / …) |
+| POST | `/api/engagements/{target}/verify` | Pipeline PoC (`?max_findings=`) |
 | GET | `/api/files` | Lista artefatos em `OUTPUTS_DIR` |
 | GET | `/api/files/{path}` | Download de artefato (path validado, anti-traversal, limite MB) |
 | GET | `/api/audit` | Trilha de auditoria (JSONL, `?limit=&date=`) |
@@ -579,7 +730,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
   "history": [{ "role": "user", "content": "..." }],
   "preferred_tool": "auto",
   "model": "google/gemini-2.5-flash",
-  "fallback_model": "deepseek/deepseek-chat-v3.2",
+  "fallback_model": "deepseek/deepseek-v3.2",
   "mission_id": "uuid-opcional-para-cancel"
 }
 ```
@@ -590,7 +741,8 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 {
   "target": "scanme.nmap.org",
   "objective": "Mapear portas abertas e serviços web",
-  "mission_id": "uuid-opcional"
+  "mission_id": "uuid-opcional",
+  "risk_profile": "safe-active"
 }
 ```
 
@@ -608,7 +760,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 }
 ```
 
-**SSE — eventos chat:** `tool_start`, `tool_done`, `done`, `error`. Auto-Pilot adiciona `mission_start`, `round_start`. Campo `stopped_reason` em `done` pode ser `completed`, `cancelled`, `objective_met`, etc.
+**SSE — eventos chat:** `tool_start`, `tool_done`, `done`, `error`. Auto-Pilot adiciona `mission_start`, `round_start`, `phase_change`. Campo `stopped_reason` em `done` pode ser `completed`, `cancelled`, `objective_met`, etc.
 
 ---
 
@@ -633,7 +785,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 
 ## Testes e validação
 
-### Automatizados (148 testes unitários, cobertura ~100%)
+### Automatizados (180+ testes unitários)
 
 ```bash
 python -m unittest discover -s tests -v
@@ -665,6 +817,10 @@ npx playwright test -c e2e/playwright.config.js
 | `test_agent_unit.py` | Chat agent mockado, cancel, relatório, concorrência de missões |
 | `test_kali_mock.py` | Cancel mata processo Docker |
 | `test_coverage_*.py` | Cobertura restante (executor, rotas, agent, autopilot) |
+| `test_methodology.py` | Fases, risk profile, Attack Surface, API engagements |
+| `test_verify_pipeline.py` | PoC, scoring, fechamento assertivo, seções do relatório |
+| `test_assertiveness.py` | Dedup, remediação, delta, WAF, triage/export API |
+| `test_max_assertiveness.py` | Nuclei JSON, CVSS, gate rígido, evidências, ZIP, risk/chains |
 
 ### Matriz por módulo
 
@@ -705,11 +861,11 @@ python -m coverage run -m unittest discover -s tests -q && coverage report
 
 **Funcional:** chat · execução nmap lab · **cancel** · whitelist bloqueia · log em `backend/logs/`
 
-**Auto-Pilot / report:** missão lab · download `.md`
+**Auto-Pilot / assertividade:** missão lab · **intel → triage** · verify · export `.html` e `.zip` · revisar fila humana
 
 **Segurança:** `CHAT_API_TOKEN` · login · sessão sobrevive restart
 
-**UI:** hard refresh · sidebar · status bar Docker/Kali · **intel** · **files** · sons CRT
+**UI:** hard refresh · sidebar · status bar Docker/Kali · **intel** (5 abas, incl. triage) · **files** · sons CRT
 
 ---
 
@@ -741,7 +897,7 @@ Variável opcional: `LOG_LEVEL` (padrão `INFO`). Segredos são redigidos nos lo
 |-------|-------|
 | Release estável | **1.1.0** |
 | API | `/api/health` → `"version": "1.1.0"` |
-| Testes | 148 unit (~100% cover) · 5 E2E |
+| Testes | 180+ unit · 5 E2E |
 | Documentação | Este README |
 
 ```bash
@@ -755,9 +911,41 @@ git push origin main --tags
 
 ## Changelog
 
+### Pós-1.1.0 — Teto prático de assertividade (2026-07-16)
+
+| Área | O que entrou |
+|------|----------------|
+| **Nuclei JSON** | `-jsonl` → template-id, matched-at, curl-command, CVSS do template |
+| **Gate rígido** | Executivo: high, ou medium+template/CVE+PoC/multi-fonte |
+| **PoC** | Até 3 passes; pass 3 WAF com UA alternativo |
+| **CVSS / impacto / esforço** | Por achado; versão nmap no surface |
+| **Evidências** | `outputs/evidence/{alvo}/{id}.txt` |
+| **Risk score + cadeias** | Score 0–100; hipóteses A+B no relatório/triagem |
+| **Relatório comercial** | Escopo, metodologia, executivo estruturado, limitações, disclaimer |
+| **Entrega ZIP** | `?format=zip` → md+html+evidências+delta+surface |
+| **UI triage** | Risk, chains, export `.zip` |
+
+Módulos: `ai/nuclei_json.py`, `ai/cvss.py`, `ai/evidence.py`, `ai/risk_score.py`, `ai/chains.py`, `ai/delivery.py`.
+
+### Pós-1.1.0 — Assertividade e triagem (2026-07-16)
+
+Dedup, PoC tipado, remediação, delta, triage UI, playbooks→verify — base do teto acima.
+
+### Pós-1.1.0 — Metodologia Auto-Pilot (2026-07-16)
+
+**Attack Surface Graph** + **fases** + **pipeline PoC**:
+
+- Fases: `recon` → `enumerate` → `vuln_scan` → `verify` → `report`
+- Perfis: `passive` / `safe-active` / `full` (`RISK_PROFILE`)
+- Pipeline: candidato → PoC → `confirmed` / `false_positive` / `inconclusive` → re-PoC → `discarded` (exceto fila WAF)
+- API base: `/api/surface`, `/api/engagements`, `/api/engagements/{t}/verify`
+- SSE: `phase_change`, `verify_*`
+
+Objetivo: ~90%+ operacional + máxima assertividade; você revisa só a fila humana e críticos.
+
 ### Pós-1.1.0 — Robustez e qualidade (2026-07-16)
 
-Ciclo de hardening pós-release **1.1.0**: correções P0, refatoração do backend, observabilidade, Docker endurecido, CI ampliado e suíte de testes levada a **~100% de cobertura** no `backend/` (148 testes). Mapa de módulos e acoplamentos: seção [Arquitetura](#arquitetura).
+Ciclo de hardening pós-release **1.1.0**: correções P0, refatoração do backend, observabilidade, Docker endurecido, CI ampliado e suíte de testes levada a **~100% de cobertura** no `backend/`. Mapa de módulos e acoplamentos: seção [Arquitetura](#arquitetura).
 
 #### Correções críticas
 
@@ -821,7 +1009,7 @@ Ferramentas: `requirements-dev.txt` (Ruff, coverage, Bandit, etc.), `pyproject.t
 
 | Antes | Depois |
 |-------|--------|
-| ~70 testes, ~71% cobertura | **148 testes**, **100%** statements no `backend/` |
+| ~70 testes, ~71% cobertura | **180 testes**, cobertura alta no `backend/` |
 
 Novos grupos principais: `test_observability`, `test_agent_unit`, `test_autopilot_unit`, `test_security_proxy`, `test_coverage_*` (executor, rotas, agent, gaps finais), `e2e/observability.spec.js`. Rate limit flaky corrigido (recriação do limiter entre cenários).
 

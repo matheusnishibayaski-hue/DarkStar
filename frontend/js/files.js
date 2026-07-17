@@ -1,168 +1,138 @@
-/** Painel de artefatos — /tools/output (volume compartilhado com o Kali). */
+/** Modal Files — lista simples de artefatos em /tools/output. */
 
 import { listFiles } from "./api/routes.js";
-import { apiFetch } from "./api.js";
+import { fileOpenUrl } from "./api.js";
+import { deleteFile } from "./data-admin.js";
+import { attachDeleteAction, formatBytes, formatDate } from "./row-actions.js";
 import { escapeHtml } from "./exec.js";
 import { openOverlay } from "./ui.js";
 
-const ICONS = {
-  pcap: "◎",
-  html: "◇",
-  json: "{ }",
-  markdown: "md",
-  archive: "▣",
-  image: "▦",
-  scan: "⌗",
-  text: "▤",
-  file: "▤",
-};
-
 let ctx = {};
-let nameFilter = "";
+let filesCache = [];
+let filter = "";
 
 export function initFilesPanel(context) {
   ctx = context;
-  ctx.filesRefreshBtn?.addEventListener("click", () => loadFiles());
+  ctx.filesRefreshBtn?.addEventListener("click", () => loadFiles(true));
+  ctx.filesSearch?.addEventListener("input", () => {
+    filter = (ctx.filesSearch.value || "").trim().toLowerCase();
+    render();
+  });
 }
 
-function formatSize(bytes) {
-  if (!bytes || bytes < 0) return "0 B";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+function basename(path) {
+  return (path || "").split("/").pop() || path;
 }
 
-function formatDate(iso) {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
+function folderOf(path) {
+  const parts = (path || "").split("/");
+  return parts.length > 1 ? parts.slice(0, -1).join("/") : "";
 }
 
-function fileIcon(kind) {
-  return ICONS[kind] || ICONS.file;
-}
-
-function fileUrl(name) {
-  const encoded = name.split("/").map(encodeURIComponent).join("/");
-  return `/api/files/${encoded}`;
-}
-
-async function downloadFile(name) {
-  try {
-    const res = await apiFetch(fileUrl(name));
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || "Falha no download");
-    }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = name.split("/").pop() || "download";
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-    ctx.toast?.(`download: ${name.split("/").pop()}`, "success");
-  } catch (e) {
-    ctx.toast?.(e.message || "Erro ao baixar", "error");
-  }
-}
-
-function renderFiles(files, root) {
+function render() {
   const { filesListEl, filesMetaEl } = ctx;
   if (!filesListEl) return;
 
-  let visible = files;
-  if (nameFilter) {
-    const q = nameFilter.toLowerCase();
-    visible = files.filter((f) => f.name.toLowerCase().includes(q));
+  let list = filesCache;
+  if (filter) {
+    list = list.filter((f) => f.name.toLowerCase().includes(filter));
   }
 
   if (filesMetaEl) {
-    const suffix = nameFilter ? ` · filtro: ${nameFilter}` : "";
-    filesMetaEl.textContent = `${visible.length} arquivo(s) · ${root || "/tools/output"}${suffix}`;
+    filesMetaEl.textContent = list.length
+      ? `${list.length} arquivo${list.length === 1 ? "" : "s"}`
+      : "nenhum arquivo";
   }
 
-  if (!visible.length) {
-    const exampleTarget = nameFilter || "scanme.nmap.org";
+  if (!list.length) {
     filesListEl.innerHTML = `
-      <p class="files-empty">Nenhum artefato${nameFilter ? " para este filtro" : " ainda"}.</p>
-      <p class="files-hint">Peça à IA salvar saídas em <code>/tools/output/</code>:</p>
-      <pre class="files-example">nmap -oA /tools/output/scan ${escapeHtml(exampleTarget)}</pre>
-      ${nameFilter ? '<button type="button" class="files-clear-filter" id="files-clear-filter">limpar filtro</button>' : ""}
-    `;
-    document.getElementById("files-clear-filter")?.addEventListener("click", () => {
-      nameFilter = "";
-      loadFiles();
-    });
+      <div class="files-simple-empty">
+        <p>${filter ? "Nada corresponde à busca." : "Pasta vazia."}</p>
+        <p class="files-simple-hint">No chat, peça para salvar assim:<br>
+          <code>nmap -oN /tools/output/scan.txt alvo.com</code>
+        </p>
+      </div>`;
     return;
   }
 
-  filesListEl.innerHTML = "";
-  const table = document.createElement("div");
-  table.className = "files-table";
-  table.setAttribute("role", "table");
-
-  const head = document.createElement("div");
-  head.className = "files-row files-row-head";
-  head.setAttribute("role", "row");
-  head.innerHTML = `
-    <span class="files-col files-col-icon" role="columnheader"></span>
-    <span class="files-col files-col-name" role="columnheader">nome</span>
-    <span class="files-col files-col-size" role="columnheader">tam</span>
-    <span class="files-col files-col-date" role="columnheader">mod</span>
-    <span class="files-col files-col-action" role="columnheader"></span>
-  `;
-  table.appendChild(head);
-
-  for (const f of visible) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "files-row files-row-item";
-    row.setAttribute("role", "row");
-    row.title = `Baixar ${f.name}`;
-    row.innerHTML = `
-      <span class="files-col files-col-icon" aria-hidden="true">${fileIcon(f.kind)}</span>
-      <span class="files-col files-col-name">
-        <span class="files-name">${escapeHtml(f.name)}</span>
-        ${f.extension ? `<span class="files-ext">.${escapeHtml(f.extension)}</span>` : ""}
-      </span>
-      <span class="files-col files-col-size">${formatSize(f.size)}</span>
-      <span class="files-col files-col-date">${formatDate(f.modified_at)}</span>
-      <span class="files-col files-col-action" aria-hidden="true">↓</span>
-    `;
-    row.addEventListener("click", () => downloadFile(f.name));
-    table.appendChild(row);
+  // agrupa por pasta
+  const groups = new Map();
+  for (const f of list) {
+    const folder = folderOf(f.name) || "raiz";
+    if (!groups.has(folder)) groups.set(folder, []);
+    groups.get(folder).push(f);
   }
 
-  filesListEl.appendChild(table);
+  filesListEl.innerHTML = [...groups.entries()]
+    .map(([folder, items]) => {
+      const rows = items
+        .map((f) => {
+          const name = f.name;
+          return `
+          <div class="files-simple-row" data-row-id="${escapeHtml(name)}">
+            <div class="files-simple-info">
+              <span class="files-simple-name">${escapeHtml(basename(name))}</span>
+              <span class="files-simple-meta">${escapeHtml(formatBytes(f.size))} · ${escapeHtml(formatDate(f.modified_at))}</span>
+            </div>
+            <div class="files-simple-actions">
+              <a class="files-simple-btn" href="${escapeHtml(fileOpenUrl(name))}" target="_blank" rel="noopener">Abrir</a>
+              <button type="button" class="files-simple-btn files-simple-btn--danger files-del-btn">Excluir</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      return `
+        <section class="files-simple-group">
+          <h3 class="files-simple-folder">${escapeHtml(folder)}</h3>
+          ${rows}
+        </section>`;
+    })
+    .join("");
+
+  filesListEl.querySelectorAll(".files-del-btn").forEach((btn) => {
+    const row = btn.closest("[data-row-id]");
+    const name = row?.dataset.rowId;
+    if (!name) return;
+    attachDeleteAction(btn, {
+      label: basename(name),
+      toast: ctx.toast,
+      onDelete: async () => {
+        await deleteFile(name);
+        await loadFiles(true);
+      },
+    });
+  });
 }
 
-async function loadFiles() {
+async function loadFiles(force = false) {
   const { filesListEl } = ctx;
-  if (filesListEl) {
-    filesListEl.innerHTML = '<p class="files-empty">listando /tools/output …</p>';
+  if (!force && filesCache.length) {
+    render();
+    return;
   }
-
+  if (filesListEl) filesListEl.innerHTML = `<p class="files-simple-empty">carregando…</p>`;
   try {
     const res = await listFiles();
-    if (!res.ok) throw new Error("Falha ao listar arquivos");
+    if (!res.ok) throw new Error("Não foi possível listar os arquivos");
     const data = await res.json();
-    renderFiles(data.files || [], data.root);
+    filesCache = data.files || [];
+    render();
   } catch (e) {
     if (filesListEl) {
-      filesListEl.innerHTML = `<p class="files-empty">${escapeHtml(e.message)}</p>`;
+      filesListEl.innerHTML = `<p class="files-simple-empty">${escapeHtml(e.message)}</p>`;
     }
   }
 }
 
-export async function openFilesPanel(filter = "") {
+export async function openFilesPanel(nameFilter = "") {
   if (!ctx.overlayFiles) return;
-  nameFilter = (filter || "").trim().toLowerCase();
+  filter = (nameFilter || "").trim().toLowerCase();
+  if (ctx.filesSearch) ctx.filesSearch.value = filter;
   openOverlay(ctx.overlayFiles);
-  await loadFiles();
+  await loadFiles(true);
+}
+
+/** Compat: chamado pelo hub antigo */
+export async function loadFilesInto() {
+  await loadFiles(true);
 }

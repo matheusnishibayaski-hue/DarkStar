@@ -33,29 +33,104 @@ export function showToastError(msg) {
   toast(msg, "error", 6000);
 }
 
+const SIDEBAR_COLLAPSE_KEY = "chat-ia-kali-sidebar-collapsed";
+
 export function isMobile() {
   return window.matchMedia("(max-width: 768px)").matches;
 }
 
+function syncMenuButton() {
+  const btn = document.getElementById("btn-menu");
+  if (!btn) return;
+  const expanded = isMobile()
+    ? Boolean(ctx.sidebar?.classList.contains("open"))
+    : !document.body.classList.contains("sidebar-collapsed");
+  btn.setAttribute("aria-expanded", expanded ? "true" : "false");
+  btn.title = expanded ? "Recolher barra lateral (M)" : "Expandir barra lateral (M)";
+}
+
+function syncCollapseButton() {
+  const btn = document.getElementById("sidebar-collapse");
+  if (!btn || isMobile()) return;
+  const collapsed = document.body.classList.contains("sidebar-collapsed");
+  btn.textContent = collapsed ? "›" : "‹";
+  btn.title = collapsed ? "Expandir barra (M)" : "Recolher barra (M)";
+  btn.setAttribute("aria-label", collapsed ? "Expandir barra lateral" : "Recolher barra lateral");
+}
+
+export function setSidebarCollapsed(collapsed) {
+  document.body.classList.toggle("sidebar-collapsed", Boolean(collapsed));
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSE_KEY, collapsed ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+  if (!collapsed) ctx.sidebar?.classList.add("open");
+  syncMenuButton();
+  syncCollapseButton();
+}
+
+/** Restaura preferência no desktop; no mobile começa fechada. */
+export function initSidebarState() {
+  if (isMobile()) {
+    document.body.classList.remove("sidebar-collapsed");
+    ctx.sidebar?.classList.remove("open");
+    if (ctx.sidebarBackdrop) ctx.sidebarBackdrop.hidden = true;
+  } else {
+    let collapsed = false;
+    try {
+      collapsed = localStorage.getItem(SIDEBAR_COLLAPSE_KEY) === "1";
+    } catch {
+      collapsed = false;
+    }
+    setSidebarCollapsed(collapsed);
+    if (!collapsed) ctx.sidebar?.classList.add("open");
+  }
+  syncMenuButton();
+  syncCollapseButton();
+}
+
 export function openSidebar() {
   const { sidebar, sidebarBackdrop } = ctx;
-  sidebar?.classList.add("open");
-  if (isMobile() && sidebarBackdrop) sidebarBackdrop.hidden = false;
+  if (isMobile()) {
+    sidebar?.classList.add("open");
+    if (sidebarBackdrop) sidebarBackdrop.hidden = false;
+  } else {
+    setSidebarCollapsed(false);
+  }
+  syncMenuButton();
 }
 
 export function closeSidebar() {
   const { sidebar, sidebarBackdrop } = ctx;
-  sidebar?.classList.remove("open");
-  if (sidebarBackdrop) sidebarBackdrop.hidden = true;
+  if (isMobile()) {
+    sidebar?.classList.remove("open");
+    if (sidebarBackdrop) sidebarBackdrop.hidden = true;
+  } else {
+    setSidebarCollapsed(true);
+  }
+  syncMenuButton();
 }
 
 export function toggleSidebar() {
-  if (ctx.sidebar?.classList.contains("open")) closeSidebar();
-  else openSidebar();
+  if (isMobile()) {
+    if (ctx.sidebar?.classList.contains("open")) closeSidebar();
+    else openSidebar();
+  } else {
+    setSidebarCollapsed(!document.body.classList.contains("sidebar-collapsed"));
+  }
+}
+
+/** Fecha só a gaveta no celular — não recolhe a barra no desktop. */
+export function dismissSidebarDrawer() {
+  if (!isMobile()) return;
+  ctx.sidebar?.classList.remove("open");
+  if (ctx.sidebarBackdrop) ctx.sidebarBackdrop.hidden = true;
+  syncMenuButton();
 }
 
 export function openOverlay(overlay) {
-  closeSidebar();
+  dismissSidebarDrawer();
   if (!overlay) return;
   overlay.hidden = false;
   requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
@@ -76,7 +151,14 @@ export function closeOverlay(overlay) {
 }
 
 export function closeAllOverlays(closeToolsPanelMenus) {
-  for (const ov of [ctx.overlayTools, ctx.overlayAutopilot, ctx.overlayHelp, ctx.overlayIntel, ctx.overlayFiles]) {
+  for (const ov of [
+    ctx.overlayTools,
+    ctx.overlayAutopilot,
+    ctx.overlayHelp,
+    ctx.overlayIntel,
+    ctx.overlayFiles,
+    ctx.overlayThreats,
+  ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");
       ov.hidden = true;
@@ -221,7 +303,7 @@ export function renderWelcome() {
     "[ OK ] docker bridge .................... linked",
     "[ OK ] kali toolchain ................... ready",
     "[ OK ] openrouter agent ................. online",
-    "[ OK ] intel db ......................... recon+threats",
+    "[ OK ] intel hub ........................ alvos+relatorios",
     "[ OK ] output volume ..................... /tools/output",
   ];
 

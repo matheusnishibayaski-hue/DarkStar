@@ -95,7 +95,7 @@ TOOL_CATALOG: dict[str, dict[str, str]] = {
     },
     "nuclei": {
         "summary": "Scan de vulnerabilidades por templates",
-        "example": "nuclei -u https://alvo.com -severity critical,high",
+        "example": "nuclei -u https://alvo.com -severity critical,high -jsonl",
     },
     "ffuf": {
         "summary": "Fuzzer web — diretórios, parâmetros, vhosts",

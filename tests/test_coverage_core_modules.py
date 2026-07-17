@@ -47,6 +47,9 @@ class TestModelsCatalog(unittest.TestCase):
         p2, f2 = resolve_model("google/gemini-2.5-flash", "google/gemini-2.5-flash")
         self.assertEqual(p2, "google/gemini-2.5-flash")
         self.assertNotEqual(f2, p2)
+        alias_p, alias_f = resolve_model("deepseek/deepseek-chat-v3.2", None)
+        self.assertEqual(alias_p, "deepseek/deepseek-v3.2")
+        self.assertIsNotNone(find_model_display("deepseek/deepseek-chat-v3.2"))
         self.assertIsNotNone(find_model_display("google/gemini-2.5-flash"))
         self.assertIsNone(find_model_display("no/such-model"))
 

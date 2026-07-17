@@ -38,6 +38,11 @@ class ReportRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list)
     tool_executions: list[ToolExecutionResponse] = Field(default_factory=list)
     title: str = Field(default="Relatório de Pentest", max_length=200)
+    surface_target: str = Field(
+        default="",
+        max_length=253,
+        description="Alvo do Attack Surface — usa findings confirmados no relatório comercial",
+    )
 
 
 class AutonomousRequest(BaseModel):
@@ -46,6 +51,11 @@ class AutonomousRequest(BaseModel):
     model: str = Field(default="", max_length=128)
     fallback_model: str = Field(default="", max_length=128)
     mission_id: str = Field(default="", max_length=64)
+    risk_profile: str = Field(
+        default="",
+        max_length=32,
+        description="passive | safe-active | full (vazio = RISK_PROFILE do .env)",
+    )
 
 
 class LoginRequest(BaseModel):

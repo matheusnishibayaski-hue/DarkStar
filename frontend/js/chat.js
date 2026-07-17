@@ -44,6 +44,26 @@ export function initChat(context) {
   ctx = context;
 }
 
+/** Extrai hostname provável da sessão para amarrar o relatório ao Attack Surface. */
+function inferSurfaceTarget(session, history, toolExecutions) {
+  const fromSession =
+    session?.target || session?.surfaceTarget || session?.reconTarget || "";
+  if (fromSession) return String(fromSession).trim();
+
+  const texts = [
+    ...(history || []).map((m) => m.content || ""),
+    ...(toolExecutions || []).map((e) => e.command || ""),
+  ].join("\n");
+
+  const urlMatch = texts.match(/https?:\/\/([a-z0-9][-a-z0-9.]+[a-z0-9])/i);
+  if (urlMatch) return urlMatch[1].toLowerCase();
+
+  const hostMatch = texts.match(
+    /\b([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\.[a-z]{2,})\b/i
+  );
+  return hostMatch ? hostMatch[1].toLowerCase() : "";
+}
+
 function setBusy(busy) {
   setLoading(busy);
   if (ctx.input) ctx.input.disabled = busy;
@@ -71,13 +91,16 @@ export async function downloadReport() {
   ctx.updateStatusBar?.();
 
   try {
+    const history = collectSessionHistory(session);
+    const surfaceTarget = inferSurfaceTarget(session, history, toolExecutions);
     const res = await apiFetch("/api/generate-report", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        history: collectSessionHistory(session),
+        history,
         tool_executions: toolExecutions,
         title: `Relatório — ${sessionTitle(session)}`,
+        surface_target: surfaceTarget,
       }),
     });
 

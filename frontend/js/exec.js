@@ -150,7 +150,7 @@ export function buildExecBlock(t) {
     logBtn.href = `/api/logs/${t.log_file_id}`;
     logBtn.target = "_blank";
     logBtn.rel = "noopener";
-    logBtn.textContent = `Log #${t.log_file_id}`;
+    logBtn.textContent = `log ${t.log_file_id.slice(0, 8)}`;
     actions.appendChild(logBtn);
   }
 

@@ -21,6 +21,15 @@ def api_files_list():
     return {"files": list_output_files(), "root": "/tools/output"}
 
 
+@router.delete("/files/{file_path:path}")
+def api_files_delete(file_path: str):
+    from backend.executor.data_cleanup import delete_output_file
+
+    if not delete_output_file(file_path):
+        raise HTTPException(status_code=404, detail="Arquivo não encontrado.")
+    return {"deleted": True, "file": file_path}
+
+
 @router.get("/files/{file_path:path}")
 def api_files_download(file_path: str):
     path = resolve_output_file(file_path)

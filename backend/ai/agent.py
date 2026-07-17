@@ -102,23 +102,57 @@ EmitFn = Callable[[str, dict], None]
 
 def _apply_recon_context(user_message: str, history: list[dict]) -> tuple[str, list[str]]:
     from backend.executor.recon_db import is_recon_target
+    from backend.executor.surface import build_surface_context
 
     history_text = " ".join(m.get("content", "") for m in history if m.get("role") == "user")
     targets = [t for t in extract_targets(user_message, history_text) if is_recon_target(t)]
-    context = build_recon_context(targets)
-    if not context:
+    parts: list[str] = []
+    recon = build_recon_context(targets)
+    if recon:
+        parts.append(recon)
+    for target in targets[:3]:
+        surface = build_surface_context(target)
+        if surface:
+            parts.append(surface)
+    if not parts:
         return user_message, targets
-    return f"{context}\n\n{user_message}", targets
+    return f"{chr(10).join(parts)}\n\n{user_message}", targets
 
 
 def _persist_recon(result: ExecutionResult, session_targets: list[str]) -> None:
+    from backend.ai.findings import auto_verify_from_execution
     from backend.executor.recon_db import extract_targets, is_recon_target
+    from backend.executor.surface import update_surface_from_execution
 
-    if not result.success or result.blocked:
-        return
     command_targets = [t for t in extract_targets(result.command) if is_recon_target(t)]
     targets = command_targets or [t for t in session_targets if is_recon_target(t)]
     if not targets:
+        return
+
+    # Attack Surface Graph: atualiza mesmo em falha (hipóteses / tools_run)
+    if not result.blocked:
+        for target in targets:
+            update_surface_from_execution(
+                target,
+                command=result.command,
+                tool=result.tool,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                success=result.success,
+                blocked=result.blocked,
+                exit_code=result.exit_code,
+            )
+            if result.success:
+                auto_verify_from_execution(
+                    target,
+                    command=result.command,
+                    tool=result.tool,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    success=True,
+                )
+
+    if not result.success or result.blocked:
         return
     patch = extract_recon_from_output(result.stdout, result.stderr, result.tool)
     if len(patch) <= 2:

@@ -116,3 +116,35 @@ def list_events(
 
     events.sort(key=lambda e: e.get("ts", ""), reverse=True)
     return events[:limit]
+
+
+def remove_entries_by_log_id(log_id: str) -> int:
+    """Remove linhas de auditoria que referenciam o log_file_id."""
+    if not log_id or not log_id.isalnum():
+        return 0
+    removed = 0
+    for path in sorted(AUDIT_DIR.glob("events-*.jsonl")):
+        if not path.is_file():
+            continue
+        kept: list[str] = []
+        file_removed = 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                kept.append(raw)
+                continue
+            if str(obj.get("log_file_id") or "") == log_id:
+                file_removed += 1
+            else:
+                kept.append(raw)
+        if file_removed:
+            path.write_text(
+                ("\n".join(kept) + "\n") if kept else "",
+                encoding="utf-8",
+            )
+            removed += file_removed
+    return removed

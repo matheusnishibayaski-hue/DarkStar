@@ -87,6 +87,36 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
             reason=f"Playbook {playbook_id} passo {i}",
             execution_id=None,
         )
+        # Alimenta Attack Surface Graph + auto-verify leve
+        try:
+            from backend.ai.findings import auto_verify_from_execution
+            from backend.executor.surface import (
+                get_or_create_surface,
+                update_surface_from_execution,
+            )
+
+            get_or_create_surface(target, mission_id=mission_id or "")
+            update_surface_from_execution(
+                target,
+                command=result.command,
+                tool=tool,
+                stdout=result.stdout or "",
+                stderr=result.stderr or "",
+                success=bool(result.success),
+                blocked=bool(result.blocked),
+                exit_code=int(result.exit_code or 0),
+            )
+            auto_verify_from_execution(
+                target,
+                command=result.command,
+                tool=tool,
+                stdout=result.stdout or "",
+                stderr=result.stderr or "",
+                success=bool(result.success),
+            )
+        except (OSError, ValueError, TypeError, KeyError):
+            pass
+
         results.append(
             {
                 "step": i,
@@ -101,10 +131,32 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None) -
         if not result.success or result.blocked:
             break
 
+    verify_summary: dict[str, Any] = {}
+    # Pipeline PoC ao final (se houve passos OK)
+    if any(r.get("success") for r in results):
+        try:
+            from backend.ai.verify import run_verification_pipeline
+            from backend.config import VERIFY_MAX_FINDINGS
+
+            vr = run_verification_pipeline(
+                target,
+                max_findings=VERIFY_MAX_FINDINGS,
+                mission_id=mission_id,
+            )
+            verify_summary = {
+                "confirmed": vr.confirmed,
+                "false_positive": vr.false_positive,
+                "discarded": vr.discarded,
+                "verify_commands_run": vr.verify_commands_run,
+            }
+        except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+            verify_summary = {}
+
     return {
         "playbook_id": playbook_id,
         "target": target,
         "mission_id": mission_id or "",
         "steps_run": len(results),
         "results": results,
+        "verify": verify_summary,
     }

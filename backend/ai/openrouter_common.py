@@ -45,7 +45,7 @@ def openrouter_error_message(error: str) -> str:
             "O que fazer:\n"
             "• Aguarde alguns minutos se enviou muitas mensagens seguidas\n"
             "• Verifique saldo/cota em https://openrouter.ai/\n"
-            "• O fallback tentará deepseek/deepseek-chat-v3.2 automaticamente\n"
+            "• O fallback tentará deepseek/deepseek-v3.2 automaticamente\n"
             "• Cada comando no chat gera 2–6 chamadas à API (ferramentas + resposta)"
         )
     return f"Erro ao chamar OpenRouter: {error}"

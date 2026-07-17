@@ -1,4 +1,4 @@
-import { MODEL_STORAGE_KEY, QUICK_OBJECTIVES } from "./constants.js";
+import { MODEL_STORAGE_KEY } from "./constants.js";
 import { apiFetch } from "./api.js";
 import { escapeHtml } from "./exec.js";
 import { getActiveSession, saveStore } from "./sessions.js";
@@ -11,6 +11,29 @@ export let toolCategories = [];
 export let activeToolCategory = "all";
 export let modelCatalog = null;
 export let selectedModel = null;
+
+const RETIRED_MODEL_ALIASES = {
+  "deepseek/deepseek-chat-v3.2": "deepseek/deepseek-v3.2",
+};
+
+function reconcileSavedModel(saved) {
+  if (!saved?.id || !modelCatalog?.tiers) return saved;
+  const mappedId = RETIRED_MODEL_ALIASES[saved.id] || saved.id;
+  for (const tier of modelCatalog.tiers) {
+    const found = tier.models.find((m) => m.id === mappedId);
+    if (found) {
+      return {
+        id: found.id,
+        name: found.name,
+        fallback: found.fallback,
+        provider: found.provider,
+        tier_id: tier.id,
+        tier_label: tier.label,
+      };
+    }
+  }
+  return mappedId === saved.id ? saved : { ...saved, id: mappedId };
+}
 
 export function initToolsPanel(context) {
   ctx = context;
@@ -186,12 +209,14 @@ export async function loadModels() {
     modelCatalog = await res.json();
     const saved = loadSelectedModel();
     if (saved?.id) {
-      const tier = resolveTierForModel(saved.id, saved.tier_id);
+      const reconciled = reconcileSavedModel(saved);
+      const tier = resolveTierForModel(reconciled.id, reconciled.tier_id);
       selectedModel = {
-        ...saved,
-        tier_id: tier?.id || saved.tier_id,
-        tier_label: tier?.label || saved.tier_label,
+        ...reconciled,
+        tier_id: tier?.id || reconciled.tier_id,
+        tier_label: tier?.label || reconciled.tier_label,
       };
+      if (reconciled.id !== saved.id) saveSelectedModel(selectedModel);
     } else {
       const defaultId = modelCatalog.default_model;
       for (const tier of modelCatalog.tiers) {
@@ -348,31 +373,8 @@ export async function loadTools() {
   return false;
 }
 
-export function renderQuickObjectives() {
-  const { quickObjectivesEl, autopilotObjective } = ctx;
-  if (!quickObjectivesEl) return;
-
-  quickObjectivesEl.innerHTML = "";
-  const label = document.createElement("span");
-  label.className = "quick-obj-label";
-  label.textContent = "objetivos rápidos:";
-  quickObjectivesEl.appendChild(label);
-
-  for (const obj of QUICK_OBJECTIVES) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "quick-obj-btn";
-    btn.textContent = obj.length > 55 ? obj.slice(0, 55) + "…" : obj;
-    btn.title = obj;
-    btn.addEventListener("click", () => {
-      if (autopilotObjective) {
-        autopilotObjective.value = obj;
-        autopilotObjective.focus();
-      }
-    });
-    quickObjectivesEl.appendChild(btn);
-  }
-}
+/** @deprecated Objetivos rápidos agora são renderizados em autopilot.js */
+export function renderQuickObjectives() {}
 
 export async function openToolsPanel() {
   const { toolSearch } = ctx;

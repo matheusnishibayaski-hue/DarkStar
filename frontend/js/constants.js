@@ -22,7 +22,7 @@ export const HELP_HTML = `
 <section class="help-section">
   <h3>Navegação</h3>
   <ul class="help-list">
-    <li><kbd>M</kbd> ou <kbd>☰</kbd> — abrir/fechar menu lateral</li>
+    <li><kbd>M</kbd> ou <kbd>☰</kbd> — recolher/expandir barra lateral</li>
     <li>Sidebar — alternar entre conversas salvas</li>
     <li><kbd>Esc</kbd> — fechar painéis</li>
     <li><kbd>snd</kbd> na barra de status — ligar/desligar efeitos sonoros CRT</li>
@@ -40,13 +40,13 @@ export const HELP_HTML = `
   <p class="help-note" style="margin-bottom:0.5rem">Use <kbd>Alt</kbd> + tecla — evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega, etc.)</p>
   <ul class="help-list">
     <li><kbd>Alt</kbd>+<kbd>T</kbd> — ferramentas</li>
-    <li><kbd>Alt</kbd>+<kbd>P</kbd> — Auto-Pilot</li>
+    <li><kbd>Alt</kbd>+<kbd>P</kbd> — piloto automático</li>
     <li><kbd>Alt</kbd>+<kbd>F</kbd> — artefatos (/tools/output)</li>
     <li><kbd>Alt</kbd>+<kbd>I</kbd> — intel (recon + ameaças)</li>
-    <li><kbd>Alt</kbd>+<kbd>C</kbd> — intel · aba threats</li>
+    <li><kbd>Alt</kbd>+<kbd>C</kbd> — mapa mundial de ameaças</li>
     <li><kbd>Alt</kbd>+<kbd>R</kbd> — relatório</li>
     <li><kbd>Alt</kbd>+<kbd>N</kbd> — novo chat</li>
-    <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — esta ajuda</li>
+    <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — tour guiado (ajuda interativa)</li>
     <li><kbd>Alt</kbd>+<kbd>K</kbd> ou <kbd>Ctrl</kbd>+<kbd>K</kbd> — focar prompt</li>
   </ul>
 </section>
@@ -57,7 +57,7 @@ export const HELP_HTML = `
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — Auto-Pilot</li>
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> — relatório (export)</li>
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> — novo chat</li>
-    <li><kbd>?</kbd> — ajuda (fora de campos de texto)</li>
+    <li><kbd>?</kbd> — tour guiado (fora de campos de texto)</li>
   </ul>
 </section>
 <section class="help-section">
@@ -80,7 +80,7 @@ export const HELP_HTML = `
     <li><strong>Chat</strong> — a IA executa ferramentas Kali via linguagem natural</li>
     <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
     <li><strong>pilot</strong> — missão autônoma com alvo + objetivo</li>
-    <li><strong>intel</strong> — recon local (tabela expansível) + mapa Kaspersky (<em>Alt+C</em> → threats)</li>
+    <li><strong>intel</strong> — alvos, achados e relatórios · <strong>mapa</strong> é modal separado (<em>Alt+C</em>)</li>
     <li><strong>files</strong> — baixar artefatos salvos em <code>/tools/output</code></li>
     <li><strong>report</strong> — relatório Markdown da sessão</li>
     <li><strong>cancel</strong> — interrompe execução em andamento</li>

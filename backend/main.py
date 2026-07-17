@@ -11,7 +11,7 @@ from backend.config import CORS_ORIGINS
 from backend.deps import APP_VERSION
 from backend.middleware import api_token_guard, rate_limit_guard, request_context_guard
 from backend.observability import configure_logging
-from backend.routes import audit, auth, autonomous, chat, files, playbooks, system
+from backend.routes import audit, auth, autonomous, chat, data, engagements, files, playbooks, system
 
 configure_logging()
 
@@ -34,8 +34,10 @@ app.middleware("http")(api_token_guard)
 
 app.include_router(system.router)
 app.include_router(files.router)
+app.include_router(data.router)
 app.include_router(audit.router)
 app.include_router(playbooks.router)
+app.include_router(engagements.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(autonomous.router)

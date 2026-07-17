@@ -1,6 +1,7 @@
-/** CiberAmeaças — widget Kaspersky (aba dentro de /sys/intel). */
+/** Mapa de ameaças Kaspersky — modal próprio (não mistura com Intel). */
 
 import { escapeHtml } from "./exec.js";
+import { openOverlay, closeOverlay } from "./ui.js";
 
 const WIDGET_URL = "https://cybermap.kaspersky.com/pt/widget/dynamic/dark";
 const FULL_MAP_URL = "https://cybermap.kaspersky.com/pt";
@@ -24,7 +25,11 @@ let loadingTimer = null;
 export function initThreatIntel(context) {
   ctx = context;
   renderLegend();
-  bindControls();
+  ctx.threatModeLive?.addEventListener("click", () => setViewMode("live"));
+  ctx.threatModeGlobe?.addEventListener("click", () => setViewMode("globe"));
+  ctx.threatOpenFull?.addEventListener("click", () => {
+    window.open(FULL_MAP_URL, "_blank", "noopener,noreferrer");
+  });
 }
 
 function hideLoading() {
@@ -44,27 +49,18 @@ function showLoading() {
 function renderLegend() {
   const { threatLegendEl } = ctx;
   if (!threatLegendEl) return;
-
-  threatLegendEl.innerHTML = THREAT_TYPES.map((t) => `
+  threatLegendEl.innerHTML = THREAT_TYPES.map(
+    (t) => `
     <div class="threat-legend-item" title="${escapeHtml(t.desc)}">
       <span class="threat-code">${t.code}</span>
       <span class="threat-label">${escapeHtml(t.label)}</span>
-    </div>
-  `).join("");
-}
-
-function bindControls() {
-  ctx.threatModeLive?.addEventListener("click", () => setViewMode("live"));
-  ctx.threatModeGlobe?.addEventListener("click", () => setViewMode("globe"));
-  ctx.threatOpenFull?.addEventListener("click", () => {
-    window.open(FULL_MAP_URL, "_blank", "noopener,noreferrer");
-  });
+    </div>`
+  ).join("");
 }
 
 function setViewMode(mode) {
-  if (viewMode === mode) return;
   viewMode = mode;
-  ctx.intelPanel?.classList.toggle("threatmap-view-globe", mode === "globe");
+  ctx.threatPanel?.classList.toggle("threatmap-view-globe", mode === "globe");
   ctx.threatModeLive?.classList.toggle("active", mode === "live");
   ctx.threatModeGlobe?.classList.toggle("active", mode === "globe");
 }
@@ -78,7 +74,18 @@ function loadIframe() {
   threatFrame.src = WIDGET_URL;
 }
 
+/** @deprecated use openThreatsPanel */
 export function activateThreatsTab() {
+  openThreatsPanel();
+}
+
+export function openThreatsPanel() {
+  if (!ctx.overlayThreats) return;
+  openOverlay(ctx.overlayThreats);
   setViewMode("live");
   loadIframe();
+}
+
+export function closeThreatsPanel() {
+  if (ctx.overlayThreats) closeOverlay(ctx.overlayThreats);
 }

@@ -17,9 +17,26 @@ _DOMAIN_RE = re.compile(
     re.I,
 )
 _IP_RE = re.compile(r"\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d?\d)\b")
-_PORT_RE = re.compile(r"(\d+/tcp\s+open\s+\S+(?:\s+\S+)*)", re.I)
+# Só a linha do serviço — não engolir blocos de script nmap (\s atravessa \n)
+_PORT_RE = re.compile(
+    r"^(\d{1,5}/tcp[ \t]+open(?:[ \t]+\S+){0,4})",
+    re.I | re.M,
+)
 _CVE_RE = re.compile(r"CVE-\d{4}-\d+", re.I)
 _SEV_RE = re.compile(r"\[(critical|high|medium|low|info)\][^\n]*", re.I)
+
+# Extensões / TLDs falsos vindos de HTML/JS (ex.: bootstrap.min.css)
+_FILELIKE_HOST_RE = re.compile(
+    r"\.(css|js|mjs|cjs|png|jpe?g|gif|ico|svg|webp|woff2?|ttf|eot|map|"
+    r"asp|aspx|php|jsp|html?|json|xml|txt|pdf|zip|gz|min|crt|pem|key|"
+    r"config|bak|old|dist|bundle)$",
+    re.I,
+)
+_JS_NOISE_RE = re.compile(
+    r"^(window|document|event|element|options|that|elem|alerta|currentform|"
+    r"phone|target|jquery|bootstrap|moment|parsley|bootbox|respond)\b",
+    re.I,
+)
 
 # Domínios genéricos / exemplos — não persistir recon
 IGNORED_RECON_TARGETS = frozenset(
@@ -36,6 +53,11 @@ IGNORED_RECON_TARGETS = frozenset(
         "aistudio.google.com",
         "docker.com",
         "wikipedia.org",
+        "nmap.org",
+        "maxcdn.com",
+        "oss.maxcdn.com",
+        "fontawesome.com",
+        "pro.fontawesome.com",
     }
 )
 
@@ -47,6 +69,51 @@ def is_recon_target(alvo: str) -> bool:
     if normalized in IGNORED_RECON_TARGETS:
         return False
     if normalized.endswith(".local"):
+        return False
+    if _FILELIKE_HOST_RE.search(normalized):
+        return False
+    if _JS_NOISE_RE.match(normalized):
+        return False
+    # IP puro ok
+    if _IP_RE.fullmatch(normalized):
+        return True
+    parts = normalized.split(".")
+    if len(parts) < 2:
+        return False
+    tld = parts[-1]
+    # TLD de lixo JS / propriedades DOM
+    if tld in {
+        "href",
+        "length",
+        "replace",
+        "value",
+        "init",
+        "show",
+        "find",
+        "mask",
+        "submit",
+        "confirm",
+        "modal",
+        "change",
+        "date",
+        "preventdefault",
+        "relatedtarget",
+        "currenttarget",
+        "srcelement",
+        "unmask",
+        "selector",
+        "attr",
+    }:
+        return False
+    if normalized in {"asp.net", "web.config", "web.config.bak"}:
+        return False
+    if len(tld) < 2 or not tld.isalpha():
+        return False
+    # e.date / dp.change — rótulo curto demais para hostname real
+    if len(parts[0]) <= 2 and parts[0].isalpha() and len(parts) == 2:
+        return False
+    # lixo tipo 22masp.net vindo de parsing HTML
+    if tld == "net" and len(parts) == 2 and re.search(r"\d", parts[0]):
         return False
     return True
 
@@ -186,11 +253,65 @@ def build_recon_context(targets: list[str]) -> str:
     return "\n\n".join(blocks)
 
 
+def sync_recon_counts_from_surface(target: str, surface: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Espelha findings/ports do Attack Surface no cache recon (fonte de verdade = surface)."""
+    if surface is None:
+        try:
+            from backend.executor.surface import load_surface
+
+            surface = load_surface(target)
+        except Exception:
+            surface = {}
+    if not surface:
+        return get_recon_data(target)
+
+    findings = surface.get("findings") or []
+    vulns = [
+        f"[{f.get('severity') or 'info'}] {f.get('title') or ''}".strip()
+        for f in findings
+        if f.get("title")
+    ]
+    cves = list(
+        dict.fromkeys(
+            str(f.get("cve")).upper() for f in findings if f.get("cve")
+        )
+    )
+    ports = []
+    for p in surface.get("ports") or []:
+        port = p.get("port")
+        if not port:
+            continue
+        svc = p.get("service") or p.get("product") or ""
+        ports.append(f"{port}/tcp open {svc}".strip())
+
+    path = _path_for(target)
+    data = get_recon_data(target) or {"target": normalize_target(target)}
+    data["target"] = normalize_target(target)
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    if vulns:
+        data["vulnerabilities"] = vulns[:50]
+    if cves:
+        data["cves"] = cves
+    if ports:
+        # Substitui blobs corrompidos de nmap (scripts colados na linha da porta)
+        data["open_ports"] = ports[:80]
+    if surface.get("tools_run"):
+        data["last_tool"] = (surface.get("tools_run") or [""])[-1]
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return data
+
+
 def list_recon_summaries() -> list[dict[str, Any]]:
-    """Lista alvos com recon persistido (não expirado)."""
+    """Lista alvos com recon + contagens do Attack Surface (achados reais)."""
     summaries: list[dict[str, Any]] = []
     if not RECON_DIR.is_dir():
         return summaries
+
+    try:
+        from backend.executor.surface import load_surface, repair_surface_from_stored_output
+    except Exception:
+        load_surface = None  # type: ignore
+        repair_surface_from_stored_output = None  # type: ignore
 
     for path in RECON_DIR.glob("*.json"):
         try:
@@ -204,14 +325,42 @@ def list_recon_summaries() -> list[dict[str, Any]]:
                 pass
             continue
         target = str(data.get("target") or path.stem)
+
+        surface = {}
+        if load_surface:
+            if repair_surface_from_stored_output:
+                try:
+                    repair_surface_from_stored_output(target)
+                except Exception:
+                    pass
+            surface = load_surface(target) or {}
+            if surface.get("findings") and not data.get("vulnerabilities"):
+                data = sync_recon_counts_from_surface(target, surface) or data
+
+        findings = surface.get("findings") or []
+        ports_count = len(surface.get("ports") or []) or len(data.get("open_ports") or [])
+        cves_count = len(
+            [f for f in findings if f.get("cve")]
+        ) or len(data.get("cves") or [])
+        vulns_count = len(findings) or len(data.get("vulnerabilities") or [])
+
         summaries.append(
             {
                 "target": target,
-                "updated_at": data.get("updated_at"),
-                "last_tool": data.get("last_tool"),
-                "open_ports_count": len(data.get("open_ports") or []),
-                "cves_count": len(data.get("cves") or []),
-                "vulnerabilities_count": len(data.get("vulnerabilities") or []),
+                "updated_at": surface.get("updated_at") or data.get("updated_at"),
+                "last_tool": data.get("last_tool")
+                or ((surface.get("tools_run") or [None])[-1] if surface else None),
+                "open_ports_count": ports_count,
+                "cves_count": cves_count,
+                "vulnerabilities_count": vulns_count,
+                "findings_confirmed": sum(
+                    1 for f in findings if f.get("status") == "confirmed"
+                ),
+                "findings_candidates": sum(
+                    1 for f in findings if f.get("status") == "candidate"
+                ),
+                "commands_run": surface.get("commands_run") or 0,
+                "has_surface": bool(surface),
             }
         )
 

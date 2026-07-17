@@ -42,3 +42,49 @@ export function runPlaybook(id, body) {
 export function getLog(logId) {
   return apiFetch(`/api/logs/${logId}`);
 }
+
+export function listSurface() {
+  return apiFetch("/api/surface");
+}
+
+export function getSurface(target) {
+  return apiFetch(`/api/surface/${encodeURIComponent(target)}`);
+}
+
+export function getEngagementTriage(target) {
+  return apiFetch(`/api/engagements/${encodeURIComponent(target)}/triage`);
+}
+
+export function getEngagement(target) {
+  return apiFetch(`/api/engagements/${encodeURIComponent(target)}`);
+}
+
+export function patchEngagement(target, body) {
+  return apiFetch(`/api/engagements/${encodeURIComponent(target)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+export function patchFindingStatus(target, findingId, body) {
+  return apiFetch(
+    `/api/engagements/${encodeURIComponent(target)}/findings/${encodeURIComponent(findingId)}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+}
+
+export function verifyEngagement(target, maxFindings) {
+  const q = maxFindings != null ? `?max_findings=${maxFindings}` : "";
+  return apiFetch(`/api/engagements/${encodeURIComponent(target)}/verify${q}`, {
+    method: "POST",
+  });
+}
+
+export function getEngagementReportUrl(target, format = "md") {
+  return `/api/engagements/${encodeURIComponent(target)}/report?format=${format}`;
+}

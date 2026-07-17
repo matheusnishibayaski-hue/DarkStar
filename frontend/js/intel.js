@@ -1,82 +1,125 @@
-/** Painel unificado /sys/intel — Recon + Threats + Timeline + Audit. */
+/** Modal Intel — hub de alvos + painéis secundários (logs/audit/limpar). Sem mapa. */
 
 import { openOverlay, closeOverlay } from "./ui.js";
-import { initReconIntel, loadReconTab } from "./recon.js";
-import { initThreatIntel, activateThreatsTab } from "./threatmap.js";
+import { initTargetsHub, loadHub, openTargetInHub } from "./targets-hub.js";
 import { initTimeline, renderTimeline } from "./timeline.js";
 import { initAuditTab, loadAuditTab } from "./audit-tab.js";
+import { initDataTab, loadDataTab } from "./data-admin.js";
+import { initLogsPanel, loadLogsTab } from "./logs-panel.js";
 
 let ctx = {};
 
-const TABS = ["recon", "threats", "timeline", "audit"];
+const SECONDARY = ["logs", "audit", "data", "timeline"];
 
 export function initIntelPanel(context) {
   ctx = context;
 
-  initReconIntel({
-    reconTableEl: ctx.reconTableEl,
-    reconMetaEl: ctx.reconMetaEl,
-    reconSearch: ctx.reconSearch,
-    reconSort: ctx.reconSort,
-    reconRefresh: ctx.reconRefresh,
+  initTargetsHub({
+    hubListEl: ctx.hubListEl,
+    hubDetailEl: ctx.hubDetailEl,
+    hubMetaEl: ctx.hubMetaEl,
+    hubSearch: ctx.hubSearch,
+    hubRefresh: ctx.hubRefresh,
+    hubVerify: ctx.hubVerify,
+    hubReportMd: ctx.hubReportMd,
+    hubReportHtml: ctx.hubReportHtml,
+    hubReportZip: ctx.hubReportZip,
+    hubFiles: ctx.hubFiles,
+    hubChat: ctx.hubChat,
+    hubDelete: ctx.hubDelete,
     input: ctx.input,
+    toast: ctx.toast,
     onClose: () => closeIntel(),
     onOpenFiles: (filter) => ctx.onOpenFiles?.(filter),
-  });
-
-  initThreatIntel({
-    intelPanel: ctx.intelPanel,
-    threatLegendEl: ctx.threatLegendEl,
-    threatFrame: ctx.threatFrame,
-    threatLoadingEl: ctx.threatLoadingEl,
-    threatModeLive: ctx.threatModeLive,
-    threatModeGlobe: ctx.threatModeGlobe,
-    threatOpenFull: ctx.threatOpenFull,
+    onDeleted: () => ctx.onDataChanged?.(),
   });
 
   initTimeline({
     timelineEl: ctx.timelineEl,
     onOpenFiles: () => ctx.onOpenFiles?.(),
+    onOpenLogs: () => showSecondary("logs"),
+    toast: ctx.toast,
   });
 
   initAuditTab({
     auditTableEl: ctx.auditTableEl,
     auditMetaEl: ctx.auditMetaEl,
     auditRefresh: ctx.auditRefresh,
+    auditPurge: ctx.auditPurge,
+    toast: ctx.toast,
+    onAuditDeleted: () => ctx.onDataChanged?.(),
   });
 
-  for (const tab of TABS) {
-    ctx[`tab${capitalize(tab)}`]?.addEventListener("click", () => switchTab(tab));
-  }
-}
+  initLogsPanel({
+    logsListEl: ctx.logsListEl,
+    logsMetaEl: ctx.logsMetaEl,
+    logsRefresh: ctx.logsRefresh,
+    logsSearch: ctx.logsSearch,
+    toast: ctx.toast,
+  });
 
-function capitalize(s) {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  initDataTab({
+    dataBodyEl: ctx.dataBodyEl,
+    dataMetaEl: ctx.dataMetaEl,
+    dataRefresh: ctx.dataRefresh,
+    toast: ctx.toast,
+    onDataChanged: () => ctx.onDataChanged?.(),
+  });
+
+  ctx.hubBack?.addEventListener("click", () => showHub());
+  document.querySelectorAll("[data-intel-more]").forEach((btn) => {
+    btn.addEventListener("click", () => showSecondary(btn.getAttribute("data-intel-more")));
+  });
 }
 
 function closeIntel() {
   if (ctx.overlayIntel) closeOverlay(ctx.overlayIntel);
 }
 
-function switchTab(tab) {
-  for (const t of TABS) {
-    const btn = ctx[`tab${capitalize(t)}`];
-    const pane = ctx[`pane${capitalize(t)}`];
-    const on = t === tab;
-    btn?.classList.toggle("active", on);
-    btn?.setAttribute("aria-selected", on ? "true" : "false");
-    pane?.classList.toggle("hidden", !on);
-    pane?.toggleAttribute("hidden", !on);
-  }
-
-  if (tab === "recon") loadReconTab();
-  if (tab === "threats") activateThreatsTab();
-  if (tab === "timeline") renderTimeline();
-  if (tab === "audit") loadAuditTab();
+function showHub() {
+  ctx.paneHub?.classList.remove("hidden");
+  ctx.paneHub?.removeAttribute("hidden");
+  SECONDARY.forEach((id) => {
+    const pane = ctx[`pane${capitalize(id)}`];
+    pane?.classList.add("hidden");
+    pane?.setAttribute("hidden", "");
+  });
+  ctx.hubBack?.setAttribute("hidden", "");
+  if (ctx.intelSubtitle) ctx.intelSubtitle.textContent = "escolha um alvo · verifique · baixe o relatório";
+  loadHub();
 }
 
-export function openIntelPanel(tab = "recon") {
+function showSecondary(id) {
+  ctx.paneHub?.classList.add("hidden");
+  ctx.paneHub?.setAttribute("hidden", "");
+  SECONDARY.forEach((sid) => {
+    const pane = ctx[`pane${capitalize(sid)}`];
+    const on = sid === id;
+    pane?.classList.toggle("hidden", !on);
+    pane?.toggleAttribute("hidden", !on);
+  });
+  ctx.hubBack?.removeAttribute("hidden");
+  if (ctx.intelSubtitle) {
+    const labels = { logs: "logs", audit: "auditoria", data: "limpar dados", timeline: "timeline" };
+    ctx.intelSubtitle.textContent = labels[id] || id;
+  }
+  if (id === "logs") loadLogsTab();
+  if (id === "audit") loadAuditTab();
+  if (id === "data") loadDataTab();
+  if (id === "timeline") renderTimeline();
+}
+
+function capitalize(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+export function openIntelPanel(tab = "hub", target = "") {
   if (!ctx.overlayIntel) return;
   openOverlay(ctx.overlayIntel);
-  switchTab(tab);
+  if (SECONDARY.includes(tab)) {
+    showSecondary(tab);
+  } else {
+    showHub();
+    if (target) openTargetInHub(target);
+  }
 }

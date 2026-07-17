@@ -23,13 +23,35 @@ class TestAgentGaps(unittest.TestCase):
     def test_persist_recon_early_exits(self):
         from backend.ai import agent as ag
 
-        blocked = MagicMock(success=True, blocked=True)
+        blocked = MagicMock(
+            success=True,
+            blocked=True,
+            command="nmap a.com",
+            stdout="",
+            stderr="",
+            tool="nmap",
+            exit_code=-1,
+        )
         ag._persist_recon(blocked, ["a.com"])
-        fail = MagicMock(success=False, blocked=False)
+        fail = MagicMock(
+            success=False,
+            blocked=False,
+            command="nmap a.com",
+            stdout="",
+            stderr="fail",
+            tool="nmap",
+            exit_code=1,
+        )
         ag._persist_recon(fail, ["a.com"])
 
         ok = MagicMock(
-            success=True, blocked=False, command="nmap", stdout="x", stderr="", tool="nmap"
+            success=True,
+            blocked=False,
+            command="nmap",
+            stdout="x",
+            stderr="",
+            tool="nmap",
+            exit_code=0,
         )
         with patch(
             "backend.executor.recon_db.extract_targets", return_value=[]

@@ -67,7 +67,22 @@ def api_generate_report(req: ReportRequest):
     try:
         history = [{"role": m.role, "content": m.content} for m in req.history]
         executions = [e.model_dump() for e in req.tool_executions]
-        markdown = generate_report(history, executions, title=req.title)
+        target = (req.surface_target or "").strip()
+        if not target:
+            # Inferir alvo a partir do histórico / executions
+            from backend.executor.recon_db import extract_targets, is_recon_target
+
+            texts = [m.content for m in req.history] + [
+                e.command for e in req.tool_executions
+            ]
+            found = [t for t in extract_targets(*texts) if is_recon_target(t)]
+            target = found[0] if found else ""
+        markdown = generate_report(
+            history,
+            executions,
+            title=req.title,
+            surface_target=target or None,
+        )
         filename = "relatorio-pentest.md"
         return Response(
             content=markdown,

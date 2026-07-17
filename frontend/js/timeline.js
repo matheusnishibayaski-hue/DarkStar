@@ -1,7 +1,7 @@
 /** Timeline de execuções da sessão ativa. */
 
-import { collectSessionExecutions, getActiveSession } from "./sessions.js";
 import { escapeHtml } from "./exec.js";
+import { collectSessionExecutions, getActiveSession } from "./sessions.js";
 
 let ctx = {};
 
@@ -55,13 +55,17 @@ export function renderTimeline() {
         <code class="timeline-cmd">${escapeHtml(cmd)}</code>
         ${ex.reason ? `<p class="timeline-reason">${escapeHtml(ex.reason)}</p>` : ""}
         <div class="timeline-actions">
-          ${logId ? `<a class="timeline-link" href="/api/logs/${encodeURIComponent(logId)}" target="_blank" rel="noopener">log</a>` : ""}
+          ${logId ? `<a class="timeline-link" href="/api/logs/${encodeURIComponent(logId)}" target="_blank" rel="noopener">abrir log</a>` : ""}
+          ${logId ? `<button type="button" class="timeline-link-btn" data-open-logs>gerenciar</button>` : ""}
           <button type="button" class="timeline-link-btn" data-open-files>artefatos</button>
         </div>
       </div>
     `;
     item.querySelector("[data-open-files]")?.addEventListener("click", () => {
       ctx.onOpenFiles?.();
+    });
+    item.querySelector("[data-open-logs]")?.addEventListener("click", () => {
+      ctx.onOpenLogs?.();
     });
     list.appendChild(item);
   });

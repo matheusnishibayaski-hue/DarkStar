@@ -59,6 +59,12 @@ export function sessionTitle(session) {
   return "novo chat";
 }
 
+function sessionInitial(session) {
+  const title = sessionTitle(session).trim();
+  if (!title) return "?";
+  return title[0].toUpperCase();
+}
+
 export function formatRelativeTime(ts) {
   const diff = Date.now() - ts;
   const min = Math.floor(diff / 60000);
@@ -125,13 +131,16 @@ export function renderSessions() {
 
   const sorted = [...store.sessions].sort((a, b) => b.updatedAt - a.updatedAt);
   for (const s of sorted) {
+    const title = sessionTitle(s);
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = `history-item${s.id === store.activeId ? " active" : ""}`;
+    btn.title = title;
     const execCount = collectSessionExecutions(s).length;
     btn.innerHTML = `
+      <span class="history-item-icon" aria-hidden="true">${escapeHtml(sessionInitial(s))}</span>
       <span class="history-item-body">
-        <span class="history-item-title">${escapeHtml(sessionTitle(s))}</span>
+        <span class="history-item-title">${escapeHtml(title)}</span>
         <span class="history-item-meta">${formatRelativeTime(s.updatedAt)}${execCount ? ` · ${execCount} exec` : ""}</span>
       </span>
       <span class="history-item-del" title="excluir">×</span>

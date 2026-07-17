@@ -11,6 +11,8 @@ Thumbs.db
 info
 backend/logs/
 backend/recon/
+backend/surface/*
+!backend/surface/.gitkeep
 backend/audit/*
 !backend/audit/.gitkeep
 backend/data/

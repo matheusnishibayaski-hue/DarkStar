@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>kali@pentest</title>
-  <link rel="stylesheet" href="/static/styles.css?v=18" />
+  <link rel="stylesheet" href="/static/styles.css?v=30" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
@@ -16,16 +16,19 @@
     <aside class="sidebar" id="sidebar" aria-label="Sessões">
       <div class="sidebar-head">
         <span class="sidebar-logo"><span class="logo-dim">//</span> sessions<span class="logo-dim">/</span></span>
-        <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Fechar">×</button>
+        <div class="sidebar-head-actions">
+          <button type="button" class="sidebar-collapse" id="sidebar-collapse" title="Recolher barra (M)" aria-label="Recolher barra lateral">‹</button>
+          <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Fechar">×</button>
+        </div>
       </div>
 
-      <button type="button" class="sidebar-new" id="sidebar-new"><span class="cmd-sym">$</span> new</button>
+      <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa"><span class="cmd-sym">$</span> new</button>
 
       <div class="sidebar-section-label">ls -la</div>
       <div class="sidebar-sessions" id="sidebar-sessions"></div>
 
       <div class="sidebar-footer">
-        <button type="button" class="sidebar-link" id="sidebar-help"><span class="cmd-sym">?</span> help <kbd>F1</kbd></button>
+        <button type="button" class="sidebar-link" id="sidebar-help" title="Guia (F1)"><span class="cmd-sym">?</span> guia <kbd>F1</kbd></button>
       </div>
     </aside>
 
@@ -40,7 +43,7 @@
               <span class="crt-light crt-light--y"></span>
               <span class="crt-light crt-light--g"></span>
             </div>
-            <button type="button" class="term-btn term-btn-menu" id="btn-menu" aria-label="Menu">☰</button>
+            <button type="button" class="term-btn term-btn-menu" id="btn-menu" title="Barra lateral (M)" aria-label="Abrir ou recolher barra lateral" aria-controls="sidebar" aria-expanded="true">☰</button>
             <h1 class="term-bar-title" id="session-title">kali@pentest: ~/chat</h1>
           </div>
           <nav class="term-bar-actions crt-toolbar">
@@ -48,13 +51,14 @@
             <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Alt+P">pilot</button>
             <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar">stop</button>
             <span class="term-toolbar-extra" id="term-toolbar-extra">
-              <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I">intel</button>
-              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F">files</button>
+              <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I — alvos e relatórios">intel</button>
+              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F — artefatos">files</button>
+              <button type="button" class="term-btn term-btn-threats" id="btn-threats" title="Alt+C — mapa mundial">mapa</button>
               <button type="button" class="term-btn" id="btn-report" title="Alt+R">report</button>
             </span>
             <button type="button" class="term-btn term-btn-more" id="btn-toolbar-more" title="Mais" aria-haspopup="true">⋯</button>
             <span class="term-bar-divider" aria-hidden="true"></span>
-            <button type="button" class="term-btn term-btn-ghost" id="btn-help" title="Alt+H">?</button>
+            <button type="button" class="term-btn term-btn-ghost" id="btn-help" title="Tour guiado (F1)">?</button>
             <button type="button" class="term-btn term-btn-ghost" id="btn-new" title="Alt+N">+</button>
           </nav>
         </header>
@@ -98,6 +102,23 @@
   <button type="button" class="scroll-bottom" id="btn-scroll-bottom" hidden title="Ir ao final">↓</button>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
+  <div class="guided-tour" id="guided-tour" hidden aria-hidden="true">
+    <div class="guided-tour-blocker" id="guided-tour-blocker" aria-hidden="true"></div>
+    <div class="guided-tour-backdrop" id="guided-tour-backdrop" hidden></div>
+    <div class="guided-tour-spotlight" id="guided-tour-spotlight" hidden></div>
+    <div class="guided-tour-card crt-panel" id="guided-tour-card" role="dialog" aria-modal="true" aria-labelledby="guided-tour-title">
+      <p class="guided-tour-progress" id="guided-tour-progress">1 / 1</p>
+      <h2 class="guided-tour-title" id="guided-tour-title">Ajuda</h2>
+      <p class="guided-tour-text" id="guided-tour-text"></p>
+      <div class="guided-tour-actions">
+        <button type="button" class="guided-tour-prev" id="guided-tour-prev">anterior</button>
+        <button type="button" class="guided-tour-skip" id="guided-tour-skip">sair</button>
+        <button type="button" class="guided-tour-next autopilot-start" id="guided-tour-next">próximo</button>
+      </div>
+      <button type="button" class="guided-tour-advanced" id="guided-tour-advanced" hidden>Atalhos avançados</button>
+    </div>
+  </div>
+
   <div class="overlay overlay-tools-wrap" id="overlay-tools" hidden>
     <div class="panel panel-tools crt-panel" role="dialog" aria-modal="true" aria-label="Ferramentas">
       <div class="panel-head">
@@ -117,35 +138,43 @@
   </div>
 
   <div class="overlay" id="overlay-autopilot" hidden>
-    <div class="panel panel-autopilot crt-panel" role="dialog" aria-modal="true" aria-label="Auto-Pilot">
+    <div class="panel panel-autopilot crt-panel" role="dialog" aria-modal="true" aria-label="Piloto automático">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
-          <span class="panel-title-main">autopilot.run</span>
-          <span class="panel-title-sub">missão autônoma → relatório</span>
+          <span class="panel-title-main">Piloto automático</span>
+          <span class="panel-title-sub">a IA testa o alvo sozinha e gera relatório</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-autopilot" aria-label="Fechar">×</button>
       </div>
       <div class="panel-body autopilot-form">
-        <p class="panel-callout"># alvo autorizado + objetivo</p>
+        <p class="pilot-intro">
+          Informe o <strong>alvo autorizado</strong> e o que você quer descobrir.
+          Acompanhe o progresso no chat. Resultados vão para o <strong>Intel</strong>.
+        </p>
+
         <div class="form-field">
-          <label class="autopilot-label" for="autopilot-target">TARGET</label>
-          <input type="text" id="autopilot-target" class="panel-field autopilot-input" placeholder="scanme.nmap.org" spellcheck="false" />
+          <label class="autopilot-label" for="autopilot-target">Alvo</label>
+          <input type="text" id="autopilot-target" class="panel-field autopilot-input" placeholder="ex: scanme.nmap.org ou https://site.com/app" spellcheck="false" />
         </div>
-        <div class="form-field">
-          <label class="autopilot-label" for="autopilot-objective">OBJECTIVE</label>
-          <textarea id="autopilot-objective" class="autopilot-textarea" rows="3" placeholder="mapear portas e serviços web" spellcheck="false"></textarea>
+
+        <div class="form-field" id="autopilot-objective-wrap">
+          <label class="autopilot-label" for="autopilot-objective">O que fazer</label>
+          <textarea id="autopilot-objective" class="autopilot-textarea" rows="3" placeholder="ex: mapear portas, tecnologias e vulnerabilidades web" spellcheck="false"></textarea>
+          <div class="quick-objectives" id="quick-objectives"></div>
         </div>
-        <div class="quick-objectives" id="quick-objectives"></div>
-        <div class="playbook-section">
-          <p class="panel-callout"># playbooks</p>
-          <div class="playbook-row">
-            <select class="panel-field playbook-select" id="playbook-select" aria-label="Playbook">
-              <option value="">— playbook —</option>
-            </select>
-            <button type="button" class="playbook-run-btn" id="playbook-run">./run-playbook</button>
-          </div>
-        </div>
-        <button type="button" class="autopilot-start" id="autopilot-start">./start-mission</button>
+
+        <details class="pilot-advanced" id="pilot-advanced">
+          <summary>Roteiros fixos <span class="pilot-advanced-hint">(opcional · sem IA · passos pré-definidos)</span></summary>
+          <p class="pilot-advanced-desc">
+            Alternativa à missão com IA: executa uma sequência curta e previsível de ferramentas.
+            Escolha um roteiro abaixo — o botão principal muda para “Rodar roteiro”.
+          </p>
+          <div class="pilot-playbooks" id="pilot-playbooks"></div>
+          <button type="button" class="pilot-clear-playbook" id="pilot-clear-playbook" hidden>Usar missão com IA em vez do roteiro</button>
+        </details>
+
+        <button type="button" class="autopilot-start" id="autopilot-start">Iniciar missão com IA</button>
+        <p class="pilot-foot" id="pilot-foot">Só use alvos que você tem autorização para testar.</p>
       </div>
     </div>
   </div>
@@ -163,89 +192,133 @@
     </div>
   </div>
 
+  <!-- INTEL: hub simples (sem mapa) -->
   <div class="overlay overlay-intel" id="overlay-intel" hidden>
-    <div class="panel panel-intel crt-panel" id="intel-panel" role="dialog" aria-modal="true" aria-label="Intel">
+    <div class="panel panel-intel panel-hub crt-panel" id="intel-panel" role="dialog" aria-modal="true" aria-label="Intel">
       <div class="panel-head panel-head-intel">
         <div class="panel-head-text">
-          <span class="panel-title-main">/sys/intel</span>
-          <span class="panel-title-sub" id="intel-subtitle">recon local · ameaças globais</span>
+          <button type="button" class="hub-back" id="hub-back" hidden title="Voltar">← alvos</button>
+          <span class="panel-title-main">Intel</span>
+          <span class="panel-title-sub" id="intel-subtitle">escolha um alvo · verifique · baixe o relatório</span>
         </div>
         <div class="panel-head-right intel-head-actions">
-          <div class="intel-tabs" role="tablist" aria-label="Intel">
-            <button type="button" class="intel-tab active" id="intel-tab-recon" role="tab" aria-selected="true">recon</button>
-            <button type="button" class="intel-tab" id="intel-tab-threats" role="tab" aria-selected="false">threats</button>
-            <button type="button" class="intel-tab" id="intel-tab-timeline" role="tab" aria-selected="false">timeline</button>
-            <button type="button" class="intel-tab" id="intel-tab-audit" role="tab" aria-selected="false">audit</button>
-          </div>
+          <span class="intel-meta" id="hub-meta">—</span>
           <button type="button" class="panel-close" data-close="overlay-intel" aria-label="Fechar">×</button>
         </div>
       </div>
 
-      <div class="intel-pane" id="intel-pane-recon" role="tabpanel">
-        <div class="intel-toolbar recon-toolbar">
-          <input type="text" class="panel-search intel-search" id="recon-search" placeholder="grep alvos…" spellcheck="false" />
-          <select class="intel-sort" id="recon-sort" aria-label="Ordenar">
-            <option value="date">data ↓</option>
-            <option value="target">alvo A-Z</option>
-            <option value="ports">portas ↓</option>
-            <option value="cves">cve ↓</option>
-            <option value="vulns">achados ↓</option>
-          </select>
-          <button type="button" class="intel-refresh-btn" id="recon-refresh" title="Atualizar">refresh</button>
-          <span class="intel-meta" id="recon-meta">/var/recon</span>
-        </div>
-        <div class="intel-pane-body recon-table-wrap" id="recon-table"></div>
-      </div>
-
-      <div class="intel-pane hidden" id="intel-pane-threats" role="tabpanel" hidden>
-        <div class="intel-threats-bar">
-          <div class="threat-mode-toggle" role="group" aria-label="Layout do mapa">
-            <button type="button" class="threat-mode-btn active" id="threat-mode-live" title="Legenda + mapa">live</button>
-            <button type="button" class="threat-mode-btn" id="threat-mode-globe" title="Mapa expandido">globe</button>
-          </div>
-          <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">Kaspersky Cybermap</a>
-          <button type="button" class="threat-open-full" id="threat-open-full" title="Abrir mapa completo">↗</button>
-        </div>
-        <div class="threatmap-body intel-threatmap-body">
-          <aside class="threatmap-sidebar">
-            <p class="threatmap-sidebar-head"># tipos de detecção</p>
-            <div class="threat-legend" id="threat-legend"></div>
-            <p class="threatmap-note">Detecções desde 00:00 GMT · arraste o globo para girar</p>
+      <div class="intel-pane hub-pane" id="intel-pane-hub">
+        <div class="hub-layout">
+          <aside class="hub-sidebar">
+            <div class="hub-sidebar-tools">
+              <input type="search" class="panel-search hub-search" id="hub-search" placeholder="Buscar alvo…" spellcheck="false" />
+              <button type="button" class="hub-icon-btn" id="hub-refresh" title="Atualizar">↻</button>
+            </div>
+            <div class="hub-list" id="hub-list"></div>
+            <nav class="hub-more" aria-label="Mais opções">
+              <button type="button" data-intel-more="logs">Logs</button>
+              <button type="button" data-intel-more="timeline">Timeline</button>
+              <button type="button" data-intel-more="audit">Auditoria</button>
+              <button type="button" data-intel-more="data">Limpar dados</button>
+            </nav>
           </aside>
-          <div class="threatmap-frame-wrap">
-            <p class="threatmap-loading" id="threat-loading" aria-hidden="true">carregando mapa…</p>
-            <iframe class="threatmap-frame" id="threat-frame" title="Mapa de CiberAmeaças Kaspersky" width="640" height="640" loading="lazy" allow="fullscreen"></iframe>
+
+          <div class="hub-main">
+            <div class="hub-actions" id="hub-actions">
+              <button type="button" class="hub-btn hub-btn--primary" id="hub-verify" disabled>Verificar</button>
+              <button type="button" class="hub-btn" id="hub-report-md" disabled>Relatório .md</button>
+              <button type="button" class="hub-btn" id="hub-report-html" disabled>.html</button>
+              <button type="button" class="hub-btn" id="hub-report-zip" disabled>.zip</button>
+              <button type="button" class="hub-btn" id="hub-files" disabled>Arquivos</button>
+              <button type="button" class="hub-btn" id="hub-chat" disabled>Usar no chat</button>
+              <button type="button" class="hub-btn hub-btn--danger" id="hub-delete" disabled>Excluir</button>
+            </div>
+            <div class="hub-detail" id="hub-detail"></div>
           </div>
         </div>
       </div>
 
-      <div class="intel-pane hidden" id="intel-pane-timeline" role="tabpanel" hidden>
+      <div class="intel-pane hidden" id="intel-pane-logs" hidden>
+        <div class="intel-toolbar">
+          <input type="text" class="panel-search intel-search" id="logs-search" placeholder="buscar log…" spellcheck="false" />
+          <button type="button" class="intel-refresh-btn" id="logs-refresh">atualizar</button>
+          <span class="intel-meta" id="logs-meta"></span>
+        </div>
+        <div class="intel-pane-body logs-list-wrap" id="logs-list"></div>
+      </div>
+
+      <div class="intel-pane hidden" id="intel-pane-timeline" hidden>
         <div class="intel-pane-body timeline-wrap" id="intel-timeline"></div>
       </div>
 
-      <div class="intel-pane hidden" id="intel-pane-audit" role="tabpanel" hidden>
-        <div class="intel-toolbar audit-toolbar">
-          <button type="button" class="intel-refresh-btn" id="audit-refresh" title="Atualizar">refresh</button>
-          <span class="intel-meta" id="audit-meta">/var/audit</span>
+      <div class="intel-pane hidden" id="intel-pane-audit" hidden>
+        <div class="intel-toolbar">
+          <button type="button" class="intel-refresh-btn" id="audit-refresh">atualizar</button>
+          <button type="button" class="intel-refresh-btn row-action--danger" id="audit-purge">limpar audit</button>
+          <span class="intel-meta" id="audit-meta"></span>
         </div>
         <div class="intel-pane-body audit-table-wrap" id="audit-table"></div>
+      </div>
+
+      <div class="intel-pane hidden" id="intel-pane-data" hidden>
+        <div class="intel-toolbar">
+          <button type="button" class="intel-refresh-btn" id="data-refresh">atualizar</button>
+          <span class="intel-meta" id="data-meta"></span>
+        </div>
+        <div class="intel-pane-body data-body" id="data-body"></div>
       </div>
     </div>
   </div>
 
+  <!-- FILES: modal próprio -->
   <div class="overlay" id="overlay-files" hidden>
-    <div class="panel panel-files crt-panel" role="dialog" aria-modal="true" aria-label="Artefatos">
+    <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Arquivos">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">/tools/output</span>
-          <span class="panel-title-sub" id="files-meta">artefatos do container Kali</span>
+          <span class="panel-title-main">Arquivos</span>
+          <span class="panel-title-sub" id="files-meta">saídas salvas em /tools/output</span>
         </div>
         <div class="panel-head-right files-head-actions">
-          <button type="button" class="files-refresh-btn" id="files-refresh" title="Atualizar lista">refresh</button>
+          <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
           <button type="button" class="panel-close" data-close="overlay-files" aria-label="Fechar">×</button>
         </div>
       </div>
+      <div class="files-simple-toolbar">
+        <input type="search" class="panel-search" id="files-search" placeholder="Filtrar por nome ou alvo…" spellcheck="false" />
+      </div>
       <div class="panel-body files-panel-body" id="files-list"></div>
+    </div>
+  </div>
+
+  <!-- MAPA: modal separado do Intel -->
+  <div class="overlay overlay-threats" id="overlay-threats" hidden>
+    <div class="panel panel-threats crt-panel" id="threat-panel" role="dialog" aria-modal="true" aria-label="Mapa de ameaças">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <span class="panel-title-main">Mapa mundial</span>
+          <span class="panel-title-sub">ameaça em tempo real · Kaspersky</span>
+        </div>
+        <div class="panel-head-right files-head-actions">
+          <div class="threat-mode-toggle" role="group" aria-label="Layout">
+            <button type="button" class="threat-mode-btn active" id="threat-mode-live">legenda</button>
+            <button type="button" class="threat-mode-btn" id="threat-mode-globe">expandir</button>
+          </div>
+          <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">abrir site</a>
+          <button type="button" class="threat-open-full" id="threat-open-full" title="Abrir mapa completo">↗</button>
+          <button type="button" class="panel-close" data-close="overlay-threats" aria-label="Fechar">×</button>
+        </div>
+      </div>
+      <div class="threatmap-body">
+        <aside class="threatmap-sidebar">
+          <p class="threatmap-sidebar-head">tipos de detecção</p>
+          <div class="threat-legend" id="threat-legend"></div>
+          <p class="threatmap-note">Detecções desde 00:00 GMT · arraste o globo</p>
+        </aside>
+        <div class="threatmap-frame-wrap">
+          <p class="threatmap-loading" id="threat-loading" aria-hidden="true">carregando mapa…</p>
+          <iframe class="threatmap-frame" id="threat-frame" title="Mapa Kaspersky" width="640" height="640" loading="lazy" allow="fullscreen"></iframe>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -285,6 +358,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=15"></script>
+  <script type="module" src="/static/js/main.js?v=21"></script>
 </body>
 </html>

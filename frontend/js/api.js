@@ -22,6 +22,14 @@ export function logStreamUrl(executionId) {
   return url;
 }
 
+export function fileOpenUrl(relPath) {
+  const encoded = relPath.split("/").map(encodeURIComponent).join("/");
+  const token = localStorage.getItem(API_TOKEN_KEY);
+  let url = `/api/files/${encoded}`;
+  if (token) url += `?token=${encodeURIComponent(token)}`;
+  return url;
+}
+
 export async function checkClientConfig(toast) {
   try {
     const res = await fetch("/api/client-config", { credentials: "include" });

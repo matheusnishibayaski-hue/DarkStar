@@ -19,6 +19,16 @@ class TestOpenApi(unittest.TestCase):
             "/api/playbooks",
             "/api/playbooks/{playbook_id}/run",
             "/api/metrics",
+            "/api/surface",
+            "/api/engagements",
+            "/api/engagements/{target}/verify",
+            "/api/engagements/{target}/triage",
+            "/api/engagements/{target}/report",
+            "/api/engagements/{target}/delta",
+            "/api/engagements/{target}/baseline",
+            "/api/engagements/{target}/risk",
+            "/api/data/summary",
+            "/api/data/purge",
         ):
             self.assertIn(route, paths, f"Rota ausente no OpenAPI: {route}")
 

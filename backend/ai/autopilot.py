@@ -13,13 +13,22 @@ from backend.ai.agent import (
     _record_execution,
     generate_report,
 )
+from backend.ai.findings import findings_for_report
 from backend.ai.healing import healing_prompt, should_attempt_healing
+from backend.ai.verify import run_verification_pipeline
 from backend.ai.openrouter_common import (
     OPENROUTER_BASE_URL,
     OPENROUTER_HEADERS,
     assistant_message_dict,
     is_retryable_error,
     openrouter_error_message,
+)
+from backend.ai.phases import (
+    advance_surface_phase,
+    is_tool_allowed,
+    kickoff_for_phase,
+    normalize_risk_profile,
+    phase_prompt_block,
 )
 from backend.ai.sse import format_sse
 from backend.config import (
@@ -28,8 +37,16 @@ from backend.config import (
     MAX_AUTONOMOUS_TOOLS,
     MAX_TOOL_ITERATIONS,
     OPENROUTER_API_KEY,
+    RISK_PROFILE,
 )
 from backend.executor.recon_db import build_recon_context, normalize_target
+from backend.executor.surface import (
+    build_surface_context,
+    get_or_create_surface,
+    load_surface,
+    save_surface,
+    surface_summary,
+)
 from backend.models_catalog import resolve_model
 from backend.observability import timed
 from backend.security.missions import get_mission_registry
@@ -103,6 +120,9 @@ def _run_autonomous_cycle(
     recon_targets: list[str] | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    *,
+    phase: str = "recon",
+    risk_profile: str = "safe-active",
 ) -> tuple[str, bool, bool, str]:
     """
     Uma rodada do auto-pilot.
@@ -180,6 +200,26 @@ def _run_autonomous_cycle(
                     command = ""
                     reason = "Falha ao decodificar argumentos."
 
+                allowed, block_msg = is_tool_allowed(
+                    command, phase=phase, risk_profile=risk_profile
+                )
+                if not allowed:
+                    tool_calls_budget -= 1
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": (
+                                f"[BLOQUEADO PELA METODOLOGIA] {block_msg}\n"
+                                "Escolha outra ferramenta adequada à fase/perfil "
+                                "ou avance com finish_mission se estiver na fase report."
+                            ),
+                        }
+                    )
+                    if tool_calls_budget <= 0:
+                        return "", False, False, model_to_use
+                    continue
+
                 result_text = _record_execution(
                     command,
                     reason,
@@ -229,6 +269,7 @@ def run_autonomous(
     fallback_model: str | None = None,
     emit: EmitFn | None = None,
     mission_id: str | None = None,
+    risk_profile: str | None = None,
 ) -> AutonomousResponse:
     registry = get_mission_registry()
     if mission_id:
@@ -242,6 +283,7 @@ def run_autonomous(
             fallback_model,
             emit,
             mission_id,
+            risk_profile=risk_profile,
         )
     finally:
         if mission_id:
@@ -255,6 +297,7 @@ def _run_autonomous_body(
     fallback_model: str | None,
     emit: EmitFn | None,
     mission_id: str | None,
+    risk_profile: str | None = None,
 ) -> AutonomousResponse:
     if not OPENROUTER_API_KEY:
         return AutonomousResponse(
@@ -273,12 +316,27 @@ def _run_autonomous_body(
             stopped_reason="error",
         )
 
+    profile = normalize_risk_profile(risk_profile or RISK_PROFILE)
     client = _create_client()
     recon_target = normalize_target(target)
+    surface = get_or_create_surface(
+        recon_target,
+        objective=objective,
+        risk_profile=profile,
+        mission_id=mission_id or "",
+    )
     recon_context = build_recon_context([recon_target])
-    system = AUTONOMOUS_SYSTEM_PROMPT.format(target=target, objective=objective)
+    surface_context = build_surface_context(recon_target)
+    system = AUTONOMOUS_SYSTEM_PROMPT.format(
+        target=target,
+        objective=objective,
+        risk_profile=profile,
+    )
+    system = f"{system}\n\n{phase_prompt_block(surface.get('phase') or 'recon', surface_summary(surface))}"
     if recon_context:
         system = f"{system}\n\n{recon_context}"
+    if surface_context:
+        system = f"{system}\n\n{surface_context}"
     messages: list[dict] = [{"role": "system", "content": system}]
 
     executions: list[ToolExecution] = []
@@ -290,7 +348,12 @@ def _run_autonomous_body(
     remaining_tools = MAX_AUTONOMOUS_TOOLS
 
     if emit:
-        payload = {"target": target, "objective": objective}
+        payload = {
+            "target": target,
+            "objective": objective,
+            "phase": surface.get("phase") or "recon",
+            "risk_profile": profile,
+        }
         if mission_id:
             payload["mission_id"] = mission_id
         emit("mission_start", payload)
@@ -305,23 +368,20 @@ def _run_autonomous_body(
             stopped_reason = "max_tools"
             break
 
+        surface = load_surface(recon_target) or surface
+        current_phase = surface.get("phase") or "recon"
+        summary = surface_summary(surface)
         per_round = min(MAX_TOOL_ITERATIONS, remaining_tools)
 
-        if round_idx == 0:
-            kickoff = (
-                f"Missão autônoma iniciada.\n"
-                f"Alvo: {target}\n"
-                f"Objetivo: {objective}\n\n"
-                "Execute o primeiro comando via run_kali_tool agora."
-            )
-        else:
-            kickoff = (
-                f"Rodada {round_idx + 1}/{MAX_AUTONOMOUS_ROUNDS}. "
-                f"Comandos executados até agora: {len(executions)}.\n"
-                "Analise os resultados anteriores, execute a próxima ferramenta necessária "
-                "ou chame finish_mission se o objetivo foi atingido."
-            )
-
+        kickoff = kickoff_for_phase(
+            phase=current_phase,
+            target=target,
+            objective=objective,
+            round_idx=round_idx,
+            max_rounds=MAX_AUTONOMOUS_ROUNDS,
+            tools_executed=len(executions),
+            surface_summary_data=summary,
+        )
         messages.append({"role": "user", "content": kickoff})
 
         if emit:
@@ -331,6 +391,8 @@ def _run_autonomous_body(
                     "round": round_idx + 1,
                     "max_rounds": MAX_AUTONOMOUS_ROUNDS,
                     "tools_executed": len(executions),
+                    "phase": current_phase,
+                    "risk_profile": profile,
                 },
             )
 
@@ -345,6 +407,8 @@ def _run_autonomous_body(
                 recon_targets=[recon_target],
                 emit=emit,
                 mission_id=mission_id,
+                phase=current_phase,
+                risk_profile=profile,
             )
         except RuntimeError as e:
             return AutonomousResponse(
@@ -358,6 +422,33 @@ def _run_autonomous_body(
         rounds_completed = round_idx + 1
         remaining_tools = MAX_AUTONOMOUS_TOOLS - len(executions)
 
+        # Avanço de fase após a rodada
+        surface = load_surface(recon_target) or surface
+        prev_phase = surface.get("phase") or "recon"
+        surface, decision = advance_surface_phase(surface)
+        save_surface(recon_target, surface)
+        if decision.advanced and emit:
+            emit(
+                "phase_change",
+                {
+                    "from": prev_phase,
+                    "to": decision.phase,
+                    "reason": decision.reason,
+                    "can_finish": decision.can_finish,
+                    "surface": surface_summary(surface),
+                },
+            )
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"[METODOLOGIA] Fase avançou: {prev_phase} → {decision.phase}. "
+                        f"{decision.reason}\n"
+                        f"{phase_prompt_block(decision.phase, surface_summary(surface))}"
+                    ),
+                }
+            )
+
         if finished:
             final_message = text
             objective_met = met
@@ -367,10 +458,26 @@ def _run_autonomous_body(
                 stopped_reason = "objective_met"
             else:
                 stopped_reason = "finished_early"
+            # Marca fase report ao encerrar
+            surface = load_surface(recon_target) or surface
+            surface["phase"] = "report"
+            save_surface(recon_target, surface)
             break
 
         if text:
             final_message = text
+
+        # Se já pode finalizar e a IA não chamou finish, injeta nudge
+        if decision.can_finish and not finished:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        "Fase report: chame finish_mission agora com resumo dos achados "
+                        "confirmados, candidatos restantes e conclusão do objetivo."
+                    ),
+                }
+            )
 
     if not final_message and executions:
         final_message = (
@@ -379,6 +486,52 @@ def _run_autonomous_body(
         )
     elif not final_message:
         final_message = "Nenhum comando foi executado durante a missão autônoma."
+
+    # Pipeline assertivo: PoC + re-verificação antes do relatório
+    if not get_mission_registry().is_cancelled(mission_id):
+        if emit:
+            emit("verify_pipeline_start", {"target": recon_target})
+        from backend.config import VERIFY_MAX_FINDINGS
+
+        verify_result = run_verification_pipeline(
+            recon_target,
+            emit=emit,
+            mission_id=mission_id,
+            max_findings=VERIFY_MAX_FINDINGS,
+        )
+    else:
+        verify_result = None
+
+    bucket = findings_for_report(recon_target)
+    lines_sum: list[str] = []
+    if bucket["confirmed"]:
+        lines_sum.append("**Confirmados:**")
+        lines_sum.extend(
+            f"- [{f.get('severity', '?').upper()}] {f.get('title')} "
+            f"(confiança: {f.get('confidence', '—')})"
+            for f in bucket["confirmed"][:15]
+        )
+    if bucket["false_positive"]:
+        lines_sum.append("**Falsos positivos:**")
+        lines_sum.extend(
+            f"- [{f.get('severity', '?').upper()}] {f.get('title')}"
+            for f in bucket["false_positive"][:10]
+        )
+    if bucket["discarded"]:
+        lines_sum.append("**Descartados (não reproduzíveis):**")
+        lines_sum.extend(
+            f"- [{f.get('severity', '?').upper()}] {f.get('title')}"
+            for f in bucket["discarded"][:10]
+        )
+    if lines_sum:
+        final_message += "\n\n### Achados verificados\n" + "\n".join(lines_sum)
+    if verify_result:
+        final_message += (
+            f"\n\n_Pipeline: {verify_result.verify_commands_run} PoC(s) · "
+            f"{verify_result.confirmed} confirmado(s) · "
+            f"{verify_result.false_positive} FP · "
+            f"{verify_result.discarded} descartado(s)._"
+        )
 
     history = [
         {"role": "user", "content": f"[Auto-Pilot] Alvo: {target}\nObjetivo: {objective}"},
@@ -402,11 +555,14 @@ def _run_autonomous_body(
         history,
         exec_dicts,
         title=f"Relatório Auto-Pilot — {target}",
+        surface_target=recon_target,
     )
 
+    surface = load_surface(recon_target) or {}
     status_line = (
         f"\n\n---\n**Auto-Pilot:** {rounds_completed} rodada(s) · "
         f"{len(executions)} comando(s) · "
+        f"fase={surface.get('phase', '?')} · perfil={profile} · "
         f"{'objetivo atingido' if objective_met else stopped_reason}"
     )
     final_message = final_message + status_line
@@ -442,6 +598,7 @@ def run_autonomous_stream(
     model: str | None = None,
     fallback_model: str | None = None,
     mission_id: str | None = None,
+    risk_profile: str | None = None,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -457,6 +614,7 @@ def run_autonomous_stream(
                 fallback_model=fallback_model,
                 emit=emit,
                 mission_id=mission_id,
+                risk_profile=risk_profile,
             )
             event_queue.put(
                 format_sse(

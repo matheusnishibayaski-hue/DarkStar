@@ -1,7 +1,8 @@
-/** Modo Auto-Pilot autônomo. */
+/** Piloto automático — missão com IA ou roteiro fixo (playbook). */
 
 import { apiFetch } from "./api.js";
 import { listPlaybooks, runPlaybook } from "./api/routes.js";
+import { QUICK_OBJECTIVES } from "./constants.js";
 import {
   getActiveSession,
   ensureSession,
@@ -35,66 +36,186 @@ import { toast, showToastError, downloadMarkdown, setLoading, getLoading, closeO
 
 let ctx = {};
 let playbooksCache = [];
+/** @type {string} id do roteiro selecionado, ou "" para missão com IA */
+let selectedPlaybookId = "";
 
 export function initAutopilot(context) {
   ctx = context;
-  loadPlaybookOptions();
-  ctx.playbookRun?.addEventListener("click", runSelectedPlaybook);
+  renderQuickObjectives();
+  loadPlaybookCards();
+  ctx.autopilotStart?.addEventListener("click", onPrimaryAction);
+  ctx.pilotClearPlaybook?.addEventListener("click", () => selectPlaybook(""));
+  ctx.autopilotObjective?.addEventListener("input", () => {
+    if (selectedPlaybookId) selectPlaybook("");
+  });
+  ctx.autopilotTarget?.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onPrimaryAction();
+    }
+  });
 }
 
 function setBusy(busy) {
   setLoading(busy);
   if (ctx.input) ctx.input.disabled = busy;
   if (ctx.autopilotStart) ctx.autopilotStart.disabled = busy;
-  if (ctx.playbookRun) ctx.playbookRun.disabled = busy;
   if (ctx.btnAutopilot) ctx.btnAutopilot.disabled = busy;
   ctx.updateStatusBar?.();
 }
 
-async function loadPlaybookOptions() {
-  const select = ctx.playbookSelect;
-  if (!select) return;
+function renderQuickObjectives() {
+  const wrap = ctx.quickObjectivesEl;
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const label = document.createElement("span");
+  label.className = "quick-obj-label";
+  label.textContent = "Sugestões:";
+  wrap.appendChild(label);
+
+  for (const obj of QUICK_OBJECTIVES) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "quick-obj-btn";
+    btn.textContent = obj.length > 52 ? `${obj.slice(0, 52)}…` : obj;
+    btn.title = obj;
+    btn.addEventListener("click", () => {
+      selectPlaybook("");
+      if (ctx.autopilotObjective) {
+        ctx.autopilotObjective.value = obj;
+        ctx.autopilotObjective.focus();
+      }
+      updatePrimaryButton();
+    });
+    wrap.appendChild(btn);
+  }
+}
+
+async function loadPlaybookCards() {
+  const root = ctx.pilotPlaybooksEl;
+  if (!root) return;
   try {
     const res = await listPlaybooks();
     if (!res.ok) return;
     playbooksCache = (await res.json()).playbooks || [];
-    select.innerHTML = '<option value="">— playbook —</option>';
-    for (const pb of playbooksCache) {
-      const opt = document.createElement("option");
-      opt.value = pb.id;
-      opt.textContent = `${pb.name} (${pb.steps_count} passos)`;
-      select.appendChild(opt);
+  } catch {
+    playbooksCache = [];
+  }
+
+  if (!playbooksCache.length) {
+    root.innerHTML = `<p class="pilot-advanced-desc">Nenhum roteiro instalado.</p>`;
+    return;
+  }
+
+  root.innerHTML = playbooksCache
+    .map((pb) => {
+      const title = friendlyPlaybookName(pb);
+      const desc = pb.description || `${pb.steps_count || "?"} passos`;
+      return `
+        <button type="button" class="pilot-pb-card" data-pb="${escapeAttr(pb.id)}" aria-pressed="false">
+          <strong>${escapeHtml(title)}</strong>
+          <span>${escapeHtml(desc)}</span>
+          <em>${pb.steps_count || 0} passo(s) · sem IA</em>
+        </button>`;
+    })
+    .join("");
+
+  root.querySelectorAll("[data-pb]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-pb") || "";
+      selectPlaybook(selectedPlaybookId === id ? "" : id);
+    });
+  });
+}
+
+function friendlyPlaybookName(pb) {
+  const map = {
+    "port-scan": "Scan de portas (nmap)",
+    "recon-web": "Recon web (subdomínios + HTTP)",
+  };
+  return map[pb.id] || pb.name || pb.id;
+}
+
+function selectPlaybook(id) {
+  selectedPlaybookId = id || "";
+  const wrap = ctx.autopilotObjectiveWrap;
+  const clearBtn = ctx.pilotClearPlaybook;
+  const cards = ctx.pilotPlaybooksEl?.querySelectorAll("[data-pb]") || [];
+
+  cards.forEach((c) => {
+    const on = c.getAttribute("data-pb") === selectedPlaybookId;
+    c.classList.toggle("is-selected", on);
+    c.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+
+  if (wrap) wrap.classList.toggle("is-dimmed", Boolean(selectedPlaybookId));
+  if (clearBtn) clearBtn.hidden = !selectedPlaybookId;
+
+  // Abre o details se escolheu roteiro
+  const adv = ctx.pilotAdvanced;
+  if (selectedPlaybookId && adv) adv.open = true;
+
+  updatePrimaryButton();
+}
+
+function updatePrimaryButton() {
+  const btn = ctx.autopilotStart;
+  const foot = ctx.pilotFoot;
+  if (!btn) return;
+  if (selectedPlaybookId) {
+    const pb = playbooksCache.find((p) => p.id === selectedPlaybookId);
+    const name = pb ? friendlyPlaybookName(pb) : selectedPlaybookId;
+    btn.textContent = `Rodar roteiro: ${name}`;
+    btn.classList.add("autopilot-start--playbook");
+    if (foot) {
+      foot.textContent = "Roteiro fixo: mesmos comandos sempre, sem planejamento da IA.";
     }
-  } catch { /* ignore */ }
+  } else {
+    btn.textContent = "Iniciar missão com IA";
+    btn.classList.remove("autopilot-start--playbook");
+    if (foot) {
+      foot.textContent = "Só use alvos que você tem autorização para testar.";
+    }
+  }
+}
+
+function onPrimaryAction() {
+  if (selectedPlaybookId) {
+    runSelectedPlaybook();
+  } else {
+    startAutopilot();
+  }
 }
 
 async function runSelectedPlaybook() {
-  const id = ctx.playbookSelect?.value;
+  const id = selectedPlaybookId;
   const target = ctx.autopilotTarget?.value.trim();
   if (!id) {
-    showToastError("Selecione um playbook.");
+    showToastError("Escolha um roteiro ou inicie a missão com IA.");
     return;
   }
   if (!target) {
-    showToastError("Informe o alvo para o playbook.");
+    showToastError("Informe o alvo.");
+    ctx.autopilotTarget?.focus();
     return;
   }
   if (getLoading()) return;
 
   setBusy(true);
   closeOverlay(ctx.overlayAutopilot);
-  appendLine("info", `playbook ${id} → ${target} …`);
+  const label = friendlyPlaybookName(playbooksCache.find((p) => p.id === id) || { id });
+  appendLine("info", `Roteiro “${label}” → ${target} …`);
 
   try {
     const res = await runPlaybook(id, { target, mission_id: createMissionId() });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showToastError(data.detail || "Falha ao executar playbook");
+      showToastError(data.detail || "Falha ao executar roteiro");
       return;
     }
     const ok = (data.results || []).filter((r) => r.success).length;
-    appendLine("info", `playbook concluído: ${ok}/${data.steps_run} passo(s) ok`);
-    toast(`playbook ${id} executado`, "success");
+    appendLine("info", `Roteiro concluído: ${ok}/${data.steps_run} passo(s) ok · veja Intel e Arquivos`);
+    toast(`Roteiro concluído (${ok} ok)`, "success");
   } catch (e) {
     showToastError(e.message);
   } finally {
@@ -107,8 +228,14 @@ export async function startAutopilot() {
   const target = ctx.autopilotTarget?.value.trim();
   const objective = ctx.autopilotObjective?.value.trim();
 
-  if (!target || !objective) {
-    showToastError("Informe o alvo e o objetivo da missão.");
+  if (!target) {
+    showToastError("Informe o alvo.");
+    ctx.autopilotTarget?.focus();
+    return;
+  }
+  if (!objective) {
+    showToastError("Descreva o que fazer, ou escolha uma sugestão.");
+    ctx.autopilotObjective?.focus();
     return;
   }
 
@@ -132,7 +259,7 @@ export async function startAutopilot() {
   renderSessions();
   updateSessionTitle();
   renderChat();
-  showAutopilotProgress("auto-pilot em execução — planejando, executando e analisando (pode levar vários minutos)");
+  showAutopilotProgress("Piloto em execução — planejando e testando (pode levar vários minutos)");
 
   try {
     let finalData = null;
@@ -161,20 +288,24 @@ export async function startAutopilot() {
       return;
     }
 
-    await consumeChatStream(res, {
-      ...createToolStreamHandlers({
-        chatEl: ctx.chatEl,
-        showTyping: showAutopilotProgress,
-        hideTyping,
-        scrollChatToBottom,
-      }),
-      done(data) {
-        finalData = data;
+    await consumeChatStream(
+      res,
+      {
+        ...createToolStreamHandlers({
+          chatEl: ctx.chatEl,
+          showTyping: showAutopilotProgress,
+          hideTyping,
+          scrollChatToBottom,
+        }),
+        done(data) {
+          finalData = data;
+        },
+        error(data) {
+          throw new Error(data.detail || "Erro no stream");
+        },
       },
-      error(data) {
-        throw new Error(data.detail || "Erro no stream");
-      },
-    }, { signal: abortController.signal });
+      { signal: abortController.signal }
+    );
 
     hideTyping();
     closeAllLiveStreams();
@@ -214,23 +345,25 @@ export async function startAutopilot() {
       downloadMarkdown(data.report, `relatorio-autopilot-${safeName}.md`);
       appendLine(
         "info",
-        `relatório auto-pilot baixado · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${data.objective_met ? "objetivo atingido" : data.stopped_reason}`
+        `Relatório baixado · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
+          data.objective_met ? "objetivo atingido" : data.stopped_reason
+        }`
       );
-      toast(`auto-pilot concluído · ${data.tools_executed} comandos`, "success");
+      toast(`Missão concluída · ${data.tools_executed} comandos`, "success");
     } else if (data.stopped_reason === "cancelled") {
-      toast("auto-pilot cancelado", "warn");
+      toast("Missão cancelada", "warn");
     }
   } catch (e) {
     hideTyping();
     closeAllLiveStreams();
     if (e.name === "AbortError") {
-      const errMsg = "auto-pilot cancelado pelo usuário.";
+      const errMsg = "Missão cancelada pelo usuário.";
       session.messages.push({ role: "assistant", content: errMsg });
       saveStore();
       appendLine("info", errMsg);
-      toast("missão cancelada", "warn");
+      toast("Missão cancelada", "warn");
     } else {
-      const errMsg = `erro de conexão auto-pilot: ${e.message}`;
+      const errMsg = `Erro de conexão no piloto: ${e.message}`;
       session.messages.push({ role: "assistant", content: errMsg });
       saveStore();
       appendLine("error", errMsg);
@@ -242,4 +375,16 @@ export async function startAutopilot() {
     rebuildInputHistory(ctx.inputHistory);
     ctx.input?.focus();
   }
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/'/g, "&#39;");
 }
