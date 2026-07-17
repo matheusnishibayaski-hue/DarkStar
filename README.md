@@ -55,7 +55,7 @@ start.bat servidor          # ou: ./start.sh servidor
 
 **Recomendado:** defina `CHAT_API_TOKEN` no `.env` para proteger a API local.
 
-**Testes:** `python -m unittest discover -s tests -v` (180+ testes, cobertura alta, sem Docker/OpenRouter) · E2E: `npm install && npx playwright test -c e2e/playwright.config.js`
+**Testes:** `python -m unittest discover -s tests -v` (**188** testes, cobertura alta, sem Docker/OpenRouter) · E2E: `npm install && npx playwright test -c e2e/playwright.config.js`
 
 ---
 
@@ -69,8 +69,8 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 | Execução Kali Docker, whitelist, cancel, scope lock + **aviso** | Mitigação automática, SIEM, SOC |
 | **Auditoria** JSONL, **playbooks**, **timeline** | ML customizado, multi-agentes paralelos |
 | Auth sessão, rate limit, bind `127.0.0.1` | Labs GNS3 / EVE-NG / VMs dinâmicas |
-| Intel (recon + threats + audit), file manager, onboarding | — |
-| **Pós-1.1.0:** observabilidade, metodologia, teto de assertividade, **180+ testes** | Prometheus/Grafana, load tests |
+| Intel hub (alvos + triagem + relatórios), mapa Kaspersky separado, file manager, admin de dados | — |
+| **Pós-1.1.0:** observabilidade, metodologia, teto de assertividade, extractors nmap/nikto, **188 testes** | Prometheus/Grafana, load tests |
 
 ---
 
@@ -78,21 +78,24 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 
 | Área | Detalhe |
 |------|---------|
-| **Chat** | Terminal CRT (`kali@pentest:~$`), Markdown nas respostas, sidebar de conversas, histórico ↑↓, toasts, barra de status |
+| **Chat** | Terminal CRT (`kali@pentest:~$`), Markdown nas respostas, sidebar recolhível (rail com ícones), histórico ↑↓, toasts, barra de status |
 | **Ferramentas** | 180+ binários na whitelist; painel com categorias, busca e exemplos; modo `auto` ou ferramenta fixa |
 | **Execução** | Vectorizada (`docker exec bin arg1 arg2…`, sem shell); flags não-interativas; timeout configurável |
 | **Streaming** | Logs stdout/stderr ao vivo via SSE; blocos `[live]` durante execução |
 | **Dashboards** | Parser Nmap (tabela portas) e Nuclei/vulns (cards por severidade) |
 | **Smart Healing** | Até `MAX_HEALING_ATTEMPTS` retentativas automáticas após falha de comando |
 | **Recon DB** | Memória local por alvo (`backend/recon/`), TTL configurável, contexto injetado em chats futuros |
-| **Intel** | Painel `/sys/intel`: **recon**, **threats**, **timeline**, **audit**, **triage** (Attack Surface) |
-| **File manager** | Artefatos em `/tools/output` (volume Docker); listar, filtrar por alvo e baixar via UI e `GET /api/files` |
-| **Playbooks** | Presets `recon-web` e `port-scan` — execução sequencial via API ou Auto-Pilot |
-| **Auditoria** | Log append-only em `backend/audit/`; consulta `GET /api/audit` e aba **audit** no Intel |
-| **Onboarding** | Guia de 3 passos na primeira visita (health, escopo, primeiro scan) |
-| **Auto-Pilot** | Alvo + objetivo → **metodologia por fases** + Attack Surface Graph + relatório `.md` |
+| **Intel** | Hub unificado: lista de alvos à esquerda, detalhe + triagem à direita; **Verificar**, relatórios `.md`/`.html`/`.zip`, arquivos, chat, excluir; subpainéis **logs**, **timeline**, **audit**, **limpar dados** |
+| **Mapa** | Modal próprio (`mapa` · `Alt+C`): Kaspersky Cybermap — separado do Intel |
+| **File manager** | Modal simples: artefatos em `/tools/output` agrupados por pasta; busca, download e exclusão |
+| **Admin de dados** | `GET/POST/DELETE /api/data/*` — resumo de storage, purge por categoria, exclusão de logs/recon/surface/arquivos/audit |
+| **Playbooks** | Presets `recon-web` e `port-scan` — roteiros opcionais no Auto-Pilot ou via API |
+| **Auditoria** | Log append-only em `backend/audit/`; consulta `GET /api/audit` e painel **audit** no Intel |
+| **Tour guiado** | Spotlight interativo (`F1` / `?`) + onboarding de 3 passos na primeira visita (health, escopo, primeiro scan) |
+| **Auto-Pilot** | Fluxo principal: **alvo** + **o que fazer** → **Iniciar missão com IA**; metodologia por fases + Attack Surface + relatório |
 | **Attack Surface** | Grafo por alvo com dedup (CVE/template-id), findings, baseline de reteste |
-| **Triagem** | Aba **triage** no Intel: risk score, cadeias A+B, executivo / fila humana / arquivo; verify; export `.md` / `.html` / `.zip` |
+| **Triagem** | Integrada ao hub Intel por alvo: risk score, cadeias A+B, buckets executivo / fila humana / arquivo; verify; promoção manual ✓/FP/✕ |
+| **Extractors** | Achados de nmap (HttpOnly, banners), nikto, paths — além de Nuclei `[sev]`/CVE; backfill via `repair_surface_from_stored_output` |
 | **Cancel** | Botão **cancel** interrompe chat stream e Auto-Pilot; mata processo Docker ativo |
 | **Relatórios** | Gate rígido (só confirmados no executivo), CVSS/impacto, remediação, delta reteste, metodologia, limitações, ZIP de entrega |
 | **Modelos** | Tiers Economia / Equilibrado / Raciocínio; seletor CRT `llm:`; Gemini ↔ DeepSeek; fallback em 429 |
@@ -108,13 +111,13 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 ┌─────────────────────────────────────────────────────────────┐
 │  Frontend (frontend/)                                       │
 │  index.html · styles.css · js/main.js + módulos ES6        │
-│  (chat, intel, triage, files, audio, threatmap, markdown, …) │
+│  (chat, targets-hub, triage, files, data-admin, guided-tour, threatmap, …) │
 └──────────────────────────┬──────────────────────────────────┘
                            │ HTTP / SSE
                            ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Backend FastAPI (backend/main.py → routes/)                │
-│  auth · system · chat · autonomous · engagements · files · audit · playbooks │
+│  auth · system · chat · autonomous · engagements · files · audit · data · playbooks │
 │  middleware: request context · rate limit · auth            │
 └──────────────┬──────────────────────────┬───────────────────┘
                │                          │
@@ -123,7 +126,7 @@ Release **1.1.0** fecha o ciclo operacional **scan → recon → artefato → re
 │  IA (backend/ai/)        │  │  Executor (backend/executor/)│
 │  agent · autopilot       │  │  kali · logs · summarize     │
 │  phases · findings       │  │  recon_db · surface          │
-│  verify · nuclei_json    │  │  files_store · stream_hub    │
+│  verify · nuclei_json    │  │  files_store · data_cleanup  │
 │  cvss · evidence         │  │  wifi_scan                   │
 │  risk_score · chains     │  │                              │
 │  delivery · report · …   │  │                              │
@@ -156,8 +159,9 @@ main.py ──► middleware (request_id, rate limit, auth)
     ├── ai/          agent · autopilot · phases · findings · verify
     │                nuclei_json · cvss · evidence · risk_score · chains
     │                delivery · remediation · delta · report · …
-    ├── executor/    kali · logs · recon_db · surface · files_store · …
-    ├── routes/      auth · chat · autonomous · engagements · …
+    ├── executor/    kali · logs · recon_db · surface · files_store
+    │                data_cleanup · stream_hub · wifi_scan · …
+    ├── routes/      auth · chat · autonomous · engagements · data · …
     ├── security/    sessions · rate_limit · scope · audit · missions
     ├── config.py    facade (env + reexports)
     │     config_tools.py    ALLOWED_TOOLS · TOOL_CATEGORIES
@@ -189,21 +193,23 @@ Chat IA Kali/
 │   ├── config_tools.py · config_prompts.py
 │   ├── observability.py     # logs JSON, request ID, métricas
 │   ├── schemas.py · deps.py · middleware.py
-│   ├── routes/              # auth, system, chat, autonomous, engagements, files, audit, playbooks
+│   ├── routes/              # auth, system, chat, autonomous, engagements, files, audit, data, playbooks
 │   ├── security/            # sessions, rate_limit, missions, scope, audit
 │   ├── playbooks/           # recon-web.yaml, port-scan.yaml, loader.py
 │   ├── ai/                  # agent, autopilot, phases, verify, nuclei_json, cvss,
 │   │                        # evidence, risk_score, chains, delivery, report, …
-│   ├── executor/            # kali, logs, summarize, recon_db, surface, files_store, …
+│   ├── executor/            # kali, logs, summarize, recon_db, surface, files_store,
+│   │                        # data_cleanup, stream_hub, wifi_scan, …
 │   ├── audit/               # eventos JSONL (gitignored)
-│   ├── data/                # sessões (gitignored)
-│   └── logs/ · recon/ · surface/ · outputs/   # gitignored (evidence/ e delivery/ em outputs/)
+│   ├── data/                # sessões auth (gitignored)
+│   ├── logs/ · recon/ · surface/ · outputs/   # gitignored (evidence/ e delivery/ em outputs/)
 ├── frontend/
 │   ├── index.html · styles.css
-│   └── js/                  # main, chat, intel, triage, files, audio, onboarding, …
+│   └── js/                  # main, chat, targets-hub, intel, triage, files, data-admin,
+│                            # guided-tour, autopilot, threatmap, logs-panel, timeline, …
 ├── docker/                  # Dockerfile, compose (+ volume outputs)
 ├── e2e/                     # Playwright smoke tests
-├── tests/                   # 180+ testes unitários + auth_patch helper
+├── tests/                   # 188 testes unitários + auth_patch helper
 ├── scripts/docker-check.ps1 # Docker com timeout (Windows)
 ├── start.bat · start.sh
 ├── package.json             # ESLint + Playwright (dev)
@@ -301,44 +307,85 @@ Interface estilo terminal fosforescente (`kali@pentest:~$`), scanlines, boot seq
 
 | Área | Conteúdo |
 |------|----------|
-| Sidebar | Conversas, novo chat, ajuda |
-| Barra superior | `tools` · `pilot` · `cancel` · **`intel`** · **`files`** · `report` · `?` · `+` |
-| Terminal | Mensagens (Markdown), execuções `[live]`, dashboards |
-| Prompt | Entrada + seletor de modelo `llm:` (tiers Economia / Equilibrado / Raciocínio) |
-| Status bar | `docker:` · `kali:` · relógio · status · **`snd:on`/`snd:off`** |
-| Health banner | Aviso dismissível quando Docker ou container Kali estão offline |
-| Scope banner | Aviso persistente quando `ALLOWED_TARGETS` está vazio |
+| **Sidebar** | Conversas, `$` novo chat, guia (`F1`); **recolhível** no desktop (`M` ou `‹`/`›`) — vira rail estreita (~52px) com ícones e iniciais das sessões; no mobile vira gaveta overlay |
+| **Barra superior** | `tools` · `pilot` · `stop` · **`intel`** · **`files`** · **`mapa`** · `report` · `?` · `+` |
+| **Terminal** | Mensagens (Markdown), execuções `[live]`, dashboards Nmap/Nuclei |
+| **Prompt** | Entrada + seletor de modelo `llm:` (tiers Economia / Equilibrado / Raciocínio) |
+| **Status bar** | `docker:` · `kali:` · relógio · status · **`snd:on`/`snd:off`** |
+| **Health banner** | Aviso dismissível quando Docker ou container Kali estão offline |
+| **Scope banner** | Aviso persistente quando `ALLOWED_TARGETS` está vazio |
 
 ### Painel Intel (`intel` · `Alt+I`)
 
-Painel unificado **`/sys/intel`** com cinco abas:
+Hub unificado para **alvos testados** — sem mapa mundial (esse ficou em modal separado).
 
-| Aba | Função |
-|-----|--------|
-| **recon** | Tabela retro de alvos em cache (`GET /api/recon`). Card expansível com portas, CVEs e achados. Busca, ordenação, **usar no prompt**, **re-scan** e **artefatos** (abre Files filtrado). |
-| **threats** (`Alt+C`) | Mapa global [Kaspersky Cybermap](https://cybermap.kaspersky.com/pt). Modos **live** e **globe**. |
-| **timeline** | Linha do tempo das execuções da sessão ativa — comando, status, link para log e artefatos. |
-| **audit** | Últimos eventos da trilha de auditoria (`GET /api/audit`) com link para logs de execução. |
-| **triage** | **Attack Surface** por alvo: risk score, cadeias A+B, buckets executivo / fila humana / arquivo; **verify**; export `.md` / `.html` / `.zip`; promoção manual ✓/FP/✕. |
+**Layout principal (hub):**
+
+| Coluna | Conteúdo |
+|--------|----------|
+| **Esquerda** | Busca, lista de alvos (contagem de vulns), atalhos **Logs** · **Timeline** · **Auditoria** · **Limpar dados** |
+| **Direita** | Detalhe do alvo selecionado: achados por severidade, triagem (executivo / fila humana / arquivo), risk score, cadeias A+B |
+
+**Ações por alvo** (barra superior do detalhe):
+
+| Botão | Função |
+|-------|--------|
+| **Verificar** | Dispara pipeline PoC (`POST /api/engagements/{alvo}/verify`) |
+| **Relatório .md / .html / .zip** | Download do relatório comercial |
+| **Arquivos** | Abre Files filtrado pelo alvo |
+| **Usar no chat** | Preenche prompt para continuar análise |
+| **Excluir** | Remove recon + surface do alvo |
+
+**Subpainéis** (via menu inferior da lista):
+
+| Painel | Função |
+|--------|--------|
+| **Logs** | Lista execuções com busca; abrir log; excluir entrada |
+| **Timeline** | Linha do tempo da sessão ativa — comando, status, links |
+| **Auditoria** | Eventos `GET /api/audit`; limpar por dia ou tudo |
+| **Limpar dados** | Resumo de storage (`GET /api/data/summary`); purge por categoria (logs, recon, surface, outputs, evidence, delivery, audit) |
+
+Promoção manual de findings (✓ confirmado / FP / ✕ descartado) na tabela de triagem do hub.
+
+### Mapa de ameaças (`mapa` · `Alt+C`)
+
+Modal **separado** do Intel com [Kaspersky Cybermap](https://cybermap.kaspersky.com/pt). Modos **live** e **globe**; arraste o globo; link para mapa completo.
 
 ### Fluxo consultoria (resumo)
 
 ```
-Auto-Pilot ou playbook → surface.json (findings candidatos)
+Auto-Pilot ou playbook → surface.json (findings candidatos + extractors nmap/nikto)
         → pipeline PoC (até 3 passes; WAF → fila humana)
         → gate rígido → relatório executivo
-        → intel/triage → revisão → .zip para o cliente
+        → Intel (hub do alvo) → revisão → .zip para o cliente
 ```
 
 ### Painel Files (`files` · `Alt+F`)
 
-Lista artefatos gerados no container em **`/tools/output`** (relatórios, `.pcap`, scans `-oA`, etc.). Clique na linha para download. Volume Docker: `backend/outputs` ↔ `/tools/output`.
+Modal simples: artefatos em **`/tools/output`** agrupados por pasta. Busca por nome/alvo; clique para download; exclusão via `DELETE /api/data/files/{path}`.
 
-Peça à IA para salvar saídas com caminho explícito, por exemplo:
+Peça à IA para salvar saídas com caminho explícito:
 
 ```text
 nmap -oA /tools/output/scanme scanme.nmap.org
 ```
+
+### Auto-Pilot (`pilot` · `Alt+P`)
+
+Fluxo principal simplificado:
+
+1. **Alvo** — domínio/IP/URL autorizado
+2. **O que fazer** — objetivo em linguagem natural (+ atalhos de objetivos comuns)
+3. **Iniciar missão com IA** — metodologia por fases, Attack Surface, relatório ao final
+
+**Roteiros fixos (opcional):** seção recolhível com cards `recon-web` e `port-scan`. Ao escolher um roteiro, o botão principal muda para **Rodar roteiro: …** (execução sequencial sem IA). Botão **Usar missão com IA** volta ao modo autônomo.
+
+### Tour guiado e onboarding
+
+| Recurso | Quando |
+|---------|--------|
+| **Tour guiado** (`F1`, `?`, botão `?` na toolbar) | Spotlight nos elementos da UI — explica chat, tools, pilot, intel, files, mapa |
+| **Onboarding** (primeira visita) | 3 passos: health Docker/Kali, escopo `ALLOWED_TARGETS`, primeiro scan sugerido |
 
 ### Sons CRT (`snd:on` / `snd:off`)
 
@@ -350,21 +397,21 @@ Efeitos sintetizados via **Web Audio API** (sem arquivos `.mp3`). Feedback em en
 |--------|------|
 | `Alt+T` | Ferramentas |
 | `Alt+P` | Auto-Pilot |
-| `Alt+I` | Intel (aba recon) |
-| `Alt+C` | Intel (aba threats) |
+| `Alt+I` | Intel (hub de alvos) |
+| `Alt+C` | **Mapa** Kaspersky (modal separado) |
 | `Alt+F` | Artefatos (`/tools/output`) |
-| `Alt+R` | Relatório |
+| `Alt+R` | Relatório da sessão |
 | `Alt+N` | Novo chat |
-| `Alt+H` / `F1` | Ajuda |
+| `Alt+H` / `F1` | Tour guiado |
 | `Alt+K` / `Ctrl+K` | Focar prompt |
-| `M` | Sidebar |
-| `Esc` | Fechar painéis |
+| `M` | Recolher/expandir sidebar (desktop) ou gaveta (mobile) |
+| `Esc` | Fechar painéis / sair do tour |
 | `↑` / `↓` | Histórico da sessão |
 | `snd` (status bar) | Ligar/desligar sons CRT |
 
 Alternativas: `Ctrl+Shift+T/P/E/N`. Usar `Alt+*` evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega).
 
-Persistência no navegador: `chat-ia-kali-sessions` (conversas), `chat-ia-kali-model` (modelo ativo), `chat-ia-kali-sound` (sons).
+**Persistência no navegador:** `chat-ia-kali-sessions` (conversas), `chat-ia-kali-model` (modelo ativo), `chat-ia-kali-sound` (sons), `chat-ia-kali-sidebar-collapsed` (sidebar recolhida no desktop).
 
 ---
 
@@ -384,9 +431,10 @@ Durante chat ou Auto-Pilot, o botão **cancel** envia `AbortController` no clien
 
 ### Auto-Pilot (metodologia + assertividade)
 
-1. `Alt+P` → informe **alvo**, **objetivo** e opcionalmente **risk_profile** (ou playbook + alvo)
-2. O agente segue fases fixas e atualiza o **Attack Surface Graph** (`backend/surface/`) a cada comando
-3. Ao encerrar: pipeline PoC automático → relatório comercial → revisão na aba **triage**
+1. `Alt+P` → informe **alvo** e **o que fazer** (objetivo) — ou escolha um **roteiro fixo** na seção opcional
+2. Clique **Iniciar missão com IA** (ou **Rodar roteiro** se playbook selecionado)
+3. O agente segue fases fixas e atualiza o **Attack Surface Graph** (`backend/surface/`) a cada comando
+4. Ao encerrar: pipeline PoC automático → relatório comercial → revisão no **Intel** (hub do alvo)
 
 | Fase | O que faz | Ferramentas típicas |
 |------|-----------|---------------------|
@@ -499,7 +547,7 @@ POST /api/engagements
 
 ### Relatório de sessão (chat)
 
-Botão **report** → `POST /api/generate-report` com histórico da sessão. Se houver Attack Surface para o alvo, usa o mesmo motor assertivo; caso contrário, fallback por regex nos logs.
+Botão **report** → `POST /api/generate-report` com histórico da sessão. Se houver Attack Surface para o alvo (`surface_target` no body), usa o mesmo motor assertivo; caso contrário, fallback por regex nos logs + extractors.
 
 ### Exemplos práticos
 
@@ -508,15 +556,15 @@ Botão **report** → `POST /api/generate-report` com histórico da sessão. Se 
 | *"Liste redes Wi-Fi"* | `wlan-scan` via `netsh` (Windows host) |
 | *"Scan SYN em scanme.nmap.org"* | `nmap` no container + dashboard |
 | *"Subdomínios de example.com"* | `subfinder` / `amass` |
-| **pilot** + alvo lab | Missão autônoma → triage → relatório/ZIP |
-| **intel → triage** | Risk score, verify, export `.zip` para cliente |
+| **pilot** + alvo lab | Missão autônoma → Intel hub → relatório/ZIP |
+| **intel** → alvo | Risk score, verify, export `.zip` para cliente |
 | Tier **Economia** | Modelo mais barato (Flash-Lite / DeepSeek V3.2) |
 
 ---
 
 ## Playbooks
 
-Presets em `backend/playbooks/*.yaml` (schema em `playbook.schema.json` — **não** é Ansible). Disponíveis no Auto-Pilot ou via API.
+Presets em `backend/playbooks/*.yaml` (schema em `playbook.schema.json` — **não** é Ansible). Na UI ficam na seção **Roteiros fixos (opcional)** do Auto-Pilot; também disponíveis via API.
 
 Ao final de cada playbook: atualiza o **Attack Surface Graph** e dispara o **pipeline PoC** (mesmo motor do Auto-Pilot).
 
@@ -628,6 +676,22 @@ Cada execução gera evento append-only em `backend/audit/events-YYYY-MM-DD.json
 - timestamp, ferramenta, comando, alvos, status, `mission_id`, `log_file_id`
 - segredos redigidos automaticamente
 
+### Admin de dados (`/api/data`)
+
+Categorias de purge (`POST /api/data/purge` com `confirm: true`):
+
+| Categoria | Remove |
+|-----------|--------|
+| `logs` | Arquivos em `backend/logs/` |
+| `recon` | Cache `backend/recon/{alvo}.json` |
+| `surface` | Attack Surface `backend/surface/{alvo}.json` |
+| `outputs` | Artefatos gerais em `backend/outputs/` (exceto evidence/delivery se categorias separadas) |
+| `evidence` | Pacotes de prova `outputs/evidence/` |
+| `delivery` | ZIPs de entrega `outputs/delivery/` |
+| `audit` | JSONL em `backend/audit/` |
+
+Opcional: filtrar por `target` em recon/surface. Exclusões individuais via `DELETE` por recurso.
+
 ### File manager
 
 - Anti path-traversal (`files_store.py`)
@@ -669,7 +733,7 @@ Trade-off do perfil A: privilégios elevados ≈ controle próximo ao host — u
 
 Recon: extraído após execuções bem-sucedidas; injetado no prompt quando o usuário menciona o mesmo alvo. Entradas expiradas removidas por `RECON_TTL_DAYS`.
 
-Surface: atualizado a cada execução (chat, Auto-Pilot, playbook); alimenta triagem, verify e relatório comercial.
+Surface: atualizado a cada execução (chat, Auto-Pilot, playbook); extractors para nmap/nikto além de Nuclei; alimenta triagem, verify e relatório comercial. Backfill: `repair_surface_from_stored_output(alvo)`.
 
 **Não versionar:** além dos paths acima, `backend/surface/*.json` e `backend/outputs/**` (exceto `.gitkeep`).
 
@@ -706,6 +770,14 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | GET | `/api/files` | Lista artefatos em `OUTPUTS_DIR` |
 | GET | `/api/files/{path}` | Download de artefato (path validado, anti-traversal, limite MB) |
 | GET | `/api/audit` | Trilha de auditoria (JSONL, `?limit=&date=`) |
+| GET | `/api/data/summary` | Resumo de storage (logs, recon, surface, outputs, audit, …) |
+| GET | `/api/data/logs` | Lista logs de execução (`?limit=`) |
+| POST | `/api/data/purge` | Purge por categoria — body: `{ "categories": [...], "target": "opcional", "confirm": true }` |
+| DELETE | `/api/data/logs/{id}` | Exclui log de execução (+ entrada na auditoria) |
+| DELETE | `/api/data/recon/{target}` | Exclui cache recon do alvo |
+| DELETE | `/api/data/surface/{target}` | Exclui Attack Surface / engajamento do alvo |
+| DELETE | `/api/data/files/{path}` | Exclui artefato em `OUTPUTS_DIR` |
+| DELETE | `/api/data/audit` | Purge auditoria (`?all=true` ou `?date=YYYY-MM-DD`) |
 | GET | `/api/playbooks` | Lista playbooks pré-definidos |
 | POST | `/api/playbooks/{id}/run` | Executa playbook em alvo autorizado |
 | GET | `/api/logs/{id}` | Log completo (text/plain) |
@@ -774,7 +846,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 | `[blocked]` | Ferramenta fora da whitelist ou `..` nos args |
 | CSS/JS antigo | Hard refresh `Ctrl+Shift+R` (cache-bust em `?v=` nos assets) |
 | Arquivos vazios em **files** | Recrie o container após alterar `docker-compose.yml` (`docker compose up -d --build`) |
-| Mapa Kaspersky sem interação | Use aba **threats** · modo **globe**; arraste o globo; ↗ para mapa completo |
+| Mapa Kaspersky sem interação | Use botão **mapa** ou `Alt+C` (modal separado) · modo **globe**; arraste o globo |
 | Sem som | Clique na página uma vez (política do browser); verifique `snd:on` |
 | Wi-Fi container vazio | Dongle USB; `docker exec kali-tools wifi-status` |
 | Build Docker lenta | Normal na 1ª vez; cache nas seguintes |
@@ -785,7 +857,7 @@ Base: `http://127.0.0.1:8000`. Com `CHAT_API_TOKEN`, rotas `/api/*` exigem cooki
 
 ## Testes e validação
 
-### Automatizados (180+ testes unitários)
+### Automatizados (188 testes unitários)
 
 ```bash
 python -m unittest discover -s tests -v
@@ -821,6 +893,8 @@ npx playwright test -c e2e/playwright.config.js
 | `test_verify_pipeline.py` | PoC, scoring, fechamento assertivo, seções do relatório |
 | `test_assertiveness.py` | Dedup, remediação, delta, WAF, triage/export API |
 | `test_max_assertiveness.py` | Nuclei JSON, CVSS, gate rígido, evidências, ZIP, risk/chains |
+| `test_data_cleanup.py` | API `/api/data`, purge, exclusão logs/recon/surface/arquivos |
+| `test_tool_findings_extract.py` | Extractors nmap/nikto/HttpOnly/banners → surface |
 
 ### Matriz por módulo
 
@@ -861,11 +935,11 @@ python -m coverage run -m unittest discover -s tests -q && coverage report
 
 **Funcional:** chat · execução nmap lab · **cancel** · whitelist bloqueia · log em `backend/logs/`
 
-**Auto-Pilot / assertividade:** missão lab · **intel → triage** · verify · export `.html` e `.zip` · revisar fila humana
+**Auto-Pilot / assertividade:** missão lab · **intel** (hub + verify) · export `.html` e `.zip` · revisar fila humana
 
-**Segurança:** `CHAT_API_TOKEN` · login · sessão sobrevive restart
+**Segurança:** `CHAT_API_TOKEN` · login · sessão sobrevive restart · purge dados via Intel → Limpar dados
 
-**UI:** hard refresh · sidebar · status bar Docker/Kali · **intel** (5 abas, incl. triage) · **files** · sons CRT
+**UI:** hard refresh · sidebar recolhível (rail) · status bar Docker/Kali · **intel** hub · **files** · **mapa** · tour guiado · sons CRT
 
 ---
 
@@ -897,7 +971,7 @@ Variável opcional: `LOG_LEVEL` (padrão `INFO`). Segredos são redigidos nos lo
 |-------|-------|
 | Release estável | **1.1.0** |
 | API | `/api/health` → `"version": "1.1.0"` |
-| Testes | 180+ unit · 5 E2E |
+| Testes | 188 unit · 5 E2E |
 | Documentação | Este README |
 
 ```bash
@@ -910,6 +984,23 @@ git push origin main --tags
 ---
 
 ## Changelog
+
+### Pós-1.1.0 — UI Intel, dados e persistência (2026-07-16)
+
+| Área | O que entrou |
+|------|----------------|
+| **Intel hub** | Lista de alvos + detalhe/triagem; subpainéis logs, timeline, audit, limpar dados |
+| **Mapa separado** | Modal próprio (`mapa` / `Alt+C`) — fora do Intel |
+| **Files** | Modal simples agrupado por pasta; busca e exclusão |
+| **Auto-Pilot** | Fluxo alvo → objetivo → missão IA; playbooks em seção opcional |
+| **Sidebar** | Rail recolhível (~52px) com ícones; `M` / `‹`/`›` / ☰ |
+| **Tour guiado** | Spotlight interativo (`guided-tour.js`) + onboarding primeira visita |
+| **Extractors** | Achados nmap/nikto/HttpOnly/banners em `surface.py`; backfill de logs |
+| **API dados** | `/api/data/*` — summary, purge, delete logs/recon/surface/files/audit |
+| **Modelo DeepSeek** | ID atualizado para `deepseek/deepseek-v3.2` |
+| **Testes** | +`test_data_cleanup`, +`test_tool_findings_extract` → **188** testes |
+
+Módulos frontend: `targets-hub.js`, `data-admin.js`, `guided-tour.js`, `logs-panel.js`, `row-actions.js`. Backend: `routes/data.py`, `executor/data_cleanup.py`.
 
 ### Pós-1.1.0 — Teto prático de assertividade (2026-07-16)
 
@@ -1009,7 +1100,7 @@ Ferramentas: `requirements-dev.txt` (Ruff, coverage, Bandit, etc.), `pyproject.t
 
 | Antes | Depois |
 |-------|--------|
-| ~70 testes, ~71% cobertura | **180 testes**, cobertura alta no `backend/` |
+| ~70 testes, ~71% cobertura | **188 testes**, cobertura alta no `backend/` |
 
 Novos grupos principais: `test_observability`, `test_agent_unit`, `test_autopilot_unit`, `test_security_proxy`, `test_coverage_*` (executor, rotas, agent, gaps finais), `e2e/observability.spec.js`. Rate limit flaky corrigido (recriação do limiter entre cenários).
 
