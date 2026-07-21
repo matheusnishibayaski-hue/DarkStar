@@ -5,6 +5,8 @@ cd /d "%~dp0"
 if /i "%~1"=="servidor" goto server_only
 if /i "%~1"=="nodocker" goto server_only
 if /i "%~1"=="repair" goto repair_docker
+if /i "%~1"=="menu" goto menu_only
+if /i "%~1"=="quick" goto menu_only
 
 set "COMPOSE_FILE=docker-compose.yml"
 if /i "%~1"=="restricted" set "COMPOSE_FILE=docker-compose.restricted.yml"
@@ -194,6 +196,7 @@ echo [6/6] Servidor web...
 goto run_server
 
 :server_only
+if not defined COMPOSE_FILE set "COMPOSE_FILE=docker-compose.yml"
 echo.
 echo  Servidor apenas (sem Docker/Kali)
 echo  Wi-Fi scan nativo (wlan-scan) funciona assim.
@@ -218,6 +221,18 @@ call "venv\Scripts\activate.bat"
 python -m pip install -q -r requirements.txt >nul 2>&1
 python -c "import reportlab" >nul 2>&1
 if errorlevel 1 python -m pip install -q reportlab==4.4.1 >nul 2>&1
+goto run_server
+
+:menu_only
+if not defined COMPOSE_FILE set "COMPOSE_FILE=docker-compose.yml"
+echo.
+echo  Modo rapido — apenas menu do servidor (sem Docker/pip)
+echo.
+if not exist "venv\Scripts\python.exe" (
+    echo [ERRO] Rode start.bat completo uma vez para criar o venv.
+    pause
+    exit /b 1
+)
 goto run_server
 
 :repair_docker
@@ -330,6 +345,7 @@ pause
 exit /b 1
 
 :run_server
+if not defined COMPOSE_FILE set "COMPOSE_FILE=docker-compose.yml"
 echo.
 echo  ============================================
 if exist ".env" (
@@ -343,12 +359,22 @@ if /i "!UVICORN_HOST!"=="127.0.0.1" (
   echo   Acesso local apenas ^(127.0.0.1^)
   echo   Rede LAN: defina UVICORN_HOST=0.0.0.0 no .env
 )
-echo   Pressione Ctrl+C para encerrar
+echo   Menu: [R] reiniciar servidor  [K] reiniciar Kali  [Q] sair
 echo  ============================================
 echo.
 
-python -m uvicorn backend.main:app --host !UVICORN_HOST! --port !UVICORN_PORT! --reload
+set "START_PS1=%~dp0start.ps1"
+if not exist "!START_PS1!" (
+    echo [ERRO] Nao encontrado: !START_PS1!
+    pause
+    exit /b 1
+)
+
+powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -File "!START_PS1!" ^
+    -ProjectRoot "%CD%" ^
+    -ComposeFile "!COMPOSE_FILE!"
 
 echo.
-echo Servidor encerrado.
+echo Menu encerrado.
 pause
+exit /b 0

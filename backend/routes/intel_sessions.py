@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from backend.executor.session_intel import (
     aggregate_session_findings,
+    backfill_session_findings_from_client,
     collect_session_tool_executions,
     delete_session_intel,
     list_session_summaries,
@@ -15,6 +16,7 @@ from backend.executor.session_intel import (
     patch_session_finding,
     session_summary,
     set_session_label,
+    sync_session_intel_from_logs,
 )
 
 router = APIRouter(prefix="/api/intel", tags=["intel"])
@@ -28,6 +30,10 @@ class SessionFindingPatch(BaseModel):
     surface_target: str = Field(..., min_length=1, max_length=253)
     status: str = Field(..., min_length=1, max_length=32)
     evidence: str = Field(default="", max_length=2000)
+
+
+class SessionExecutionsSync(BaseModel):
+    executions: list[dict] = Field(default_factory=list, max_length=100)
 
 
 def _validate_session_id(session_id: str) -> str:
@@ -69,6 +75,15 @@ def api_intel_session_delete(session_id: str):
     session_id = _validate_session_id(session_id)
     deleted = delete_session_intel(session_id)
     return {"deleted": deleted, "session_id": session_id}
+
+
+@router.post("/sessions/{session_id}/sync-executions")
+def api_intel_sync_executions(session_id: str, body: SessionExecutionsSync):
+    session_id = _validate_session_id(session_id)
+    sync_session_intel_from_logs(session_id)
+    stats = backfill_session_findings_from_client(session_id, body.executions)
+    findings = aggregate_session_findings(session_id, sync=False)
+    return {"session_id": session_id, **stats, "findings_count": len(findings)}
 
 
 @router.post("/sessions/{session_id}/findings/{finding_id}")

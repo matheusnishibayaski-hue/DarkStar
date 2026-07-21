@@ -91,6 +91,30 @@ class TestAgentUnit(unittest.TestCase):
         self.assertEqual(len(result.tool_executions), 1)
         self.assertTrue(result.tool_executions[0].success)
 
+    def test_conversational_answer_without_forcing_tools(self):
+        msg = MagicMock()
+        msg.content = "Nmap é um scanner de portas e serviços de rede."
+        msg.tool_calls = None
+
+        choice = MagicMock()
+        choice.message = msg
+        resp = MagicMock()
+        resp.choices = [choice]
+
+        fake_client = MagicMock()
+        fake_client.chat.completions.create.return_value = resp
+
+        with (
+            patch("backend.ai.agent.OPENROUTER_API_KEY", "sk-test"),
+            patch("backend.ai.agent.OpenAI", return_value=fake_client),
+            patch("backend.ai.agent.resolve_model", return_value=("m1", "m2")),
+        ):
+            result = chat([], "O que é o nmap?")
+
+        self.assertIn("Nmap", result.message)
+        self.assertEqual(len(result.tool_executions), 0)
+        self.assertEqual(fake_client.chat.completions.create.call_count, 1)
+
     def test_generate_report_contains_sections(self):
         md = generate_report(
             [

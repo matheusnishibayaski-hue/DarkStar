@@ -24,14 +24,28 @@ function visible(el) {
   return r.width > 0 && r.height > 0;
 }
 
+/** Elemento real para o spotlight (ex.: label do switch quando o input está oculto). */
+function spotlightTarget(step) {
+  const primary = step.spotlightSelector ? $(step.spotlightSelector) : $(step.selector);
+  if (!primary) return null;
+  if (visible(primary)) return primary;
+  if (primary instanceof HTMLInputElement) {
+    const label =
+      primary.closest("label") ||
+      (primary.id ? document.querySelector(`label[for="${CSS.escape(primary.id)}"]`) : null);
+    if (label && visible(label)) return label;
+  }
+  return null;
+}
+
 function buildSteps() {
   return [
     {
       title: "Bem-vindo ao assistente",
       text:
-        "Este programa conversa com você e executa testes de segurança em sites e redes — " +
-        "somente em alvos que você tem permissão para testar. " +
-        "Neste tour vamos passar por cada botão e explicar, em linguagem simples, para que serve.",
+        "Você está no Chat IA Kali: a assistente Kali conversa com você e roda ferramentas reais no Docker — " +
+        "sempre só em alvos que você tem permissão para testar. " +
+        "Este tour mostra cada área da interface em linguagem simples.",
       centered: true,
       before: async () => resetPanels(),
     },
@@ -39,8 +53,8 @@ function buildSteps() {
       selector: "#chat",
       title: "Área da conversa",
       text:
-        "Aqui aparecem suas mensagens e as respostas da inteligência artificial. " +
-        "Quando uma ferramenta de segurança roda, o resultado também é mostrado nesta área.",
+        "Suas mensagens e as respostas da Kali aparecem aqui. Ela age como assistente de pentest (não só lista de comandos): " +
+        "explica, sugere próximos passos e mostra o resultado quando uma ferramenta roda.",
       placement: "top",
       before: async () => resetPanels(),
     },
@@ -48,8 +62,8 @@ function buildSteps() {
       selector: "#input",
       title: "Campo de mensagem",
       text:
-        "Digite aqui o que você quer fazer, como se estivesse conversando no WhatsApp. " +
-        "Exemplo: “verifique as portas abertas em scanme.nmap.org”. Pressione Enter para enviar.",
+        "Converse em português, como no WhatsApp. Ex.: “faça um scan leve em scanme.nmap.org e resuma”. " +
+        "Enter envia · ↑/↓ recupera mensagens anteriores desta conversa.",
       placement: "top",
     },
     {
@@ -91,10 +105,18 @@ function buildSteps() {
     },
     {
       selector: "#sidebar-help",
-      title: "Ajuda no menu lateral",
+      title: "Guia no menu lateral",
       text:
-        "Abre o mesmo tour guiado que você está vendo agora. Também funciona com a tecla F1 no teclado.",
+        "Reabre este tour guiado. Atalhos: F1, Alt+H ou o botão ? na barra superior (fora de campos de texto).",
       placement: "right",
+    },
+    {
+      selector: "#sidebar-collapse",
+      title: "Recolher conversas",
+      text:
+        "No desktop, deixa a barra lateral estreita (só ícones) para ganhar espaço no chat. Atalho M.",
+      placement: "right",
+      when: () => !isMobile() && visible($("#sidebar-collapse")),
     },
     {
       selector: "#btn-menu",
@@ -139,11 +161,23 @@ function buildSteps() {
       placement: "top",
     },
     {
+      selector: "#offensive-mode-control",
+      title: "Modo offensive",
+      text:
+        "Switch na barra superior: interface fica vermelha e o Piloto automático pode usar perfil de risco completo " +
+        "(ferramentas agressivas no scan completo/personalizado). Use só em alvos autorizados.",
+      placement: "bottom",
+      before: async () => {
+        resetPanels();
+        if (isMobile()) $("#term-toolbar-extra")?.classList.remove("open");
+        await delay(80);
+      },
+    },
+    {
       selector: "#btn-autopilot",
       title: "Piloto automático",
       text:
-        "Modo “faça tudo sozinho”: você informa o site/alvo e o objetivo, e o sistema executa várias etapas " +
-        "sem precisar digitar cada comando. Ideal para varreduras completas.",
+        "Missão em várias etapas sem digitar cada comando: você informa o alvo e o tipo de scan; a IA executa e, ao terminar, gera PDF.",
       placement: "bottom",
       before: async () => resetPanels(),
     },
@@ -160,8 +194,7 @@ function buildSteps() {
       selector: "#autopilot-target",
       title: "Alvo da missão",
       text:
-        "Site ou servidor que você tem autorização para testar. " +
-        "Nunca use alvos de terceiros sem permissão.",
+        "Domínio, IP ou URL que você tem autorização para testar. O objetivo técnico é definido automaticamente conforme o tipo de scan.",
       placement: "bottom",
       before: async () => {
         resetPanels();
@@ -170,64 +203,63 @@ function buildSteps() {
       },
     },
     {
-      selector: "#autopilot-objective",
-      title: "O que fazer",
+      selector: "#pilot-scan-options",
+      title: "Tipo de scan",
       text:
-        "Descreva em português o objetivo — por exemplo: “mapear portas e falhas no site”. " +
-        "Ou clique numa sugestão abaixo do campo.",
+        "Básico · Intermediário · Completo · Personalizado. Em Personalizado, marque as ferramentas na grade abaixo. " +
+        "Com offensive ligado, o scan Completo usa o catálogo ampliado.",
       placement: "top",
     },
     {
       selector: "#autopilot-start",
-      title: "Iniciar missão com IA",
+      title: "Iniciar missão",
       text:
-        "Único botão principal: a IA planeja, executa ferramentas e gera relatório. " +
-        "Roteiros fixos (sem IA) ficam opcionais em “Roteiros fixos”, se você quiser.",
+        "A IA planeja e executa as ferramentas do perfil. Ao concluir, o PDF é salvo em Relatórios (Alt+F) e você pode triar achados no ícone de relatório ao lado do prompt.",
       placement: "top",
+      before: async () => {
+        if (ctx.overlayAutopilot?.hidden) {
+          resetPanels();
+          openOverlay(ctx.overlayAutopilot);
+          await delay(180);
+        }
+      },
     },
     {
       selector: "#btn-toolbar-more",
       title: "Mais opções (celular)",
-      text:
-        "Em telas pequenas, alguns botões ficam escondidos aqui. Toque para ver Intel, Arquivos e Relatório.",
+      text: "Em telas pequenas, abre Relatórios (PDFs baixados) e Mapa mundial.",
       placement: "bottom",
       when: () => isMobile(),
       before: async () => resetPanels(),
     },
     {
-      selector: "#btn-intel",
-      title: "Intel — seus alvos e relatórios",
+      selector: ".chat-conversation-actions",
+      title: "Logs e relatório",
       text:
-        "Aqui ficam os alvos testados. Você escolhe um, vê os achados, clica em Verificar e baixa o relatório.",
-      placement: "bottom",
+        "Ícones ao lado do prompt: Logs listam cada execução desta conversa; Relatório abre a triagem de achados (vulnerabilidade, falso positivo, descartar).",
+      placement: "top",
       before: async () => {
         resetPanels();
-        if (isMobile()) $("#term-toolbar-extra")?.classList.add("open");
-        await delay(120);
+        await delay(80);
       },
     },
     {
-      selector: "#hub-list",
-      title: "Lista de alvos",
-      text: "Clique no site/IP que você testou. Os detalhes abrem à direita.",
-      placement: "right",
-      before: async () => {
-        await ctx.openIntelPanel?.("hub");
-        await delay(280);
-      },
+      selector: "#btn-session-logs",
+      title: "Logs da conversa",
+      text: "Detalhe de cada comando: horário, status e saída completa quando precisar auditar o que rodou.",
+      placement: "top",
     },
     {
-      selector: "#hub-actions",
-      title: "Ações do alvo",
+      selector: "#btn-session-report",
+      title: "Relatório e triagem",
       text:
-        "Verificar = validar achados. Depois baixe Relatório .md / .html / .zip para o cliente. " +
-        "Arquivos abre as saídas salvas desse alvo.",
-      placement: "bottom",
+        "Modal largo com resumo por severidade. Classifique cada achado; nada é baixado até você clicar em Baixar PDF no rodapé. Alt+R.",
+      placement: "top",
     },
     {
       selector: "#btn-files",
-      title: "Arquivos",
-      text: "Pasta com tudo que as ferramentas salvaram em /tools/output. Separado do Intel.",
+      title: "Biblioteca de PDFs",
+      text: "Relatórios PDF que você baixou pelo chat ou pelo Piloto — salvos neste navegador (Alt+F).",
       placement: "bottom",
       before: async () => {
         resetPanels();
@@ -237,8 +269,8 @@ function buildSteps() {
     },
     {
       selector: "#files-list",
-      title: "Lista de arquivos",
-      text: "Use Abrir para ver/baixar e Excluir (duas vezes) para apagar.",
+      title: "Seus relatórios",
+      text: "Abra de novo, baixe outra cópia ou exclua entradas da biblioteca local.",
       placement: "top",
       before: async () => {
         await ctx.openFilesPanel?.();
@@ -257,19 +289,6 @@ function buildSteps() {
         await delay(100);
         await ctx.openThreatsPanel?.();
         await delay(220);
-      },
-    },
-    {
-      selector: "#btn-report",
-      title: "Relatório da conversa",
-      text:
-        "Baixa um relatório em texto (Markdown) com o resumo desta conversa — " +
-        "útil para documentar o que foi feito na sessão atual.",
-      placement: "bottom",
-      before: async () => {
-        resetPanels();
-        if (isMobile()) $("#term-toolbar-extra")?.classList.add("open");
-        await delay(120);
       },
     },
     {
@@ -333,8 +352,8 @@ function buildSteps() {
     {
       title: "Pronto!",
       text:
-        "Você viu os principais botões e funções. Lembre-se: use apenas em alvos autorizados. " +
-        "Para uma lista técnica de atalhos de teclado, clique em “Atalhos avançados” abaixo.",
+        "Você viu chat, ferramentas, Piloto, modo offensive, logs, triagem e PDFs. " +
+        "Use só alvos autorizados. Para atalhos de teclado, clique em “Atalhos avançados” abaixo ou F1 de novo.",
       centered: true,
       before: async () => resetPanels(),
     },
@@ -426,8 +445,8 @@ function positionSpotlight() {
     return;
   }
 
-  const el = $(step.selector);
-  if (!el || !visible(el)) {
+  const el = spotlightTarget(step);
+  if (!el) {
     backdrop.hidden = false;
     spotlight.hidden = true;
     positionCard(null, null, true);

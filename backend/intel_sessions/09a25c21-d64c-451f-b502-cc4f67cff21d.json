@@ -1,0 +1,86 @@
+{
+  "session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+  "label": "",
+  "targets": [
+    "scanme.nmap.org",
+    "this.media",
+    "www.google-analytics.com",
+    "m.parentnode.insertbefore",
+    "this.onerror",
+    "this.srcset",
+    "this.src",
+    "npcap.com",
+    "seclists.org",
+    "sectools.org",
+    "insecure.org"
+  ],
+  "created_at": "2026-07-21T00:39:13Z",
+  "updated_at": "2026-07-21T00:43:12Z",
+  "session_findings": [
+    {
+      "id": "exec-622af21dcaf6",
+      "title": "Resultado — nmap",
+      "severity": "info",
+      "status": "confirmed",
+      "evidence": "manual:confirmed",
+      "tool": "nmap",
+      "command": "nmap scanme.nmap.org",
+      "host": "scanme.nmap.org",
+      "surface_target": "scanme.nmap.org",
+      "chat_session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+      "source": "execution_log"
+    },
+    {
+      "id": "exec-802d7d834a3d",
+      "title": "Resultado — nmap",
+      "severity": "info",
+      "status": "confirmed",
+      "evidence": "manual:confirmed",
+      "tool": "nmap",
+      "command": "nmap -n --host-timeout 300s scanme.nmap.org",
+      "host": "scanme.nmap.org",
+      "surface_target": "scanme.nmap.org",
+      "chat_session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+      "source": "execution_log"
+    },
+    {
+      "id": "exec-96642b2af538",
+      "title": "Resultado — nmap",
+      "severity": "info",
+      "status": "confirmed",
+      "evidence": "manual:confirmed",
+      "tool": "nmap",
+      "command": "nmap -F -n scanme.nmap.org",
+      "host": "scanme.nmap.org",
+      "surface_target": "scanme.nmap.org",
+      "chat_session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+      "source": "execution_log"
+    },
+    {
+      "id": "exec-b56e58afa766",
+      "title": "Resultado — curl",
+      "severity": "info",
+      "status": "confirmed",
+      "evidence": "manual:confirmed",
+      "tool": "curl",
+      "command": "curl -s -I http://scanme.nmap.org",
+      "host": "scanme.nmap.org",
+      "surface_target": "scanme.nmap.org",
+      "chat_session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+      "source": "execution_log"
+    },
+    {
+      "id": "exec-90ce862c7fe3",
+      "title": "Resultado — curl",
+      "severity": "info",
+      "status": "confirmed",
+      "evidence": "manual:confirmed",
+      "tool": "curl",
+      "command": "curl -s http://scanme.nmap.org | head -100",
+      "host": "scanme.nmap.org",
+      "surface_target": "scanme.nmap.org",
+      "chat_session_id": "09a25c21-d64c-451f-b502-cc4f67cff21d",
+      "source": "execution_log"
+    }
+  ]
+}

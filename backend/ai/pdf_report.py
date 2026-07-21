@@ -95,6 +95,14 @@ def generate_report_pdf(
         spaceAfter=6,
         textColor=colors.HexColor("#14532d"),
     )
+    h3 = ParagraphStyle(
+        "H3",
+        parent=styles["Heading3"],
+        fontSize=11,
+        spaceBefore=10,
+        spaceAfter=4,
+        textColor=colors.HexColor("#1b4332"),
+    )
     body = styles["BodyText"]
     body.fontSize = 10
     body.leading = 14
@@ -215,18 +223,67 @@ def generate_report_pdf(
         story.append(table)
         story.append(Spacer(1, 0.35 * cm))
 
+    from backend.ai.remediation import remediation_for
+
+    detail_items = [f for f in findings if str(f.get("status") or "") != "discarded"]
+    if detail_items:
+        story.append(Paragraph("Detalhamento — comando, evidência e correção", h2))
+        for i, f in enumerate(detail_items, 1):
+            status = _STATUS_LABELS.get(str(f.get("status") or ""), "Pendente")
+            rem = remediation_for(f)
+            host = str(f.get("surface_target") or f.get("host") or "—")
+            cmd = str(f.get("command") or "—")
+            evidence = str(f.get("evidence") or f.get("title") or "—")
+            story.append(
+                Paragraph(
+                    f"<b>{i}. {_pdf_text(f.get('title') or 'Achado')}</b> "
+                    f"({_pdf_text(status)} · {_pdf_text(f.get('severity') or '—')})",
+                    h3,
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>Alvo:</b> {_pdf_text(host)}<br/>"
+                    f"<b>Comando executado:</b> "
+                    f"<font face='Courier' size='8'>{_pdf_text(cmd)[:500]}</font>",
+                    body,
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>O que foi encontrado:</b><br/>{_pdf_text(evidence)[:1200]}",
+                    body,
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"<b>Como corrigir — {_pdf_text(rem.get('title'))}:</b><br/>"
+                    f"{_pdf_text(rem.get('action'))}",
+                    body,
+                )
+            )
+            story.append(Spacer(1, 0.25 * cm))
+
     execs = tool_executions or []
     if execs:
-        story.append(Paragraph("Comandos executados", h2))
+        story.append(Paragraph("Histórico de comandos executados", h2))
         for i, ex in enumerate(execs[:40], 1):
             cmd = _pdf_text(ex.get("command") or "")
             ok = "OK" if ex.get("success") else "FALHA"
+            out = _pdf_text((ex.get("stdout") or ex.get("stderr") or "")[:400])
             story.append(
                 Paragraph(
                     f"{i}. [{ok}] <font face='Courier' size='8'>{cmd[:200]}</font>",
                     body,
                 )
             )
+            if out:
+                story.append(
+                    Paragraph(
+                        f"<font face='Courier' size='7'>{out}</font>",
+                        body,
+                    )
+                )
         story.append(Spacer(1, 0.3 * cm))
 
     story.append(Spacer(1, 0.5 * cm))

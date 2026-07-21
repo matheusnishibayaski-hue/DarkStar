@@ -1,8 +1,7 @@
-/** Piloto automático — missão com IA ou roteiro fixo (playbook). */
+/** Piloto automático — missão com IA por perfil de scan. */
 
 import { apiFetch } from "./api.js";
-import { listPlaybooks, runPlaybook } from "./api/routes.js";
-import { QUICK_OBJECTIVES } from "./constants.js";
+import { isOffensiveModeEnabled } from "./offensive-mode.js";
 import {
   getActiveSession,
   ensureSession,
@@ -11,7 +10,9 @@ import {
   updateSessionTitle,
   rebuildInputHistory,
 } from "./sessions.js";
-import { getModelPayload } from "./tools-panel.js";
+import { getModelPayload, loadTools, toolCategories } from "./tools-panel.js";
+import { downloadSessionPdf } from "./session-report-pdf.js";
+import { openSessionReportModal } from "./session-report-modal.js";
 import {
   closeAllLiveStreams,
   createToolStreamHandlers,
@@ -32,28 +33,197 @@ import {
   hideTyping,
   scrollChatToBottom,
 } from "./chat-view.js";
-import { toast, showToastError, downloadMarkdown, setLoading, getLoading, closeOverlay } from "./ui.js";
+import { toast, showToastError, setLoading, getLoading, closeOverlay } from "./ui.js";
 
 let ctx = {};
-let playbooksCache = [];
-/** @type {string} id do roteiro selecionado, ou "" para missão com IA */
-let selectedPlaybookId = "";
+/** @type {"basic"|"intermediate"|"full"|"custom"} */
+let selectedScanProfile = "basic";
+/** @type {Set<string>} */
+const customToolSelection = new Set();
+/** @type {Array<{id:string,label:string,description:string,tool_count:number}>} */
+let scanProfileMeta = [];
+
+const DEFAULT_OBJECTIVES = {
+  basic:
+    "Scan básico: executar as ferramentas essenciais do perfil (portas, DNS, HTTP, nuclei, nikto) e resumir achados.",
+  intermediate:
+    "Scan intermediário: recon ampliado, enumeração web e checks adicionais do perfil; priorizar achados confirmáveis.",
+  full:
+    "Scan completo: percorrer o catálogo de ferramentas do perfil no alvo autorizado e documentar tudo relevante.",
+  custom: "Scan personalizado: executar cada ferramenta selecionada e consolidar achados com evidências.",
+};
+
+async function refreshOffensiveDependentUi() {
+  await refreshScanProfileUi();
+  if (selectedScanProfile === "custom") {
+    await reloadPilotToolCatalog();
+    renderPilotToolGrid();
+  }
+}
+
+export async function onPilotOffensiveModeChanged() {
+  await refreshOffensiveDependentUi();
+}
+
+async function fetchScanProfiles() {
+  const offensive = isOffensiveModeEnabled();
+  try {
+    const res = await apiFetch(`/api/scan-profiles?offensive=${offensive ? "1" : "0"}`);
+    if (res.ok) {
+      const data = await res.json();
+      scanProfileMeta = data.profiles || [];
+      return;
+    }
+  } catch {
+    /* fallback abaixo */
+  }
+  scanProfileMeta = [
+    { id: "basic", label: "Básico", description: "Recon essencial.", tool_count: 12 },
+    { id: "intermediate", label: "Intermediário", description: "Mais ferramentas.", tool_count: 35 },
+    {
+      id: "full",
+      label: "Completo",
+      description: offensive ? "Todas permitidas no servidor." : "Catálogo da UI.",
+      tool_count: offensive ? 150 : 78,
+    },
+    { id: "custom", label: "Personalizado", description: "Escolha manual.", tool_count: 0 },
+  ];
+}
+
+async function reloadPilotToolCatalog() {
+  const offensive = isOffensiveModeEnabled();
+  try {
+    const res = await apiFetch(`/api/tools?offensive=${offensive ? "1" : "0"}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.categories) && data.categories.length > 0) {
+        toolCategories.length = 0;
+        toolCategories.push(...data.categories);
+        return;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  await loadTools();
+}
+
+function renderScanProfileOptions() {
+  const root = ctx.pilotScanOptions;
+  if (!root) return;
+
+  root.innerHTML = scanProfileMeta
+    .map((p) => {
+      const count =
+        p.id === "custom"
+          ? "você escolhe"
+          : `${p.tool_count || "?"} ferramenta(s)`;
+      return `
+        <label class="pilot-scan-card">
+          <input type="radio" name="pilot-scan" value="${escapeAttr(p.id)}" ${
+        p.id === selectedScanProfile ? "checked" : ""
+      } />
+          <span class="pilot-scan-card-body">
+            <strong>${escapeHtml(p.label)}</strong>
+            <span>${escapeHtml(p.description || "")}</span>
+            <em>${escapeHtml(count)}</em>
+          </span>
+        </label>`;
+    })
+    .join("");
+
+  root.querySelectorAll('input[name="pilot-scan"]').forEach((input) => {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      selectedScanProfile = input.value || "basic";
+      syncCustomToolsPanel();
+    });
+  });
+  syncCustomToolsPanel();
+}
+
+async function refreshScanProfileUi() {
+  await fetchScanProfiles();
+  renderScanProfileOptions();
+}
 
 export function initAutopilot(context) {
   ctx = context;
-  renderQuickObjectives();
-  loadPlaybookCards();
-  ctx.autopilotStart?.addEventListener("click", onPrimaryAction);
-  ctx.pilotClearPlaybook?.addEventListener("click", () => selectPlaybook(""));
-  ctx.autopilotObjective?.addEventListener("input", () => {
-    if (selectedPlaybookId) selectPlaybook("");
-  });
+  initScanProfileUi();
+  ctx.autopilotStart?.addEventListener("click", () => startAutopilot());
   ctx.autopilotTarget?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      onPrimaryAction();
+      startAutopilot();
     }
   });
+}
+
+async function initScanProfileUi() {
+  if (!ctx.pilotScanOptions) return;
+  ctx.pilotToolSearch?.addEventListener("input", () => {
+    if (selectedScanProfile === "custom") renderPilotToolGrid();
+  });
+  await refreshScanProfileUi();
+  await reloadPilotToolCatalog();
+  syncCustomToolsPanel();
+}
+
+function syncCustomToolsPanel() {
+  const panel = ctx.pilotCustomTools;
+  const isCustom = selectedScanProfile === "custom";
+  if (panel) panel.hidden = !isCustom;
+  if (!isCustom) {
+    if (ctx.pilotToolGrid) ctx.pilotToolGrid.innerHTML = "";
+    if (ctx.pilotToolSearch) ctx.pilotToolSearch.value = "";
+    return;
+  }
+  void reloadPilotToolCatalog().then(() => renderPilotToolGrid());
+}
+
+function renderPilotToolGrid() {
+  if (selectedScanProfile !== "custom") return;
+  const grid = ctx.pilotToolGrid;
+  if (!grid) return;
+  const q = (ctx.pilotToolSearch?.value || "").trim().toLowerCase();
+  const items = [];
+  for (const cat of toolCategories) {
+    for (const t of cat.tools || []) {
+      if (q && !t.id.includes(q) && !(t.summary || "").toLowerCase().includes(q)) continue;
+      items.push(t);
+    }
+  }
+  if (!items.length) {
+    grid.innerHTML = `<p class="pilot-advanced-desc">Nenhuma ferramenta encontrada.</p>`;
+    return;
+  }
+  grid.innerHTML = items
+    .map(
+      (t) => `
+    <label class="pilot-tool-check">
+      <input type="checkbox" data-tool="${escapeAttr(t.id)}" ${
+        customToolSelection.has(t.id) ? "checked" : ""
+      } />
+      <span><strong>${escapeHtml(t.id)}</strong> — ${escapeHtml(t.summary || "")}</span>
+    </label>`
+    )
+    .join("");
+
+  grid.querySelectorAll("input[data-tool]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      const id = cb.getAttribute("data-tool") || "";
+      if (cb.checked) customToolSelection.add(id);
+      else customToolSelection.delete(id);
+    });
+  });
+}
+
+function getCustomToolsList() {
+  return [...customToolSelection];
+}
+
+function scanProfileLabel(id) {
+  return scanProfileMeta.find((p) => p.id === id)?.label || id;
 }
 
 function setBusy(busy) {
@@ -64,182 +234,21 @@ function setBusy(busy) {
   ctx.updateStatusBar?.();
 }
 
-function renderQuickObjectives() {
-  const wrap = ctx.quickObjectivesEl;
-  if (!wrap) return;
-  wrap.innerHTML = "";
-  const label = document.createElement("span");
-  label.className = "quick-obj-label";
-  label.textContent = "Sugestões:";
-  wrap.appendChild(label);
-
-  for (const obj of QUICK_OBJECTIVES) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "quick-obj-btn";
-    btn.textContent = obj.length > 52 ? `${obj.slice(0, 52)}…` : obj;
-    btn.title = obj;
-    btn.addEventListener("click", () => {
-      selectPlaybook("");
-      if (ctx.autopilotObjective) {
-        ctx.autopilotObjective.value = obj;
-        ctx.autopilotObjective.focus();
-      }
-      updatePrimaryButton();
-    });
-    wrap.appendChild(btn);
-  }
-}
-
-async function loadPlaybookCards() {
-  const root = ctx.pilotPlaybooksEl;
-  if (!root) return;
-  try {
-    const res = await listPlaybooks();
-    if (!res.ok) return;
-    playbooksCache = (await res.json()).playbooks || [];
-  } catch {
-    playbooksCache = [];
-  }
-
-  if (!playbooksCache.length) {
-    root.innerHTML = `<p class="pilot-advanced-desc">Nenhum roteiro instalado.</p>`;
-    return;
-  }
-
-  root.innerHTML = playbooksCache
-    .map((pb) => {
-      const title = friendlyPlaybookName(pb);
-      const desc = pb.description || `${pb.steps_count || "?"} passos`;
-      return `
-        <button type="button" class="pilot-pb-card" data-pb="${escapeAttr(pb.id)}" aria-pressed="false">
-          <strong>${escapeHtml(title)}</strong>
-          <span>${escapeHtml(desc)}</span>
-          <em>${pb.steps_count || 0} passo(s) · sem IA</em>
-        </button>`;
-    })
-    .join("");
-
-  root.querySelectorAll("[data-pb]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const id = btn.getAttribute("data-pb") || "";
-      selectPlaybook(selectedPlaybookId === id ? "" : id);
-    });
-  });
-}
-
-function friendlyPlaybookName(pb) {
-  const map = {
-    "port-scan": "Scan de portas (nmap)",
-    "recon-web": "Recon web (subdomínios + HTTP)",
-  };
-  return map[pb.id] || pb.name || pb.id;
-}
-
-function selectPlaybook(id) {
-  selectedPlaybookId = id || "";
-  const wrap = ctx.autopilotObjectiveWrap;
-  const clearBtn = ctx.pilotClearPlaybook;
-  const cards = ctx.pilotPlaybooksEl?.querySelectorAll("[data-pb]") || [];
-
-  cards.forEach((c) => {
-    const on = c.getAttribute("data-pb") === selectedPlaybookId;
-    c.classList.toggle("is-selected", on);
-    c.setAttribute("aria-pressed", on ? "true" : "false");
-  });
-
-  if (wrap) wrap.classList.toggle("is-dimmed", Boolean(selectedPlaybookId));
-  if (clearBtn) clearBtn.hidden = !selectedPlaybookId;
-
-  // Abre o details se escolheu roteiro
-  const adv = ctx.pilotAdvanced;
-  if (selectedPlaybookId && adv) adv.open = true;
-
-  updatePrimaryButton();
-}
-
-function updatePrimaryButton() {
-  const btn = ctx.autopilotStart;
-  const foot = ctx.pilotFoot;
-  if (!btn) return;
-  if (selectedPlaybookId) {
-    const pb = playbooksCache.find((p) => p.id === selectedPlaybookId);
-    const name = pb ? friendlyPlaybookName(pb) : selectedPlaybookId;
-    btn.textContent = `Rodar roteiro: ${name}`;
-    btn.classList.add("autopilot-start--playbook");
-    if (foot) {
-      foot.textContent = "Roteiro fixo: mesmos comandos sempre, sem planejamento da IA.";
-    }
-  } else {
-    btn.textContent = "Iniciar missão com IA";
-    btn.classList.remove("autopilot-start--playbook");
-    if (foot) {
-      foot.textContent = "Só use alvos que você tem autorização para testar.";
-    }
-  }
-}
-
-function onPrimaryAction() {
-  if (selectedPlaybookId) {
-    runSelectedPlaybook();
-  } else {
-    startAutopilot();
-  }
-}
-
-async function runSelectedPlaybook() {
-  const id = selectedPlaybookId;
-  const target = ctx.autopilotTarget?.value.trim();
-  if (!id) {
-    showToastError("Escolha um roteiro ou inicie a missão com IA.");
-    return;
-  }
-  if (!target) {
-    showToastError("Informe o alvo.");
-    ctx.autopilotTarget?.focus();
-    return;
-  }
-  if (getLoading()) return;
-
-  setBusy(true);
-  closeOverlay(ctx.overlayAutopilot);
-  const label = friendlyPlaybookName(playbooksCache.find((p) => p.id === id) || { id });
-  appendLine("info", `Roteiro “${label}” → ${target} …`);
-
-  try {
-    const res = await runPlaybook(id, {
-      target,
-      mission_id: createMissionId(),
-      chat_session_id: getActiveSession()?.id || "",
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      showToastError(data.detail || "Falha ao executar roteiro");
-      return;
-    }
-    const ok = (data.results || []).filter((r) => r.success).length;
-    appendLine("info", `Roteiro concluído: ${ok}/${data.steps_run} passo(s) ok · veja Intel e Arquivos`);
-    toast(`Roteiro concluído (${ok} ok)`, "success");
-  } catch (e) {
-    showToastError(e.message);
-  } finally {
-    setBusy(false);
-    ctx.input?.focus();
-  }
-}
-
 export async function startAutopilot() {
   const target = ctx.autopilotTarget?.value.trim();
-  const objective = ctx.autopilotObjective?.value.trim();
+  const scanProfile = selectedScanProfile;
+  const objective = DEFAULT_OBJECTIVES[scanProfile] || DEFAULT_OBJECTIVES.basic;
+  const customTools = scanProfile === "custom" ? getCustomToolsList() : [];
+
+  if (scanProfile === "custom" && !customTools.length) {
+    showToastError("No perfil personalizado, marque ao menos uma ferramenta.");
+    ctx.pilotCustomTools?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    return;
+  }
 
   if (!target) {
     showToastError("Informe o alvo.");
     ctx.autopilotTarget?.focus();
-    return;
-  }
-  if (!objective) {
-    showToastError("Descreva o que fazer, ou escolha uma sugestão.");
-    ctx.autopilotObjective?.focus();
     return;
   }
 
@@ -249,7 +258,10 @@ export async function startAutopilot() {
   const session = getActiveSession();
   closeOverlay(ctx.overlayAutopilot);
 
-  const userMsg = `[Auto-Pilot]\nAlvo: ${target}\nObjetivo: ${objective}`;
+  const offensive = isOffensiveModeEnabled();
+  const userMsg = `[Auto-Pilot · ${scanProfileLabel(scanProfile)}${
+    offensive ? " · modo ofensivo" : ""
+  }]\nAlvo: ${target}\nObjetivo: ${objective}`;
   const missionId = createMissionId();
   const abortController = new AbortController();
   beginMission(missionId, abortController);
@@ -276,6 +288,9 @@ export async function startAutopilot() {
         objective,
         mission_id: missionId,
         chat_session_id: session.id,
+        scan_profile: scanProfile,
+        custom_tools: customTools,
+        risk_profile: isOffensiveModeEnabled() ? "full" : "safe-active",
         ...getModelPayload(),
       }),
       signal: abortController.signal,
@@ -345,16 +360,22 @@ export async function startAutopilot() {
     }
     scrollChatToBottom();
 
-    if (data.report && data.stopped_reason !== "cancelled") {
-      const safeName = target.replace(/[^\w.-]+/g, "_").slice(0, 40);
-      downloadMarkdown(data.report, `relatorio-autopilot-${safeName}.md`);
+    if (data.stopped_reason !== "cancelled" && (data.tool_executions || []).length > 0) {
       appendLine(
         "info",
-        `Relatório baixado · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
+        `Missão concluída · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
           data.objective_met ? "objetivo atingido" : data.stopped_reason
-        }`
+        } · gerando PDF…`
       );
-      toast(`Missão concluída · ${data.tools_executed} comandos`, "success");
+      try {
+        await downloadSessionPdf(session, { silent: true });
+        appendLine("info", "Relatório PDF gerado e salvo em Relatórios (Alt+F).");
+        toast(`Missão concluída · PDF do relatório pronto`, "success");
+        openSessionReportModal();
+      } catch (pdfErr) {
+        appendLine("warn", `PDF automático: ${pdfErr.message}`);
+        toast(`Missão ok, mas PDF falhou: ${pdfErr.message}`, "warn");
+      }
     } else if (data.stopped_reason === "cancelled") {
       toast("Missão cancelada", "warn");
     }

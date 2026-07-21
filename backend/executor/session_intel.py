@@ -86,12 +86,192 @@ def _finding_belongs_to_session(finding: dict[str, Any], session_id: str) -> boo
     return str(finding.get("chat_session_id") or "") == session_id
 
 
-def aggregate_session_findings(session_id: str) -> list[dict[str, Any]]:
-    """Achados de todos os alvos desta conversa."""
+def _parse_execution_log(raw: str) -> dict[str, str]:
+    cmd = ""
+    stdout_lines: list[str] = []
+    stderr_lines: list[str] = []
+    section = "head"
+    for line in raw.splitlines():
+        if line.startswith("Comando:"):
+            cmd = line.split(":", 1)[-1].strip()
+            continue
+        if line.strip() == "=== STDOUT ===":
+            section = "stdout"
+            continue
+        if line.strip() == "=== STDERR ===":
+            section = "stderr"
+            continue
+        if section == "stdout":
+            stdout_lines.append(line)
+        elif section == "stderr":
+            stderr_lines.append(line)
+    return {
+        "command": cmd,
+        "stdout": "\n".join(stdout_lines).strip(),
+        "stderr": "\n".join(stderr_lines).strip(),
+    }
+
+
+def sync_session_intel_from_logs(session_id: str) -> dict[str, Any]:
+    """Reindexa alvos e achados a partir dos logs desta conversa."""
+    from backend.executor.logs import list_log_ids_for_session, read_execution_log
+    from backend.executor.recon_db import extract_targets, is_recon_target
+    from backend.executor.surface import update_surface_from_execution
+
+    stats = {"logs": 0, "targets_touched": 0, "surfaces_updated": 0, "session_findings": 0}
+    data = load_session(session_id) or {
+        "session_id": session_id,
+        "label": "",
+        "targets": [],
+        "session_findings": [],
+        "created_at": _now(),
+    }
+    session_findings: list[dict[str, Any]] = list(data.get("session_findings") or [])
+    by_id = {str(f.get("id")): f for f in session_findings if f.get("id")}
+
+    for log_id in list_log_ids_for_session(session_id):
+        raw = read_execution_log(log_id)
+        if not raw:
+            continue
+        stats["logs"] += 1
+        parsed = _parse_execution_log(raw)
+        cmd = parsed["command"]
+        if not cmd:
+            continue
+        stdout = parsed["stdout"]
+        stderr = parsed["stderr"]
+        targets = [
+            normalize_target(t)
+            for t in extract_targets(cmd, stdout, stderr)
+            if is_recon_target(t)
+        ]
+        for t in targets:
+            touch_session(session_id, t)
+            stats["targets_touched"] += 1
+
+        tool = (cmd.split() or ["unknown"])[0].split("/")[-1].lower()
+        success = not (stderr and "error" in stderr.lower()[:300])
+
+        for target in dict.fromkeys(targets):
+            try:
+                update_surface_from_execution(
+                    target,
+                    command=cmd,
+                    tool=tool,
+                    stdout=stdout,
+                    stderr=stderr,
+                    success=success,
+                    blocked=False,
+                    exit_code=0 if success else 1,
+                    chat_session_id=session_id,
+                )
+                stats["surfaces_updated"] += 1
+            except Exception:
+                pass
+
+        fid = f"exec-{log_id}"
+        if fid in by_id:
+            continue
+        host = targets[0] if targets else ""
+        excerpt = (stdout or stderr or "Execução registrada (sem saída longa no log).")[:500]
+        row = {
+            "id": fid,
+            "title": f"Resultado — {tool}",
+            "severity": "info",
+            "status": "candidate",
+            "evidence": f"{cmd}\n\n{excerpt}"[:2000],
+            "tool": tool,
+            "command": cmd[:500],
+            "host": host,
+            "surface_target": host or "_session",
+            "chat_session_id": session_id,
+            "source": "execution_log",
+        }
+        session_findings.append(row)
+        by_id[fid] = row
+        stats["session_findings"] += 1
+
+    data["session_findings"] = session_findings[-200:]
+    save_session(session_id, data)
+    return stats
+
+
+def backfill_session_findings_from_client(
+    session_id: str,
+    executions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Achados resumidos a partir das execuções salvas no navegador (quando logs não indexados)."""
+    import hashlib
+
+    from backend.executor.recon_db import extract_targets, is_recon_target
+
+    data = load_session(session_id) or {
+        "session_id": session_id,
+        "label": "",
+        "targets": [],
+        "session_findings": [],
+        "created_at": _now(),
+    }
+    session_findings: list[dict[str, Any]] = list(data.get("session_findings") or [])
+    by_id = {str(f.get("id")): f for f in session_findings if f.get("id")}
+    added = 0
+
+    for idx, ex in enumerate(executions[:100]):
+        if not isinstance(ex, dict):
+            continue
+        cmd = str(ex.get("command") or "").strip()
+        if not cmd:
+            continue
+        stdout = str(ex.get("stdout") or "")
+        stderr = str(ex.get("stderr") or "")
+        targets = [
+            normalize_target(t)
+            for t in extract_targets(cmd, stdout, stderr)
+            if is_recon_target(t)
+        ]
+        for t in targets:
+            touch_session(session_id, t)
+
+        digest = hashlib.sha1(f"{session_id}:{cmd}:{idx}".encode()).hexdigest()[:12]
+        fid = f"exec-client-{digest}"
+        if fid in by_id:
+            continue
+        tool = str(ex.get("tool") or (cmd.split() or ["?"])[0]).split("/")[-1].lower()
+        host = targets[0] if targets else ""
+        excerpt = (stdout or stderr or "—")[:500]
+        ok = ex.get("success", True)
+        row = {
+            "id": fid,
+            "title": f"{'OK' if ok else 'Falha'} — {tool}",
+            "severity": "info" if ok else "low",
+            "status": "candidate",
+            "evidence": f"{cmd}\n\n{excerpt}"[:2000],
+            "tool": tool,
+            "command": cmd[:500],
+            "host": host,
+            "surface_target": host or "_session",
+            "chat_session_id": session_id,
+            "source": "client_history",
+        }
+        session_findings.append(row)
+        by_id[fid] = row
+        added += 1
+
+    data["session_findings"] = session_findings[-200:]
+    save_session(session_id, data)
+    return {"added": added, "total": len(session_findings)}
+
+
+def aggregate_session_findings(session_id: str, *, sync: bool = True) -> list[dict[str, Any]]:
+    """Achados de todos os alvos desta conversa + resumos de execução."""
+    if sync:
+        try:
+            sync_session_intel_from_logs(session_id)
+        except Exception:
+            pass
+
     meta = load_session(session_id)
     targets = list(meta.get("targets") or [])
-    if not targets:
-        return []
 
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -105,13 +285,26 @@ def aggregate_session_findings(session_id: str) -> list[dict[str, Any]]:
             if not _finding_belongs_to_session(f, session_id):
                 continue
             fid = str(f.get("id") or "")
-            key = f"{target}:{fid}"
+            key = f"surface:{target}:{fid}"
             if key in seen:
                 continue
             seen.add(key)
             row = dict(f)
             row["surface_target"] = target
             out.append(row)
+
+    for f in meta.get("session_findings") or []:
+        if not isinstance(f, dict):
+            continue
+        fid = str(f.get("id") or "")
+        if not fid or fid in seen:
+            continue
+        seen.add(fid)
+        row = dict(f)
+        if not row.get("surface_target"):
+            row["surface_target"] = row.get("host") or "_session"
+        out.append(row)
+
     return out
 
 
@@ -151,6 +344,25 @@ def patch_session_finding(
     *,
     evidence: str = "",
 ) -> dict[str, Any] | None:
+    if finding_id.startswith("exec-"):
+        data = load_session(session_id)
+        updated: dict[str, Any] | None = None
+        for f in data.get("session_findings") or []:
+            if str(f.get("id")) != finding_id:
+                continue
+            f["status"] = status
+            if evidence:
+                f["evidence"] = evidence[:2000]
+            updated = dict(f)
+            break
+        if not updated:
+            return None
+        save_session(session_id, data)
+        return {
+            **updated,
+            "surface_target": updated.get("surface_target") or surface_target or "_session",
+        }
+
     finding = mark_finding_status(surface_target, finding_id, status, evidence=evidence)
     if not finding:
         return None
@@ -192,10 +404,16 @@ def collect_session_tool_executions(session_id: str, limit: int = 80) -> list[di
         raw = read_execution_log(log_id)
         if not raw:
             continue
-        cmd = ""
-        for line in raw.splitlines():
-            if line.startswith("Comando:"):
-                cmd = line.split(":", 1)[-1].strip()
-                break
-        rows.append({"log_id": log_id, "command": cmd})
+        parsed = _parse_execution_log(raw)
+        cmd = parsed["command"]
+        rows.append(
+            {
+                "log_id": log_id,
+                "command": cmd,
+                "stdout": parsed["stdout"][:4000],
+                "stderr": parsed["stderr"][:2000],
+                "success": True,
+                "tool": (cmd.split() or [""])[0].split("/")[-1] if cmd else "",
+            }
+        )
     return rows

@@ -23,6 +23,7 @@ from backend.config import (
     OPENROUTER_API_KEY,
     SYSTEM_PROMPT,
 )
+from backend.config_prompts import CHAT_FINALIZE_NUDGE, CHAT_POST_TOOL_NUDGE
 from backend.executor.kali import execute_in_kali
 from backend.executor.logs import new_log_id
 from backend.executor.recon_db import (
@@ -49,9 +50,9 @@ KALI_TOOL_DEFINITION = {
     "function": {
         "name": "run_kali_tool",
         "description": (
-            "Executa comandos reais em um contêiner Kali Linux isolado para varreduras, "
-            "análises, consultas técnicas ou reconhecimento. Use sempre esta ferramenta em vez "
-            "de apenas sugerir comandos em texto livre."
+            "Executa um comando real no container Kali Linux. "
+            "Use quando o usuário pedir scan, teste, enumeração ou dado que exija saída real do terminal. "
+            "Não use para perguntas só explicativas ou conversa geral."
         ),
         "parameters": {
             "type": "object",
@@ -66,8 +67,8 @@ KALI_TOOL_DEFINITION = {
                 "reason": {
                     "type": "string",
                     "description": (
-                        "A justificativa técnica de por que este comando está sendo "
-                        "executado nesta etapa."
+                        "Breve justificativa técnica (também exibida nos logs): "
+                        "o que vai fazer e por quê, em tom de assistente."
                     ),
                 },
             },
@@ -126,11 +127,27 @@ def _persist_recon(
     chat_session_id: str | None = None,
 ) -> None:
     from backend.ai.findings import auto_verify_from_execution
-    from backend.executor.recon_db import extract_targets, is_recon_target
+    from backend.executor.recon_db import extract_targets, is_recon_target, normalize_target
+    from backend.executor.session_intel import touch_session
     from backend.executor.surface import update_surface_from_execution
 
-    command_targets = [t for t in extract_targets(result.command) if is_recon_target(t)]
-    targets = command_targets or [t for t in session_targets if is_recon_target(t)]
+    command_targets = [
+        normalize_target(t)
+        for t in extract_targets(result.command, result.stdout, result.stderr)
+        if is_recon_target(t)
+    ]
+    session_norm = [
+        normalize_target(t) for t in session_targets if is_recon_target(t)
+    ]
+    targets: list[str] = []
+    for t in command_targets + session_norm:
+        if t and t not in targets:
+            targets.append(t)
+
+    if chat_session_id:
+        for t in targets:
+            touch_session(chat_session_id, t)
+
     if not targets:
         return
 
@@ -171,8 +188,9 @@ def _apply_preferred_tool(user_message: str, preferred_tool: str | None) -> str:
     if not preferred_tool or preferred_tool == "auto":
         return user_message
     return (
-        f"[Ferramenta obrigatória: '{preferred_tool}'. "
-        f"Execute o comando com esta ferramenta via run_kali_tool e mostre o resultado.]\n\n"
+        f"[O usuário fixou a ferramenta '{preferred_tool}' no painel. "
+        f"Priorize executá-la via run_kali_tool se o pedido for operacional; "
+        f"se for só dúvida conceitual sobre ela, responda em texto.]\n\n"
         f"{user_message}"
     )
 
@@ -261,6 +279,8 @@ def _run_openrouter(
     emit: EmitFn | None = None,
     mission_id: str | None = None,
     chat_session_id: str | None = None,
+    *,
+    force_tool_use: bool = False,
 ) -> ChatResponse:
     if not OPENROUTER_API_KEY:
         return ChatResponse(
@@ -284,6 +304,7 @@ def _run_openrouter(
             emit,
             mission_id,
             chat_session_id,
+            force_tool_use=force_tool_use,
         )
     finally:
         if mission_id:
@@ -299,6 +320,8 @@ def _run_openrouter_body(
     emit: EmitFn | None,
     mission_id: str | None,
     chat_session_id: str | None = None,
+    *,
+    force_tool_use: bool = False,
 ) -> ChatResponse:
     client = OpenAI(
         base_url=OPENROUTER_BASE_URL,
@@ -345,14 +368,15 @@ def _run_openrouter_body(
         assistant_message = response.choices[0].message
 
         if not assistant_message.tool_calls:
-            if not nudged and not executions:
+            if not nudged and not executions and force_tool_use:
                 nudged = True
                 messages.append(
                     {
                         "role": "user",
                         "content": (
-                            "Execute o comando AGORA com run_kali_tool. "
-                            "Não sugira — rode a ferramenta e interprete a saída."
+                            "O usuário escolheu uma ferramenta fixa ou pediu execução. "
+                            "Use run_kali_tool agora se o pedido for operacional; "
+                            "caso contrário responda em texto."
                         ),
                     }
                 )
@@ -363,10 +387,13 @@ def _run_openrouter_body(
 
         messages.append(_assistant_message_dict(assistant_message))
 
+        batch_ran_kali = False
+        batch_needs_healing = False
         for tool_call in assistant_message.tool_calls:
             if tool_call.function.name != "run_kali_tool":
                 continue
 
+            batch_ran_kali = True
             try:
                 arguments = json.loads(tool_call.function.arguments)
                 command = arguments.get("command", "")
@@ -395,6 +422,7 @@ def _run_openrouter_body(
             last = executions[-1]
             if should_attempt_healing(last, healing_attempts):
                 healing_attempts += 1
+                batch_needs_healing = True
                 messages.append(
                     {
                         "role": "user",
@@ -402,13 +430,18 @@ def _run_openrouter_body(
                     }
                 )
 
+        if batch_ran_kali and not batch_needs_healing:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": CHAT_POST_TOOL_NUDGE,
+                }
+            )
+
     messages.append(
         {
             "role": "user",
-            "content": (
-                "Por favor, conclua agora e gere a sua resposta/análise final "
-                "com base nas execuções realizadas acima."
-            ),
+            "content": CHAT_FINALIZE_NUDGE,
         }
     )
 
@@ -440,6 +473,7 @@ def chat(
 ) -> ChatResponse:
     user_message = _apply_preferred_tool(user_message, preferred_tool)
     enriched, targets = _apply_recon_context(user_message, history)
+    force_tool_use = bool(preferred_tool and preferred_tool != "auto")
     return _run_openrouter(
         history,
         enriched,
@@ -449,6 +483,7 @@ def chat(
         emit=emit,
         mission_id=mission_id,
         chat_session_id=chat_session_id,
+        force_tool_use=force_tool_use,
     )
 
 

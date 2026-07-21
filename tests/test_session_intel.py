@@ -65,7 +65,7 @@ class TestSessionIntel(unittest.TestCase):
                 ]
                 save_surface(target_b, data_b)
 
-                findings = si.aggregate_session_findings(sid)
+                findings = si.aggregate_session_findings(sid, sync=False)
                 self.assertEqual(len(findings), 2)
                 titles = {f["title"] for f in findings}
                 self.assertIn("High on A", titles)
@@ -83,8 +83,33 @@ class TestSessionIntel(unittest.TestCase):
                 self.assertEqual(summary["findings_confirmed"], 1)
 
                 self.assertTrue(si.delete_session_intel(sid))
-                self.assertEqual(si.aggregate_session_findings(sid), [])
+                self.assertEqual(si.aggregate_session_findings(sid, sync=False), [])
                 self.assertFalse((intel_dir / f"{sid}.json").exists())
+
+    def test_backfill_client_executions(self):
+        from backend.executor import session_intel as si
+
+        with tempfile.TemporaryDirectory() as tmp:
+            intel_dir = Path(tmp) / "intel"
+            intel_dir.mkdir()
+            sid = "sess-backfill-123456"
+
+            with patch.object(si, "INTEL_SESSIONS_DIR", intel_dir):
+                stats = si.backfill_session_findings_from_client(
+                    sid,
+                    [
+                        {
+                            "command": "nmap -sV scanme.nmap.org",
+                            "stdout": "80/tcp open http",
+                            "success": True,
+                            "tool": "nmap",
+                        }
+                    ],
+                )
+                self.assertEqual(stats["added"], 1)
+                findings = si.aggregate_session_findings(sid, sync=False)
+                self.assertEqual(len(findings), 1)
+                self.assertIn("nmap", findings[0]["title"].lower())
 
     def test_intel_session_routes(self):
         from backend.main import app

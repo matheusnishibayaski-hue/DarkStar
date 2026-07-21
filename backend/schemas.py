@@ -63,6 +63,12 @@ class AutonomousRequest(BaseModel):
         max_length=32,
         description="passive | safe-active | full (vazio = RISK_PROFILE do .env)",
     )
+    scan_profile: str = Field(
+        default="basic",
+        max_length=32,
+        description="basic | intermediate | full | custom",
+    )
+    custom_tools: list[str] = Field(default_factory=list, max_length=200)
 
 
 class LoginRequest(BaseModel):

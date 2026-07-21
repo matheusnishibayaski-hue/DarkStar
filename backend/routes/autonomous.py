@@ -34,6 +34,8 @@ def api_autonomous_stream(req: AutonomousRequest):
                 mission_id=req.mission_id or None,
                 risk_profile=req.risk_profile or None,
                 chat_session_id=req.chat_session_id or None,
+                scan_profile=req.scan_profile or None,
+                custom_tools=req.custom_tools or None,
             )
         except Exception as e:
             yield format_sse("error", {"detail": str(e)})
@@ -61,6 +63,8 @@ def api_autonomous(req: AutonomousRequest):
             mission_id=req.mission_id or None,
             risk_profile=req.risk_profile or None,
             chat_session_id=req.chat_session_id or None,
+            scan_profile=req.scan_profile or None,
+            custom_tools=req.custom_tools or None,
         )
         return AutonomousResponseModel(
             message=result.message,

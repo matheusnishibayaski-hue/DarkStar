@@ -86,6 +86,20 @@ export function collectSessionExecutions(session) {
   return all;
 }
 
+/** Execuções com carimbo de data da mensagem do assistente. */
+export function collectSessionExecutionsDetailed(session) {
+  const all = [];
+  for (const msg of session?.messages || []) {
+    if (msg.role === "assistant" && msg.toolExecutions?.length) {
+      const at = msg.at || session.updatedAt;
+      for (const ex of msg.toolExecutions) {
+        all.push({ ...ex, executedAt: at });
+      }
+    }
+  }
+  return all;
+}
+
 export function collectSessionHistory(session) {
   return (session?.messages || []).map((m) => ({ role: m.role, content: m.content }));
 }
@@ -105,6 +119,59 @@ export function collectSessionLogIds(session) {
     if (ex.log_file_id) ids.add(ex.log_file_id);
   }
   return [...ids];
+}
+
+export function renameSession(id, newTitle) {
+  const session = store.sessions.find((s) => s.id === id);
+  if (!session) return false;
+  const trimmed = (newTitle || "").trim().slice(0, 80);
+  session.title = trimmed || "novo chat";
+  session.updatedAt = Date.now();
+  saveStore();
+  renderSessions();
+  if (store.activeId === id) updateSessionTitle();
+  ctx.onChanged?.();
+  return true;
+}
+
+function beginRenameSession(sessionId, anchorEl) {
+  const session = store.sessions.find((s) => s.id === sessionId);
+  const item = anchorEl?.closest?.(".history-item");
+  if (!session || !item) return;
+
+  const titleEl = item.querySelector(".history-item-title");
+  if (!titleEl || item.querySelector(".history-item-rename-input")) return;
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "history-item-rename-input";
+  input.value = sessionTitle(session);
+  input.maxLength = 80;
+  input.setAttribute("aria-label", "Nome da conversa");
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
+
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save) renameSession(sessionId, input.value);
+    else renderSessions();
+  };
+
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation();
+    if (e.key === "Enter") {
+      e.preventDefault();
+      finish(true);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      finish(false);
+    }
+  });
+  input.addEventListener("blur", () => finish(true));
 }
 
 export function deleteSession(id, e) {
@@ -155,9 +222,21 @@ export function renderSessions() {
         <span class="history-item-title">${escapeHtml(title)}</span>
         <span class="history-item-meta">${formatRelativeTime(s.updatedAt)}${execCount ? ` · ${execCount} exec` : ""}</span>
       </span>
-      <span class="history-item-del" title="excluir">×</span>
+      <span class="history-item-actions">
+        <span class="history-item-rename" title="Renomear" aria-label="Renomear conversa">✎</span>
+        <span class="history-item-del" title="Excluir" aria-label="Excluir conversa">×</span>
+      </span>
     `;
     btn.addEventListener("click", () => switchSession(s.id));
+    btn.querySelector(".history-item-title")?.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      beginRenameSession(s.id, e.target);
+    });
+    btn.querySelector(".history-item-rename")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      beginRenameSession(s.id, e.target);
+    });
     btn.querySelector(".history-item-del").addEventListener("click", (e) => deleteSession(s.id, e));
     sessionsEl.appendChild(btn);
   }

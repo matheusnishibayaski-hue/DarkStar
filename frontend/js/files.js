@@ -1,121 +1,116 @@
-/** Modal Files — lista simples de artefatos em /tools/output. */
+/** Modal Files — biblioteca de relatórios PDF baixados no chat. */
 
-import { listFiles } from "./api/routes.js";
-import { fileOpenUrl } from "./api.js";
-import { deleteFile } from "./data-admin.js";
+import {
+  listDownloadedReports,
+  deleteDownloadedReport,
+  downloadReportRecord,
+  openReportRecord,
+  onReportsChanged,
+} from "./reports-store.js";
 import { attachDeleteAction, formatBytes, formatDate } from "./row-actions.js";
 import { escapeHtml } from "./exec.js";
 import { openOverlay } from "./ui.js";
 
 let ctx = {};
-let filesCache = [];
+let reportsCache = [];
 let filter = "";
+let unsubReports = null;
 
 export function initFilesPanel(context) {
   ctx = context;
-  ctx.filesRefreshBtn?.addEventListener("click", () => loadFiles(true));
+  ctx.filesRefreshBtn?.addEventListener("click", () => loadReports(true));
   ctx.filesSearch?.addEventListener("input", () => {
     filter = (ctx.filesSearch.value || "").trim().toLowerCase();
     render();
   });
-}
-
-function basename(path) {
-  return (path || "").split("/").pop() || path;
-}
-
-function folderOf(path) {
-  const parts = (path || "").split("/");
-  return parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+  unsubReports?.();
+  unsubReports = onReportsChanged(() => {
+    if (ctx.overlayFiles && !ctx.overlayFiles.hidden) loadReports(true);
+  });
 }
 
 function render() {
   const { filesListEl, filesMetaEl } = ctx;
   if (!filesListEl) return;
 
-  let list = filesCache;
+  let list = reportsCache;
   if (filter) {
-    list = list.filter((f) => f.name.toLowerCase().includes(filter));
+    list = list.filter((r) => {
+      const hay = `${r.title} ${r.fileName} ${r.sessionId}`.toLowerCase();
+      return hay.includes(filter);
+    });
   }
 
   if (filesMetaEl) {
     filesMetaEl.textContent = list.length
-      ? `${list.length} arquivo${list.length === 1 ? "" : "s"}`
-      : "nenhum arquivo";
+      ? `${list.length} relatório${list.length === 1 ? "" : "s"} baixado${list.length === 1 ? "" : "s"}`
+      : "nenhum relatório salvo";
   }
 
   if (!list.length) {
     filesListEl.innerHTML = `
       <div class="files-simple-empty">
-        <p>${filter ? "Nada corresponde à busca." : "Pasta vazia."}</p>
-        <p class="files-simple-hint">No chat, peça para salvar assim:<br>
-          <code>nmap -oN /tools/output/scan.txt alvo.com</code>
+        <p>${filter ? "Nada corresponde à busca." : "Nenhum relatório ainda."}</p>
+        <p class="files-simple-hint">
+          Gere PDFs pelo ícone de <strong>relatório</strong> na barra do chat
+          (classifique achados e use <strong>Baixar PDF</strong>).
         </p>
       </div>`;
     return;
   }
 
-  // agrupa por pasta
-  const groups = new Map();
-  for (const f of list) {
-    const folder = folderOf(f.name) || "raiz";
-    if (!groups.has(folder)) groups.set(folder, []);
-    groups.get(folder).push(f);
-  }
+  filesListEl.innerHTML = `
+    <div class="files-record-list" role="list">
+      ${list
+        .map(
+          (r) => `
+        <div class="files-simple-row files-report-row" data-report-id="${escapeHtml(r.id)}">
+          <div class="files-simple-info">
+            <span class="files-simple-name">${escapeHtml(r.title || r.fileName || "Relatório")}</span>
+            <span class="files-simple-meta">
+              ${escapeHtml(formatBytes(r.size))} · ${escapeHtml(formatDate(new Date(r.createdAt).toISOString()))}
+              ${r.fileName ? ` · ${escapeHtml(r.fileName)}` : ""}
+            </span>
+          </div>
+          <div class="files-simple-actions">
+            <button type="button" class="files-simple-btn files-open-btn">Abrir</button>
+            <button type="button" class="files-simple-btn files-dl-btn">Baixar</button>
+            <button type="button" class="files-simple-btn files-simple-btn--danger files-del-btn">Excluir</button>
+          </div>
+        </div>`
+        )
+        .join("")}
+    </div>`;
 
-  filesListEl.innerHTML = [...groups.entries()]
-    .map(([folder, items]) => {
-      const rows = items
-        .map((f) => {
-          const name = f.name;
-          return `
-          <div class="files-simple-row" data-row-id="${escapeHtml(name)}">
-            <div class="files-simple-info">
-              <span class="files-simple-name">${escapeHtml(basename(name))}</span>
-              <span class="files-simple-meta">${escapeHtml(formatBytes(f.size))} · ${escapeHtml(formatDate(f.modified_at))}</span>
-            </div>
-            <div class="files-simple-actions">
-              <a class="files-simple-btn" href="${escapeHtml(fileOpenUrl(name))}" target="_blank" rel="noopener">Abrir</a>
-              <button type="button" class="files-simple-btn files-simple-btn--danger files-del-btn">Excluir</button>
-            </div>
-          </div>`;
-        })
-        .join("");
-      return `
-        <section class="files-simple-group">
-          <h3 class="files-simple-folder">${escapeHtml(folder)}</h3>
-          ${rows}
-        </section>`;
-    })
-    .join("");
-
-  filesListEl.querySelectorAll(".files-del-btn").forEach((btn) => {
-    const row = btn.closest("[data-row-id]");
-    const name = row?.dataset.rowId;
-    if (!name) return;
-    attachDeleteAction(btn, {
-      label: basename(name),
-      toast: ctx.toast,
-      onDelete: async () => {
-        await deleteFile(name);
-        await loadFiles(true);
-      },
-    });
+  filesListEl.querySelectorAll(".files-report-row").forEach((row) => {
+    const id = row.dataset.reportId;
+    const record = reportsCache.find((x) => x.id === id);
+    if (!record) return;
+    row.querySelector(".files-open-btn")?.addEventListener("click", () => openReportRecord(record));
+    row.querySelector(".files-dl-btn")?.addEventListener("click", () => downloadReportRecord(record));
+    const delBtn = row.querySelector(".files-del-btn");
+    if (delBtn) {
+      attachDeleteAction(delBtn, {
+        label: record.title || record.fileName,
+        toast: ctx.toast,
+        onDelete: async () => {
+          await deleteDownloadedReport(id);
+          await loadReports(true);
+        },
+      });
+    }
   });
 }
 
-async function loadFiles(force = false) {
+async function loadReports(force = false) {
   const { filesListEl } = ctx;
-  if (!force && filesCache.length) {
+  if (!force && reportsCache.length) {
     render();
     return;
   }
   if (filesListEl) filesListEl.innerHTML = `<p class="files-simple-empty">carregando…</p>`;
   try {
-    const res = await listFiles();
-    if (!res.ok) throw new Error("Não foi possível listar os arquivos");
-    const data = await res.json();
-    filesCache = data.files || [];
+    reportsCache = await listDownloadedReports();
     render();
   } catch (e) {
     if (filesListEl) {
@@ -129,10 +124,10 @@ export async function openFilesPanel(nameFilter = "") {
   filter = (nameFilter || "").trim().toLowerCase();
   if (ctx.filesSearch) ctx.filesSearch.value = filter;
   openOverlay(ctx.overlayFiles);
-  await loadFiles(true);
+  await loadReports(true);
 }
 
-/** Compat: chamado pelo hub antigo */
+/** Compat: chamado por código legado */
 export async function loadFilesInto() {
-  await loadFiles(true);
+  await loadReports(true);
 }

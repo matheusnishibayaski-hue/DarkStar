@@ -1,6 +1,5 @@
 /** UI compartilhada: toasts, sidebar, overlays, status, health. */
 
-import { QUICK_PROMPTS } from "./constants.js";
 import { selectedModel, getPreferredTool } from "./tools-panel.js";
 import { collectSessionExecutions, getActiveSession } from "./sessions.js";
 import { getHealth } from "./api/routes.js";
@@ -155,9 +154,10 @@ export function closeAllOverlays(closeToolsPanelMenus) {
     ctx.overlayTools,
     ctx.overlayAutopilot,
     ctx.overlayHelp,
-    ctx.overlayIntel,
     ctx.overlayFiles,
     ctx.overlayThreats,
+    ctx.overlaySessionLogs,
+    ctx.overlaySessionReport,
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");
@@ -294,7 +294,6 @@ export async function refreshHealth() {
 }
 
 export function renderWelcome() {
-  const { input } = ctx;
   const wrap = document.createElement("div");
   wrap.className = "welcome boot";
 
@@ -303,7 +302,7 @@ export function renderWelcome() {
     "[ OK ] docker bridge .................... linked",
     "[ OK ] kali toolchain ................... ready",
     "[ OK ] openrouter agent ................. online",
-    "[ OK ] intel hub ........................ alvos+relatorios",
+    "[ OK ] logs + relatório ............... barra do chat",
     "[ OK ] output volume ..................... /tools/output",
   ];
 
@@ -324,30 +323,6 @@ export function renderWelcome() {
     <span class="boot-msg"> session ready — awaiting input</span>
   `;
   wrap.appendChild(ready);
-
-  const hint = document.createElement("p");
-  hint.className = "boot-hint";
-  hint.textContent = "# quick commands:";
-  wrap.appendChild(hint);
-
-  const promptsEl = document.createElement("div");
-  promptsEl.className = "welcome-prompts";
-  promptsEl.id = "welcome-prompts";
-  wrap.appendChild(promptsEl);
-  for (const p of QUICK_PROMPTS) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "welcome-prompt";
-    btn.textContent = p.label;
-    btn.title = p.text;
-    btn.addEventListener("click", () => {
-      if (input) {
-        input.value = p.text;
-        input.focus();
-      }
-    });
-    promptsEl.appendChild(btn);
-  }
 
   return wrap;
 }

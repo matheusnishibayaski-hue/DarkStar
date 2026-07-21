@@ -43,6 +43,13 @@ export function getLog(logId) {
   return apiFetch(`/api/logs/${logId}`);
 }
 
+export function listDataLogs(sessionId, limit = 100) {
+  const q = new URLSearchParams();
+  if (sessionId) q.set("session_id", sessionId);
+  q.set("limit", String(limit));
+  return apiFetch(`/api/data/logs?${q.toString()}`);
+}
+
 export function listSurface() {
   return apiFetch("/api/surface");
 }
@@ -95,6 +102,14 @@ export function listIntelSessions() {
 
 export function getIntelSession(sessionId) {
   return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export function syncIntelSessionExecutions(sessionId, executions) {
+  return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}/sync-executions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ executions }),
+  });
 }
 
 export function patchIntelSession(sessionId, body) {

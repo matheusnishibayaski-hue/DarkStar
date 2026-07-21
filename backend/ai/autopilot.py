@@ -30,6 +30,12 @@ from backend.ai.phases import (
     normalize_risk_profile,
     phase_prompt_block,
 )
+from backend.ai.scan_profiles import (
+    max_tool_budget,
+    normalize_profile as normalize_scan_profile,
+    resolve_scan_tools,
+    scan_profile_prompt_block,
+)
 from backend.ai.sse import format_sse
 from backend.config import (
     AUTONOMOUS_SYSTEM_PROMPT,
@@ -273,6 +279,8 @@ def run_autonomous(
     mission_id: str | None = None,
     risk_profile: str | None = None,
     chat_session_id: str | None = None,
+    scan_profile: str | None = None,
+    custom_tools: list[str] | None = None,
 ) -> AutonomousResponse:
     registry = get_mission_registry()
     if mission_id:
@@ -288,6 +296,8 @@ def run_autonomous(
             mission_id,
             risk_profile=risk_profile,
             chat_session_id=chat_session_id,
+            scan_profile=scan_profile,
+            custom_tools=custom_tools,
         )
     finally:
         if mission_id:
@@ -303,6 +313,8 @@ def _run_autonomous_body(
     mission_id: str | None,
     risk_profile: str | None = None,
     chat_session_id: str | None = None,
+    scan_profile: str | None = None,
+    custom_tools: list[str] | None = None,
 ) -> AutonomousResponse:
     if not OPENROUTER_API_KEY:
         return AutonomousResponse(
@@ -321,7 +333,19 @@ def _run_autonomous_body(
             stopped_reason="error",
         )
 
+    scan_prof = normalize_scan_profile(scan_profile or "basic")
     profile = normalize_risk_profile(risk_profile or RISK_PROFILE)
+    scan_tools = resolve_scan_tools(
+        scan_prof,
+        custom_tools,
+        include_all_allowed=(profile == "full" and scan_prof == "full"),
+    )
+    if scan_prof == "custom" and not scan_tools:
+        return AutonomousResponse(
+            message="Perfil personalizado: selecione ao menos uma ferramenta.",
+            stopped_reason="error",
+        )
+
     client = _create_client()
     recon_target = normalize_target(target)
     surface = get_or_create_surface(
@@ -342,6 +366,9 @@ def _run_autonomous_body(
         system = f"{system}\n\n{recon_context}"
     if surface_context:
         system = f"{system}\n\n{surface_context}"
+    scan_block = scan_profile_prompt_block(scan_prof, scan_tools, target=target)
+    if scan_block:
+        system = f"{system}\n\n{scan_block}"
     messages: list[dict] = [{"role": "system", "content": system}]
 
     executions: list[ToolExecution] = []
@@ -350,7 +377,14 @@ def _run_autonomous_body(
     objective_met = False
     stopped_reason = "max_rounds"
     rounds_completed = 0
-    remaining_tools = MAX_AUTONOMOUS_TOOLS
+    remaining_tools = max_tool_budget(scan_prof, len(scan_tools)) if scan_tools else MAX_AUTONOMOUS_TOOLS
+    max_rounds = MAX_AUTONOMOUS_ROUNDS
+    if scan_prof == "full":
+        max_rounds = max(MAX_AUTONOMOUS_ROUNDS, 50 if len(scan_tools) > 100 else 40)
+    elif scan_prof == "intermediate":
+        max_rounds = max(MAX_AUTONOMOUS_ROUNDS, 20)
+    elif scan_prof == "custom" and len(scan_tools) > 25:
+        max_rounds = max(MAX_AUTONOMOUS_ROUNDS, 25)
 
     if emit:
         payload = {
@@ -358,12 +392,14 @@ def _run_autonomous_body(
             "objective": objective,
             "phase": surface.get("phase") or "recon",
             "risk_profile": profile,
+            "scan_profile": scan_prof,
+            "scan_tool_count": len(scan_tools),
         }
         if mission_id:
             payload["mission_id"] = mission_id
         emit("mission_start", payload)
 
-    for round_idx in range(MAX_AUTONOMOUS_ROUNDS):
+    for round_idx in range(max_rounds):
         if get_mission_registry().is_cancelled(mission_id):
             stopped_reason = "cancelled"
             final_message = "Missão cancelada pelo usuário."
@@ -383,7 +419,7 @@ def _run_autonomous_body(
             target=target,
             objective=objective,
             round_idx=round_idx,
-            max_rounds=MAX_AUTONOMOUS_ROUNDS,
+            max_rounds=max_rounds,
             tools_executed=len(executions),
             surface_summary_data=summary,
         )
@@ -394,7 +430,7 @@ def _run_autonomous_body(
                 "round_start",
                 {
                     "round": round_idx + 1,
-                    "max_rounds": MAX_AUTONOMOUS_ROUNDS,
+                    "max_rounds": max_rounds,
                     "tools_executed": len(executions),
                     "phase": current_phase,
                     "risk_profile": profile,
@@ -568,7 +604,7 @@ def _run_autonomous_body(
     status_line = (
         f"\n\n---\n**Auto-Pilot:** {rounds_completed} rodada(s) · "
         f"{len(executions)} comando(s) · "
-        f"fase={surface.get('phase', '?')} · perfil={profile} · "
+        f"fase={surface.get('phase', '?')} · risco={profile} · scan={scan_prof} · "
         f"{'objetivo atingido' if objective_met else stopped_reason}"
     )
     final_message = final_message + status_line
@@ -606,6 +642,8 @@ def run_autonomous_stream(
     mission_id: str | None = None,
     risk_profile: str | None = None,
     chat_session_id: str | None = None,
+    scan_profile: str | None = None,
+    custom_tools: list[str] | None = None,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -623,6 +661,8 @@ def run_autonomous_stream(
                 mission_id=mission_id,
                 risk_profile=risk_profile,
                 chat_session_id=chat_session_id,
+                scan_profile=scan_profile,
+                custom_tools=custom_tools,
             )
             event_queue.put(
                 format_sse(

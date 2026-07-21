@@ -81,7 +81,7 @@ function renderStep() {
       html: `
         <p>Experimente um alvo de laboratório público:</p>
         <pre class="onboarding-code">nmap -sV scanme.nmap.org</pre>
-        <p>Ou use o prompt rápido abaixo após fechar este guia.</p>
+        <p>Converse com a Kali ou use o <strong>pilot</strong> para um scan guiado. Depois, abra <strong>Relatório</strong> (ícone ao lado do prompt) para triar achados.</p>
       `,
       next: "começar",
     },

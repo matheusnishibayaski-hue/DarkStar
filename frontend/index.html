@@ -4,7 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>kali@pentest</title>
-  <link rel="stylesheet" href="/static/styles.css?v=32" />
+  <link rel="stylesheet" href="/static/styles.css?v=41" />
+  <script>
+    (function () {
+      try {
+        if (localStorage.getItem("chat-ia-kali-pilot-offensive") === "1") {
+          document.documentElement.classList.add("mode-offensive");
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
@@ -49,12 +58,15 @@
           <nav class="term-bar-actions crt-toolbar">
             <button type="button" class="term-btn" id="btn-tools" title="Alt+T">tools:<span class="term-badge" id="tool-badge">auto</span></button>
             <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Alt+P">pilot</button>
+            <label class="term-offensive-toggle" id="offensive-mode-control" for="offensive-mode-toggle" title="Modo ofensivo — libera ferramentas agressivas no Piloto">
+              <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
+              <span class="offensive-mode-switch" aria-hidden="true"></span>
+              <span class="offensive-mode-label">offensive</span>
+            </label>
             <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar">stop</button>
             <span class="term-toolbar-extra" id="term-toolbar-extra">
-              <button type="button" class="term-btn term-btn-intel" id="btn-intel" title="Alt+I — alvos e relatórios">intel</button>
-              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F — artefatos">files</button>
+              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F — relatórios PDF">relatórios</button>
               <button type="button" class="term-btn term-btn-threats" id="btn-threats" title="Alt+C — mapa mundial">mapa</button>
-              <button type="button" class="term-btn" id="btn-report" title="Alt+R — relatório PDF">pdf</button>
             </span>
             <button type="button" class="term-btn term-btn-more" id="btn-toolbar-more" title="Mais" aria-haspopup="true">⋯</button>
             <span class="term-bar-divider" aria-hidden="true"></span>
@@ -76,6 +88,20 @@
             <input type="text" class="cmd-input" id="input" spellcheck="false" autofocus
               placeholder="" aria-label="Comando" />
             <span class="cmd-cursor" id="cmd-cursor" aria-hidden="true"></span>
+            <div class="chat-conversation-actions" role="group" aria-label="Logs e relatório">
+              <button type="button" class="chat-icon-btn" id="btn-session-logs" title="Logs desta conversa (Alt+L)" aria-label="Logs desta conversa">
+                <svg class="chat-icon-btn-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M8 6h12M8 12h12M8 18h7"/>
+                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 6h.01M4 12h.01M4 18h.01"/>
+                </svg>
+              </button>
+              <button type="button" class="chat-icon-btn" id="btn-session-report" title="Relatório e achados (Alt+R)" aria-label="Relatório e achados">
+                <svg class="chat-icon-btn-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M9 3h8l2 2v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3"/>
+                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M16 3v4h4M8 13h8M8 17h6"/>
+                </svg>
+              </button>
+            </div>
             <div class="model-picker-wrap">
               <button type="button" class="model-trigger" id="model-trigger" title="Modelo" aria-haspopup="listbox" aria-expanded="false">
                 <span class="model-trigger-prefix">llm:</span>
@@ -137,44 +163,38 @@
     </div>
   </div>
 
-  <div class="overlay" id="overlay-autopilot" hidden>
+  <div class="overlay overlay-pilot" id="overlay-autopilot" hidden>
     <div class="panel panel-autopilot crt-panel" role="dialog" aria-modal="true" aria-label="Piloto automático">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main">Piloto automático</span>
-          <span class="panel-title-sub">a IA testa o alvo sozinha e gera relatório</span>
+          <span class="panel-title-sub">escolha o scan, informe o alvo — relatório PDF ao final</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-autopilot" aria-label="Fechar">×</button>
       </div>
       <div class="panel-body autopilot-form">
         <p class="pilot-intro">
-          Informe o <strong>alvo autorizado</strong> e o que você quer descobrir.
-          Acompanhe o progresso no chat. Resultados vão para o <strong>Intel</strong>.
+          Use o switch <strong>offensive</strong> na barra superior para liberar ferramentas agressivas.
+          O progresso aparece no chat; logs e triagem ficam nos ícones ao lado do prompt.
         </p>
 
         <div class="form-field">
-          <label class="autopilot-label" for="autopilot-target">Alvo</label>
-          <input type="text" id="autopilot-target" class="panel-field autopilot-input" placeholder="ex: scanme.nmap.org ou https://site.com/app" spellcheck="false" />
+          <label class="autopilot-label" for="autopilot-target">Alvo autorizado</label>
+          <input type="text" id="autopilot-target" class="panel-field autopilot-input pilot-target-input" placeholder="ex: scanme.nmap.org ou https://site.com/app" spellcheck="false" autocomplete="off" />
         </div>
 
-        <div class="form-field" id="autopilot-objective-wrap">
-          <label class="autopilot-label" for="autopilot-objective">O que fazer</label>
-          <textarea id="autopilot-objective" class="autopilot-textarea" rows="3" placeholder="ex: mapear portas, tecnologias e vulnerabilidades web" spellcheck="false"></textarea>
-          <div class="quick-objectives" id="quick-objectives"></div>
+        <div class="form-field" id="pilot-scan-wrap">
+          <span class="autopilot-label">Tipo de scan</span>
+          <div class="pilot-scan-options" id="pilot-scan-options" role="radiogroup" aria-label="Tipo de scan"></div>
+          <div class="pilot-custom-tools" id="pilot-custom-tools" hidden>
+            <p class="pilot-advanced-desc">Marque as ferramentas que a IA deve executar (pelo menos uma).</p>
+            <input type="search" id="pilot-tool-search" class="panel-field" placeholder="Filtrar ferramentas…" spellcheck="false" autocomplete="off" />
+            <div class="pilot-tool-grid" id="pilot-tool-grid"></div>
+          </div>
         </div>
-
-        <details class="pilot-advanced" id="pilot-advanced">
-          <summary>Roteiros fixos <span class="pilot-advanced-hint">(opcional · sem IA · passos pré-definidos)</span></summary>
-          <p class="pilot-advanced-desc">
-            Alternativa à missão com IA: executa uma sequência curta e previsível de ferramentas.
-            Escolha um roteiro abaixo — o botão principal muda para “Rodar roteiro”.
-          </p>
-          <div class="pilot-playbooks" id="pilot-playbooks"></div>
-          <button type="button" class="pilot-clear-playbook" id="pilot-clear-playbook" hidden>Usar missão com IA em vez do roteiro</button>
-        </details>
 
         <button type="button" class="autopilot-start" id="autopilot-start">Iniciar missão com IA</button>
-        <p class="pilot-foot" id="pilot-foot">Só use alvos que você tem autorização para testar.</p>
+        <p class="pilot-foot" id="pilot-foot">Ao concluir, o PDF do relatório é gerado automaticamente. Só use alvos autorizados.</p>
       </div>
     </div>
   </div>
@@ -192,47 +212,47 @@
     </div>
   </div>
 
-  <!-- INTEL: pentest simplificado -->
-  <div class="overlay overlay-intel" id="overlay-intel" hidden>
-    <div class="panel panel-intel panel-intel-simple crt-panel" id="intel-panel" role="dialog" aria-modal="true" aria-label="Intel">
-      <div class="panel-head panel-head-intel">
+  <!-- LOGS da conversa -->
+  <div class="overlay overlay-session-logs" id="overlay-session-logs" hidden>
+    <div class="panel panel-session-modal crt-panel" role="dialog" aria-modal="true" aria-label="Logs da conversa">
+      <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">Intel</span>
-          <span class="panel-title-sub" id="intel-subtitle">achados da conversa · classifique · baixe o PDF</span>
+          <span class="panel-title-main">Logs</span>
+          <span class="panel-title-sub">comandos executados nesta conversa</span>
         </div>
-        <div class="panel-head-right intel-head-actions">
-          <span class="intel-meta" id="hub-meta">—</span>
-          <button type="button" class="panel-close" data-close="overlay-intel" aria-label="Fechar">×</button>
-        </div>
+        <button type="button" class="panel-close" data-close="overlay-session-logs" aria-label="Fechar">×</button>
       </div>
+      <div class="panel-body session-modal-body" id="session-logs-body"></div>
+    </div>
+  </div>
 
-      <div class="intel-simple-layout">
-        <aside class="intel-simple-side">
-          <div class="intel-simple-tools">
-            <input type="search" class="panel-search hub-search" id="hub-search" placeholder="Buscar conversa…" spellcheck="false" />
-            <button type="button" class="hub-icon-btn" id="hub-refresh" title="Atualizar">↻</button>
-          </div>
-          <div class="intel-simple-list" id="hub-list"></div>
-        </aside>
-
-        <div class="intel-simple-main">
-          <div class="intel-simple-actions">
-            <button type="button" class="hub-btn hub-btn--primary" id="hub-report-pdf" disabled>Baixar PDF</button>
-            <button type="button" class="hub-btn hub-btn--danger" id="hub-delete" disabled>Excluir</button>
-          </div>
-          <div class="intel-simple-detail" id="hub-detail"></div>
+  <!-- RELATÓRIO / triagem -->
+  <div class="overlay overlay-session-report" id="overlay-session-report" hidden>
+    <div class="panel panel-session-modal panel-session-report crt-panel" role="dialog" aria-modal="true" aria-label="Relatório">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <span class="panel-title-main">Relatório</span>
+          <span class="panel-title-sub" id="session-report-meta">triagem de achados desta conversa</span>
         </div>
+        <button type="button" class="panel-close" data-close="overlay-session-report" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body session-modal-body" id="session-report-body"></div>
+      <div class="session-report-footer">
+        <p class="session-report-footer-hint" id="session-report-footer-hint">
+          Classifique cada achado. O PDF inclui só o que você marcou como vulnerabilidade.
+        </p>
+        <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
       </div>
     </div>
   </div>
 
   <!-- FILES: modal próprio -->
   <div class="overlay" id="overlay-files" hidden>
-    <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Arquivos">
+    <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Relatórios">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">Arquivos</span>
-          <span class="panel-title-sub" id="files-meta">saídas salvas em /tools/output</span>
+          <span class="panel-title-main">Relatórios</span>
+          <span class="panel-title-sub" id="files-meta">PDFs baixados pelo chat</span>
         </div>
         <div class="panel-head-right files-head-actions">
           <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
@@ -240,7 +260,7 @@
         </div>
       </div>
       <div class="files-simple-toolbar">
-        <input type="search" class="panel-search" id="files-search" placeholder="Filtrar por nome ou alvo…" spellcheck="false" />
+        <input type="search" class="panel-search" id="files-search" placeholder="Buscar relatório…" spellcheck="false" />
       </div>
       <div class="panel-body files-panel-body" id="files-list"></div>
     </div>
@@ -314,6 +334,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=23"></script>
+  <script type="module" src="/static/js/main.js?v=38"></script>
 </body>
 </html>

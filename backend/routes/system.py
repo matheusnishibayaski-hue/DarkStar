@@ -122,8 +122,30 @@ def api_metrics():
 
 
 @router.get("/tools")
-def api_tools():
+def api_tools(offensive: bool = False):
+    if offensive:
+        from backend.config_tools import ALLOWED_TOOLS
+        from backend.tool_catalog import get_tool_info
+
+        tools = []
+        for tid in sorted(ALLOWED_TOOLS):
+            meta = get_tool_info(tid)
+            tools.append(
+                {
+                    "id": tid,
+                    "summary": meta["summary"],
+                    "example": meta["example"],
+                }
+            )
+        return {"categories": [{"id": "all", "name": "Permitidas no servidor", "tools": tools}]}
     return {"categories": enrich_categories(TOOL_CATEGORIES)}
+
+
+@router.get("/scan-profiles")
+def api_scan_profiles(offensive: bool = False):
+    from backend.ai.scan_profiles import profile_catalog
+
+    return profile_catalog(offensive=offensive)
 
 
 @router.get("/models")

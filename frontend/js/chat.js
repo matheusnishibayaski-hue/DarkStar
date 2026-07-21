@@ -1,4 +1,4 @@
-/** Envio de mensagens e relatório da sessão. */
+/** Envio de mensagens — relatório via modal session-report-modal.js */
 
 import { HISTORY_LIMIT } from "./constants.js";
 import { apiFetch } from "./api.js";
@@ -9,8 +9,6 @@ import {
   saveStore,
   renderSessions,
   updateSessionTitle,
-  collectSessionExecutions,
-  collectSessionHistory,
   rebuildInputHistory,
 } from "./sessions.js";
 import { preferredTool, getModelPayload } from "./tools-panel.js";
@@ -35,7 +33,7 @@ import {
   hideTyping,
   scrollChatToBottom,
 } from "./chat-view.js";
-import { toast, showToastError, downloadMarkdown, setLoading, getLoading } from "./ui.js";
+import { toast, showToastError, setLoading, getLoading } from "./ui.js";
 import { playSound } from "./audio.js";
 
 let ctx = {};
@@ -44,90 +42,10 @@ export function initChat(context) {
   ctx = context;
 }
 
-/** Extrai hostname provável da sessão para amarrar o relatório ao Attack Surface. */
-function inferSurfaceTarget(session, history, toolExecutions) {
-  const fromSession =
-    session?.target || session?.surfaceTarget || session?.reconTarget || "";
-  if (fromSession) return String(fromSession).trim();
-
-  const texts = [
-    ...(history || []).map((m) => m.content || ""),
-    ...(toolExecutions || []).map((e) => e.command || ""),
-  ].join("\n");
-
-  const urlMatch = texts.match(/https?:\/\/([a-z0-9][-a-z0-9.]+[a-z0-9])/i);
-  if (urlMatch) return urlMatch[1].toLowerCase();
-
-  const hostMatch = texts.match(
-    /\b([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\.[a-z]{2,})\b/i
-  );
-  return hostMatch ? hostMatch[1].toLowerCase() : "";
-}
-
 function setBusy(busy) {
   setLoading(busy);
   if (ctx.input) ctx.input.disabled = busy;
   ctx.updateStatusBar?.();
-}
-
-export async function downloadReport() {
-  const session = getActiveSession();
-  if (!session || session.messages.length === 0) {
-    showToastError("Nenhuma conversa ativa para gerar relatório.");
-    return;
-  }
-
-  const toolExecutions = collectSessionExecutions(session);
-  if (toolExecutions.length === 0) {
-    showToastError("Nenhuma ferramenta foi executada nesta sessão.");
-    return;
-  }
-
-  const { btnReport } = ctx;
-  if (btnReport) {
-    btnReport.disabled = true;
-    btnReport.textContent = "...";
-  }
-  ctx.updateStatusBar?.();
-
-  try {
-    const history = collectSessionHistory(session);
-    const surfaceTarget = inferSurfaceTarget(session, history, toolExecutions);
-    const res = await apiFetch("/api/generate-report", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        history,
-        tool_executions: toolExecutions,
-        title: `Relatório — ${sessionTitle(session)}`,
-        chat_session_id: session.id,
-        surface_target: surfaceTarget,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      showToastError(`Erro ao gerar relatório: ${err.detail || res.statusText}`);
-      return;
-    }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "relatorio-pentest.pdf";
-    a.click();
-    URL.revokeObjectURL(url);
-    toast("relatório baixado");
-  } catch (e) {
-    showToastError(`Erro de conexão: ${e.message}`);
-  } finally {
-    if (btnReport) {
-      btnReport.disabled = false;
-      btnReport.textContent = "pdf";
-    }
-    ctx.updateStatusBar?.();
-  }
 }
 
 export async function sendMessage(text) {
@@ -154,8 +72,9 @@ export async function sendMessage(text) {
   }
 
   const isFirst = session.messages.length === 0;
-  session.messages.push({ role: "user", content: text });
-  session.updatedAt = Date.now();
+  const now = Date.now();
+  session.messages.push({ role: "user", content: text, at: now });
+  session.updatedAt = now;
   if (isFirst || session.title === "novo chat") session.title = sessionTitle(session);
   saveStore();
   renderSessions();
@@ -185,7 +104,7 @@ export async function sendMessage(text) {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const errMsg = `erro: ${err.detail || res.statusText}`;
-      session.messages.push({ role: "assistant", content: errMsg });
+      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
       saveStore();
       appendLine("error", errMsg);
       showToastError(errMsg);
@@ -221,7 +140,7 @@ export async function sendMessage(text) {
     }
 
     if (finalData.stopped_reason === "cancelled") {
-      session.messages.push({ role: "assistant", content: finalData.message });
+      session.messages.push({ role: "assistant", content: finalData.message, at: Date.now() });
       saveStore();
       appendAssistantLine(finalData.message);
       toast("operação cancelada", "warn");
@@ -232,6 +151,7 @@ export async function sendMessage(text) {
       role: "assistant",
       content: finalData.message,
       toolExecutions: finalData.tool_executions || [],
+      at: Date.now(),
     });
     session.updatedAt = Date.now();
     saveStore();
@@ -250,13 +170,13 @@ export async function sendMessage(text) {
     closeAllLiveStreams();
     if (e.name === "AbortError") {
       const errMsg = "Operação cancelada pelo usuário.";
-      session.messages.push({ role: "assistant", content: errMsg });
+      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
       saveStore();
       appendLine("info", errMsg);
       toast("cancelado", "warn");
     } else {
       const errMsg = `erro de conexão: ${e.message}`;
-      session.messages.push({ role: "assistant", content: errMsg });
+      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
       saveStore();
       appendLine("error", errMsg);
       showToastError(errMsg);

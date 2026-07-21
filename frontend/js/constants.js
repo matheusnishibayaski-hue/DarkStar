@@ -3,20 +3,9 @@ export const MODEL_STORAGE_KEY = "chat-ia-kali-model";
 export const API_TOKEN_KEY = "chat-ia-kali-api-token";
 export const SOUND_STORAGE_KEY = "chat-ia-kali-sound";
 export const ONBOARDING_STORAGE_KEY = "chat-ia-kali-onboarded";
+/** Piloto: libera ferramentas ofensivas (risk_profile full + catálogo ampliado). */
+export const PILOT_OFFENSIVE_STORAGE_KEY = "chat-ia-kali-pilot-offensive";
 export const HISTORY_LIMIT = 10;
-
-export const QUICK_PROMPTS = [
-  { label: "Scan Nmap", text: "Faça um scan de portas e serviços em scanme.nmap.org" },
-  { label: "Subdomínios", text: "Liste subdomínios de example.com com subfinder" },
-  { label: "Whois", text: "Consulte whois e DNS de google.com" },
-  { label: "Wi-Fi local", text: "Liste redes Wi-Fi visíveis ao redor" },
-];
-
-export const QUICK_OBJECTIVES = [
-  "Encontre subdomínios expostos e verifique se há takeover",
-  "Mapeie portas abertas e identifique serviços desatualizados",
-  "Faça reconhecimento web: tecnologias, diretórios e vulnerabilidades",
-];
 
 export const HELP_HTML = `
 <section class="help-section">
@@ -41,10 +30,10 @@ export const HELP_HTML = `
   <ul class="help-list">
     <li><kbd>Alt</kbd>+<kbd>T</kbd> — ferramentas</li>
     <li><kbd>Alt</kbd>+<kbd>P</kbd> — piloto automático</li>
-    <li><kbd>Alt</kbd>+<kbd>F</kbd> — artefatos (/tools/output)</li>
-    <li><kbd>Alt</kbd>+<kbd>I</kbd> — intel (recon + ameaças)</li>
+    <li><kbd>Alt</kbd>+<kbd>F</kbd> — relatórios PDF baixados</li>
+    <li><kbd>Alt</kbd>+<kbd>L</kbd> — logs da conversa</li>
     <li><kbd>Alt</kbd>+<kbd>C</kbd> — mapa mundial de ameaças</li>
-    <li><kbd>Alt</kbd>+<kbd>R</kbd> — relatório</li>
+    <li><kbd>Alt</kbd>+<kbd>R</kbd> — relatório (modal)</li>
     <li><kbd>Alt</kbd>+<kbd>N</kbd> — novo chat</li>
     <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — tour guiado (ajuda interativa)</li>
     <li><kbd>Alt</kbd>+<kbd>K</kbd> ou <kbd>Ctrl</kbd>+<kbd>K</kbd> — focar prompt</li>
@@ -79,10 +68,10 @@ export const HELP_HTML = `
   <ul class="help-list">
     <li><strong>Chat</strong> — a IA executa ferramentas Kali via linguagem natural</li>
     <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
-    <li><strong>pilot</strong> — missão autônoma com alvo + objetivo</li>
-    <li><strong>intel</strong> — alvos, achados e relatórios · <strong>mapa</strong> é modal separado (<em>Alt+C</em>)</li>
-    <li><strong>files</strong> — baixar artefatos salvos em <code>/tools/output</code></li>
-    <li><strong>report</strong> — relatório Markdown da sessão</li>
+    <li><strong>pilot</strong> — alvo + tipo de scan (básico → completo); PDF ao fim da missão</li>
+    <li><strong>offensive</strong> — switch na barra: perfil de risco completo no Piloto (UI vermelha)</li>
+    <li>Ícones no prompt — <strong>logs</strong> (<em>Alt+L</em>) e <strong>relatório/triagem</strong> (<em>Alt+R</em>); PDF só ao clicar em Baixar PDF</li>
+    <li><strong>relatórios</strong> — biblioteca de PDFs baixados (<em>Alt+F</em>) · <strong>mapa</strong> — contexto global (<em>Alt+C</em>)</li>
     <li><strong>cancel</strong> — interrompe execução em andamento</li>
   </ul>
 </section>
