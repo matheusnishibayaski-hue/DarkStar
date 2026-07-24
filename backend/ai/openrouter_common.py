@@ -6,7 +6,7 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 OPENROUTER_HEADERS = {
     "HTTP-Referer": "https://github.com/matheusnishibayaski-hue/Chat-IA-Kali",
-    "X-Title": "Chat IA Kali",
+    "X-Title": "DarkStar",
 }
 
 

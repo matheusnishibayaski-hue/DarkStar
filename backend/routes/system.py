@@ -28,14 +28,20 @@ router = APIRouter(prefix="/api", tags=["system"])
 
 @router.get("/client-config")
 def client_config():
+    from backend.security.privileges import master_key_configured, privilege_status
+
     return {
         "version": APP_VERSION,
+        "brand": "DarkStar",
+        "assistant": "Argus",
         "authRequired": bool(CHAT_API_TOKEN),
         "sessionAuth": bool(CHAT_API_TOKEN),
         "host": UVICORN_HOST,
         "port": UVICORN_PORT,
         "scope_lock_enabled": scope_lock_enabled(),
         "scope_warning": not scope_lock_enabled(),
+        "master_key_configured": master_key_configured(),
+        **privilege_status(),
     }
 
 

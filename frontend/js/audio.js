@@ -143,9 +143,9 @@ export function bindSoundButton(btn) {
   if (!btn) return;
   const refresh = () => {
     const on = isSoundEnabled();
-    btn.textContent = on ? "snd:on" : "snd:off";
+    btn.textContent = on ? "Som: ligado" : "Som: mudo";
     btn.classList.toggle("sound-off", !on);
-    btn.title = on ? "Desativar sons CRT" : "Ativar sons CRT";
+    btn.title = on ? "Desativar sons" : "Ativar sons";
   };
   updateSoundButton = refresh;
   refresh();

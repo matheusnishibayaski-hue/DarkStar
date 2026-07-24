@@ -335,6 +335,12 @@ def _run_autonomous_body(
 
     scan_prof = normalize_scan_profile(scan_profile or "basic")
     profile = normalize_risk_profile(risk_profile or RISK_PROFILE)
+    try:
+        from backend.security.privileges import effective_risk_profile
+
+        profile = effective_risk_profile(profile)
+    except Exception:
+        pass
     scan_tools = resolve_scan_tools(
         scan_prof,
         custom_tools,

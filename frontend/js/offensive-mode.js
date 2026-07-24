@@ -2,6 +2,7 @@
 
 import { PILOT_OFFENSIVE_STORAGE_KEY } from "./constants.js";
 import { toast } from "./ui.js";
+import { isElevated } from "./master-key.js";
 
 /** @type {HTMLInputElement | null} */
 let toggleEl = null;
@@ -9,6 +10,7 @@ let toggleEl = null;
 const listeners = new Set();
 
 export function isOffensiveModeEnabled() {
+  if (!isElevated()) return false;
   if (toggleEl) return Boolean(toggleEl.checked);
   return loadOffensivePreference();
 }
@@ -49,7 +51,14 @@ function notifyListeners(on) {
 }
 
 function setOffensiveMode(on, { silent = false } = {}) {
-  const enabled = Boolean(on);
+  let enabled = Boolean(on);
+  if (enabled && !isElevated()) {
+    enabled = false;
+    if (toggleEl) toggleEl.checked = false;
+    if (!silent) {
+      toast("Desbloqueie com a master key (barra lateral) para o modo offensive", "warn");
+    }
+  }
   if (toggleEl) toggleEl.checked = enabled;
   saveOffensivePreference(enabled);
   applyOffensiveTheme(enabled);
@@ -65,10 +74,11 @@ function setOffensiveMode(on, { silent = false } = {}) {
 export function initOffensiveMode(input) {
   toggleEl = input;
   if (!input) {
-    applyOffensiveTheme(loadOffensivePreference());
+    applyOffensiveTheme(loadOffensivePreference() && isElevated());
     return;
   }
-  setOffensiveMode(loadOffensivePreference(), { silent: true });
+  const pref = loadOffensivePreference() && isElevated();
+  setOffensiveMode(pref, { silent: true });
   input.addEventListener("change", () => {
     setOffensiveMode(input.checked);
   });

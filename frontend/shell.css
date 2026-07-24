@@ -1,0 +1,1683 @@
+/* DarkStar shell v5 — negativo / positivo · B&W · spine + papel */
+
+:root {
+  --ink: #000000;
+  --paper: #ffffff;
+  --mute: #6e6e6e;
+  --line: #000000;
+  --hair: rgba(0, 0, 0, 0.14);
+
+  --bg: var(--ink);
+  --screen: var(--paper);
+  --surface: var(--paper);
+  --surface-2: #f2f2f2;
+  --surface-3: #e4e4e4;
+  --line: rgba(0, 0, 0, 0.14);
+  --line-2: rgba(0, 0, 0, 0.28);
+  --text: #111111;
+  --text-2: #555555;
+  --text-3: #888888;
+  --star: #000000;
+  --phosphor: #111111;
+  --phosphor-dim: #555555;
+  --phosphor-glow: none;
+  --phosphor-soft: rgba(0, 0, 0, 0.05);
+  --accent: #000000;
+  --accent-dim: rgba(0, 0, 0, 0.08);
+  --accent-glow: transparent;
+  --argus: #000000;
+  --argus-dim: #000000;
+  --argus-glow: none;
+  --argus-soft: rgba(0, 0, 0, 0.06);
+  --amber: #000000;
+  --cyan: #444444;
+  --pilot: #000000;
+  --danger: #000000;
+  --warn: #000000;
+  --info: #444444;
+  --display: "Anton", Impact, Haettenschweiler, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, monospace;
+  --sans: var(--mono);
+  --r: 0;
+  --sidebar-w: 312px;
+  --sidebar-w-collapsed: 0px;
+  --header-h: 64px;
+  --ease: 0.15s ease;
+  --chat-max: 560px;
+  --spine-w: 72px;
+}
+
+/* Offensive = inverte o mundo (papel ↔ tinta) */
+html.mode-offensive {
+  --ink: #ffffff;
+  --paper: #000000;
+  --mute: #9a9a9a;
+  --hair: rgba(255, 255, 255, 0.18);
+  --bg: #ffffff;
+  --screen: #000000;
+  --surface: #000000;
+  --surface-2: #141414;
+  --surface-3: #222222;
+  --line: rgba(255, 255, 255, 0.16);
+  --line-2: rgba(255, 255, 255, 0.32);
+  --text: #f2f2f2;
+  --text-2: #b0b0b0;
+  --text-3: #777777;
+  --star: #ffffff;
+  --phosphor: #f2f2f2;
+  --phosphor-dim: #b0b0b0;
+  --phosphor-soft: rgba(255, 255, 255, 0.06);
+  --accent: #ffffff;
+  --accent-dim: rgba(255, 255, 255, 0.1);
+  --argus: #ffffff;
+  --argus-dim: #ffffff;
+  --argus-soft: rgba(255, 255, 255, 0.08);
+  --pilot: #ffffff;
+  --danger: #ffffff;
+  --warn: #ffffff;
+  --info: #b0b0b0;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--ink);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app-bg,
+.crt-vignette {
+  display: none !important;
+}
+
+.app-shell {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--ink);
+}
+
+.main-area {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper);
+}
+
+/* ── Sidebar: spine + rail ───────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  background: var(--ink);
+  color: var(--paper);
+  border-right: 3px solid var(--paper);
+}
+
+html.mode-offensive .sidebar {
+  border-right-color: var(--ink);
+}
+
+.spine {
+  width: var(--spine-w);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 0 1.25rem;
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--ink);
+}
+
+html.mode-offensive .spine {
+  border-right-color: rgba(0, 0, 0, 0.18);
+}
+
+.spine-eye {
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 2px solid var(--paper);
+  border-radius: 50%;
+  position: relative;
+}
+
+.spine-eye::after {
+  content: "";
+  position: absolute;
+  inset: 28%;
+  background: var(--paper);
+  border-radius: 50%;
+  animation: blink-eye 4.5s ease-in-out infinite;
+}
+
+@keyframes blink-eye {
+  0%, 92%, 100% { transform: scaleY(1); }
+  96% { transform: scaleY(0.1); }
+}
+
+.spine-brand {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: var(--display);
+  font-size: 2.35rem;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: var(--paper);
+  margin: 0;
+  user-select: none;
+}
+
+.spine-meta {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.28em;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+}
+
+html.mode-offensive .spine-meta {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.rail {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.85rem 0.7rem 0.75rem;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.sidebar-head {
+  display: none;
+}
+
+.brand-name,
+.brand-sub,
+.brand-star {
+  display: none !important;
+}
+
+.sidebar-close {
+  display: none;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  z-index: 5;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--paper);
+  background: transparent;
+  color: var(--paper);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.sidebar-new {
+  width: 100%;
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.65rem;
+  border: 1px solid var(--paper);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  cursor: pointer;
+}
+
+.sidebar-new:hover {
+  background: transparent;
+  color: var(--paper);
+  border-color: var(--paper);
+  box-shadow: none;
+  transform: none;
+  opacity: 1;
+}
+
+.rail-label {
+  margin: 0.35rem 0 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+html.mode-offensive .rail-label {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-section-label,
+.sidebar-footer {
+  display: none !important;
+}
+
+.sidebar-sessions {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+.sidebar-collapse {
+  display: none !important;
+}
+
+.history-item {
+  border-radius: 0 !important;
+  border-left: none !important;
+  padding: 0.45rem 0.35rem;
+  margin-bottom: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  background: transparent;
+}
+
+html.mode-offensive .history-item {
+  border-bottom-color: rgba(0, 0, 0, 0.12);
+  color: rgba(0, 0, 0, 0.7);
+}
+
+.history-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--paper);
+}
+
+html.mode-offensive .history-item:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--ink);
+}
+
+.history-item.active {
+  background: var(--paper) !important;
+  color: var(--ink) !important;
+  border-left: none !important;
+  text-shadow: none;
+  font-weight: 600;
+}
+
+html.mode-offensive .history-item.active {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.sidebar-nav {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+html.mode-offensive .sidebar-nav {
+  border-top-color: rgba(0, 0, 0, 0.18);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  padding: 0.42rem 0.2rem;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-align: left;
+  text-transform: lowercase;
+  cursor: pointer;
+}
+
+html.mode-offensive .nav-item {
+  color: rgba(0, 0, 0, 0.72);
+}
+
+.nav-item:hover {
+  color: var(--paper);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+html.mode-offensive .nav-item:hover {
+  color: var(--ink);
+}
+
+.nav-item.term-btn--active {
+  color: var(--paper);
+  font-weight: 600;
+}
+
+html.mode-offensive .nav-item.term-btn--active {
+  color: var(--ink);
+}
+
+.nav-sep {
+  height: 1px;
+  margin: 0.35rem 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+html.mode-offensive .nav-sep {
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.nav-toggle .offensive-mode-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.nav-toggle .offensive-mode-switch {
+  position: relative;
+  width: 1.55rem;
+  height: 0.85rem;
+  flex-shrink: 0;
+  border-radius: 0;
+  border: 1px solid var(--paper);
+  background: transparent;
+}
+
+html.mode-offensive .nav-toggle .offensive-mode-switch {
+  border-color: var(--ink);
+}
+
+.nav-toggle .offensive-mode-switch::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 0;
+  background: var(--paper);
+  transition: transform var(--ease);
+}
+
+html.mode-offensive .nav-toggle .offensive-mode-switch::after {
+  background: var(--ink);
+}
+
+.nav-toggle .offensive-mode-input:checked + .offensive-mode-switch {
+  background: var(--paper);
+}
+
+html.mode-offensive .nav-toggle .offensive-mode-input:checked + .offensive-mode-switch {
+  background: var(--ink);
+}
+
+.nav-toggle .offensive-mode-input:checked + .offensive-mode-switch::after {
+  transform: translateX(0.65rem);
+  background: var(--ink);
+}
+
+html.mode-offensive .nav-toggle .offensive-mode-input:checked + .offensive-mode-switch::after {
+  background: var(--paper);
+}
+
+.nav-toggle.is-locked {
+  opacity: 0.35;
+}
+
+.term-offensive-toggle {
+  display: none !important;
+}
+
+.term-badge {
+  color: rgba(255, 255, 255, 0.4);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+}
+
+html.mode-offensive .term-badge {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+/* ── Main paper ──────────────────────────────────────── */
+.terminal.crt {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  background: var(--paper);
+  border-left: none;
+  color: var(--text);
+}
+
+.term-bar.crt-titlebar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: var(--header-h);
+  padding: 0.85rem 1.5rem 0.75rem;
+  border-bottom: 3px solid var(--star);
+  background: var(--paper);
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.argus-presence,
+.crt-lights,
+.term-bar-divider,
+.term-toolbar-extra,
+.app-menu-wrap,
+.app-menu {
+  display: none !important;
+}
+
+.term-bar-left {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.title-kicker {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.28em;
+  color: var(--text-3);
+}
+
+.term-bar-title {
+  font-family: var(--display);
+  font-size: 1.65rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--star);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+  margin: 0;
+}
+
+.term-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.2rem;
+  padding: 0.4rem 0.9rem;
+  border: 1.5px solid var(--star);
+  border-radius: 0;
+  background: transparent;
+  color: var(--star);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  cursor: pointer;
+  transition: background var(--ease), color var(--ease);
+}
+
+.term-btn:hover {
+  background: var(--star);
+  color: var(--paper);
+}
+
+html.mode-offensive .term-btn:hover {
+  color: var(--ink);
+}
+
+.term-btn-menu {
+  width: 2.2rem;
+  padding: 0;
+  font-size: 1rem;
+  letter-spacing: 0;
+}
+
+.term-btn-pilot {
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
+}
+
+html.mode-offensive .term-btn-pilot {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.term-btn-pilot:hover {
+  background: transparent;
+  color: #000000;
+}
+
+html.mode-offensive .term-btn-pilot:hover {
+  background: transparent !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+.term-btn-cancel {
+  background: transparent;
+  border-style: dashed;
+}
+
+.paper {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 27px,
+      rgba(0, 0, 0, 0.035) 27px,
+      rgba(0, 0, 0, 0.035) 28px
+    );
+}
+
+html.mode-offensive .paper {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 27px,
+      rgba(255, 255, 255, 0.04) 27px,
+      rgba(255, 255, 255, 0.04) 28px
+    );
+}
+
+.term-screen.crt-screen {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 1.75rem 1.5rem;
+  background: transparent;
+  position: relative;
+}
+
+.term-screen.crt-screen::before {
+  content: none !important;
+}
+
+.term-screen.crt-screen > * {
+  max-width: var(--chat-max);
+  margin-left: 0;
+  margin-right: auto;
+  position: relative;
+  z-index: 2;
+}
+
+/* Welcome — poster */
+.welcome.boot {
+  margin: 8vh 0 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  max-width: 28rem;
+}
+
+.welcome-brand {
+  margin-bottom: 1rem;
+  border-top: 3px solid var(--star);
+  border-bottom: 3px solid var(--star);
+  padding: 0.55rem 0;
+}
+
+.welcome-brand .brand-name {
+  display: block !important;
+  font-family: var(--display);
+  font-size: clamp(3rem, 9vw, 5.2rem);
+  letter-spacing: 0.02em;
+  line-height: 0.9;
+  color: var(--star);
+  text-transform: uppercase;
+}
+
+.welcome-argus,
+.boot-log {
+  display: none !important;
+}
+
+.boot-ready {
+  margin: 0 0 0.65rem;
+  max-width: 22rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.boot-hint {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Messages */
+.cmd-line--user {
+  display: flex;
+  justify-content: flex-start;
+  margin: 1.35rem 0;
+}
+
+.cmd-line--user .cmd-prompt-inline {
+  display: none;
+}
+
+.cmd-line--user .cmd-echo {
+  max-width: 92%;
+  padding: 0.85rem 1rem;
+  border-radius: 0;
+  background: #000000;
+  color: #ffffff;
+  font-family: var(--mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+html.mode-offensive .cmd-line--user .cmd-echo {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.cmd-line--out {
+  display: block;
+  margin: 0.5rem 0 1.4rem;
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--star);
+}
+
+.argus-avatar {
+  display: none !important;
+}
+
+.cmd-line--out .md-body {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  line-height: 1.65;
+}
+
+.cmd-line--out .md-body a {
+  color: var(--star);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cmd-line--out .md-body code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  padding: 0.08rem 0.3rem;
+  border-radius: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--hair);
+}
+
+.cmd-line--out .md-body pre {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  padding: 0.85rem 1rem;
+  border-radius: 0;
+  background: var(--ink);
+  color: var(--paper);
+  border: none;
+  overflow-x: auto;
+}
+
+html.mode-offensive .cmd-line--out .md-body pre {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.cmd-line--out .md-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+
+.term-exec,
+.dash-panel {
+  border: 1.5px solid var(--star);
+  border-radius: 0;
+  background: var(--paper);
+}
+
+/* ── Composer: barra negra no papel ──────────────────── */
+.composer.crt-dock {
+  flex-shrink: 0;
+  border-top: 3px solid var(--star);
+  background: var(--paper);
+  padding: 0.9rem 1.5rem 0.85rem;
+  overflow: visible;
+}
+
+.cmd-form.term-prompt {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  display: block;
+  overflow: visible;
+}
+
+.cmd-prompt,
+.cmd-cursor,
+.chat-conversation-actions {
+  display: none !important;
+}
+
+.composer-box {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  border: 2px solid var(--star);
+  border-radius: 0;
+  background: #000000;
+  overflow: visible;
+}
+
+html.mode-offensive .composer-box {
+  background: #ffffff;
+  border-color: #ffffff;
+}
+
+.composer-box:focus-within {
+  box-shadow: 4px 4px 0 var(--star);
+}
+
+.composer-mark {
+  display: flex;
+  align-items: center;
+  padding: 0 0.65rem 0 0.85rem;
+  color: #ffffff;
+  font-family: var(--mono);
+  font-size: 1.1rem;
+  font-weight: 600;
+  user-select: none;
+}
+
+html.mode-offensive .composer-mark {
+  color: #000000 !important;
+}
+
+.cmd-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.85rem 0.5rem;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #ffffff;
+  font-family: var(--mono);
+  font-size: 0.92rem;
+  caret-color: #ffffff;
+  text-shadow: none;
+}
+
+html.mode-offensive .cmd-input {
+  color: #000000 !important;
+  caret-color: #000000 !important;
+}
+
+.cmd-input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+html.mode-offensive .cmd-input::placeholder {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+.composer-tools {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.model-picker-wrap {
+  margin: 0;
+  position: relative;
+  overflow: visible;
+  display: flex;
+}
+
+.model-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  height: 100%;
+  min-height: 100%;
+  padding: 0 0.75rem;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: none;
+  text-transform: lowercase;
+}
+
+html.mode-offensive .model-trigger {
+  border-left-color: rgba(0, 0, 0, 0.25) !important;
+  color: rgba(0, 0, 0, 0.7) !important;
+}
+
+.model-trigger-prefix {
+  display: none;
+}
+
+.model-trigger:hover,
+.model-trigger.open {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  box-shadow: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+html.mode-offensive .model-trigger:hover,
+html.mode-offensive .model-trigger.open {
+  background: rgba(0, 0, 0, 0.08) !important;
+  color: #000000 !important;
+  border-left-color: rgba(0, 0, 0, 0.25) !important;
+}
+
+.model-trigger.model-deepseek #model-label,
+.model-trigger.model-gemini #model-label {
+  text-shadow: none;
+  color: inherit;
+}
+
+.composer-send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1rem;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 0;
+  background: #ffffff;
+  color: #000000;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  cursor: pointer;
+}
+
+html.mode-offensive .composer-send {
+  border-left-color: rgba(0, 0, 0, 0.25) !important;
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+.composer-send:hover {
+  opacity: 0.85;
+  transform: none;
+}
+
+.model-menu {
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 300;
+  border-radius: 0;
+  background: var(--paper);
+  border: 2px solid var(--star);
+  box-shadow: 6px 6px 0 var(--star);
+}
+
+.model-menu::before {
+  content: none !important;
+}
+
+.model-option {
+  background: var(--paper);
+  border-color: var(--hair);
+  color: var(--text);
+  border-radius: 0;
+}
+
+.model-option:hover,
+.model-option.active {
+  background: var(--star);
+  color: var(--paper);
+  border-color: var(--star);
+  box-shadow: none;
+}
+
+html.mode-offensive .model-option:hover,
+html.mode-offensive .model-option.active {
+  color: var(--ink);
+}
+
+.model-option.active .model-option-desc {
+  color: inherit;
+  opacity: 0.7;
+}
+
+.status-bar.crt-status {
+  max-width: none;
+  margin: 0.55rem 0 0;
+  padding: 0;
+  border: none;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+  text-transform: lowercase;
+}
+
+.status-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  min-width: 0;
+}
+
+.status-tag.status-ok {
+  color: var(--star);
+  text-shadow: none;
+}
+
+.status-tag.status-warn,
+.status-tag.status-off {
+  color: var(--text-2);
+}
+
+.status-clock,
+.status-sound-btn {
+  display: none !important;
+}
+
+/* ── Overlays B&W ────────────────────────────────────── */
+.overlay {
+  backdrop-filter: none;
+  background: rgba(0, 0, 0, 0.72) !important;
+}
+
+html.mode-offensive .overlay {
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.panel.crt-panel {
+  border-radius: 0 !important;
+  border: 3px solid #fff !important;
+  background: #000 !important;
+  box-shadow: 10px 10px 0 #fff !important;
+  color: #fff;
+}
+
+html.mode-offensive .panel.crt-panel {
+  border-color: #000 !important;
+  background: #fff !important;
+  box-shadow: 10px 10px 0 #000 !important;
+  color: #000;
+}
+
+.panel-title-main {
+  font-family: var(--display) !important;
+  font-size: 1.45rem !important;
+  font-weight: 400 !important;
+  letter-spacing: 0.04em !important;
+  color: inherit !important;
+  text-shadow: none !important;
+  text-transform: uppercase !important;
+}
+
+.panel-title-sub {
+  font-family: var(--mono) !important;
+  color: inherit !important;
+  opacity: 0.55 !important;
+}
+
+.panel-field,
+.panel-search,
+.autopilot-input {
+  background: transparent !important;
+  border: 1.5px solid currentColor !important;
+  color: inherit !important;
+  border-radius: 0 !important;
+  font-family: var(--mono) !important;
+}
+
+.autopilot-start,
+.session-report-download-btn {
+  background: #fff !important;
+  color: #000 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: var(--mono) !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.1em !important;
+  text-transform: uppercase !important;
+}
+
+html.mode-offensive .autopilot-start,
+html.mode-offensive .session-report-download-btn {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+.scroll-bottom {
+  border-radius: 0;
+  border: 2px solid var(--star);
+  background: var(--paper);
+  color: var(--star);
+}
+
+.toast {
+  background: var(--ink) !important;
+  border: 2px solid var(--paper) !important;
+  color: var(--paper) !important;
+  border-radius: 0 !important;
+  font-family: var(--mono) !important;
+}
+
+.health-banner {
+  border-bottom: 2px solid var(--star);
+  background: var(--surface-2);
+  color: var(--text);
+  font-family: var(--mono);
+}
+
+.guided-tour-card {
+  border-radius: 0 !important;
+  border: 3px solid #fff !important;
+  background: #000 !important;
+  color: #fff !important;
+  box-shadow: 8px 8px 0 #fff !important;
+}
+
+/* ── Contraste hover (texto legível em fundo escuro) ─── */
+.sidebar .history-item:hover,
+.sidebar .history-item:hover .history-item-title,
+.sidebar .history-item:hover .history-item-meta,
+.sidebar .history-item:hover .history-item-rename,
+.sidebar .history-item:hover .history-item-del,
+.sidebar .history-item:hover::before {
+  color: #ffffff !important;
+}
+
+.sidebar .history-item.active,
+.sidebar .history-item.active:hover,
+.sidebar .history-item.active .history-item-title,
+.sidebar .history-item.active .history-item-meta,
+.sidebar .history-item.active .history-item-rename,
+.sidebar .history-item.active .history-item-del,
+.sidebar .history-item.active:hover .history-item-title,
+.sidebar .history-item.active:hover .history-item-meta,
+.sidebar .history-item.active:hover .history-item-rename,
+.sidebar .history-item.active:hover .history-item-del,
+.sidebar .history-item.active::before,
+.sidebar .history-item.active:hover::before {
+  color: #000000 !important;
+}
+
+.sidebar .history-item-rename:hover,
+.sidebar .history-item-del:hover {
+  color: #ffffff !important;
+  opacity: 1;
+}
+
+.sidebar .history-item.active .history-item-rename:hover,
+.sidebar .history-item.active .history-item-del:hover {
+  color: #000000 !important;
+}
+
+.sidebar .history-item-rename-input,
+.sidebar .history-item-rename-input:focus {
+  color: #ffffff !important;
+  background: #000000 !important;
+  border: 1px solid #ffffff !important;
+  box-shadow: none !important;
+}
+
+.sidebar .nav-item:hover,
+.sidebar .nav-item:hover .term-badge {
+  color: #ffffff !important;
+}
+
+.sidebar .sidebar-new:hover {
+  color: #ffffff !important;
+  background: transparent !important;
+}
+
+/* Painéis pretos: hovers e campos sem texto escuro */
+.panel.crt-panel .panel-close:hover,
+.panel.crt-panel .files-refresh-btn:hover,
+.panel.crt-panel .files-simple-btn:hover,
+.panel.crt-panel .threat-mode-btn:hover,
+.panel.crt-panel .threat-open-full:hover,
+.panel.crt-panel .threatmap-link:hover,
+.panel.crt-panel .tool-use-btn:hover,
+.panel.crt-panel .tool-cat-tab:hover,
+.panel.crt-panel .session-log-toggle:hover,
+.panel.crt-panel .onboarding-skip:hover,
+.panel.crt-panel .guided-tour-advanced:hover {
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+  background: #1a1a1a !important;
+}
+
+.panel.crt-panel .panel-search,
+.panel.crt-panel .panel-field,
+.panel.crt-panel .autopilot-input,
+.panel.crt-panel .autopilot-textarea {
+  color: #ffffff !important;
+  background: #111111 !important;
+  border-color: #ffffff !important;
+  caret-color: #ffffff !important;
+}
+
+.panel.crt-panel .panel-search::placeholder,
+.panel.crt-panel .panel-field::placeholder,
+.panel.crt-panel .autopilot-input::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.panel.crt-panel .tool-card,
+.panel.crt-panel .pilot-scan-card,
+.panel.crt-panel .pilot-pb-card,
+.panel.crt-panel .files-report-row,
+.panel.crt-panel .session-log-row {
+  background: #111111 !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.panel.crt-panel .tool-card:hover,
+.panel.crt-panel .pilot-scan-card:hover,
+.panel.crt-panel .pilot-pb-card:hover,
+.panel.crt-panel .files-report-row:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.panel.crt-panel .tool-card:hover .tool-item-name,
+.panel.crt-panel .tool-card:hover .tool-item-cat,
+.panel.crt-panel .tool-card:hover .tool-item-desc,
+.panel.crt-panel .tool-card:hover .tool-use-btn,
+.panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body,
+.panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body strong,
+.panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body span,
+.panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body em {
+  color: #000000 !important;
+}
+
+.panel.crt-panel .tool-item-name,
+.panel.crt-panel .pilot-scan-card-body strong,
+.panel.crt-panel .autopilot-label,
+.panel.crt-panel .panel-callout,
+.panel.crt-panel .tools-hint,
+.panel.crt-panel .pilot-foot,
+.panel.crt-panel .pilot-intro,
+.panel.crt-panel .pilot-advanced-desc,
+.panel.crt-panel .session-report-footer-hint {
+  color: #ffffff !important;
+}
+
+.panel.crt-panel .tool-item-cat,
+.panel.crt-panel .tool-item-desc,
+.panel.crt-panel .pilot-scan-card-body span,
+.panel.crt-panel .pilot-scan-card-body em {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.panel.crt-panel .pilot-scan-card:has(input:checked) {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.panel.crt-panel .pilot-scan-card:has(input:checked) .pilot-scan-card-body strong,
+.panel.crt-panel .pilot-scan-card:has(input:checked) .pilot-scan-card-body span,
+.panel.crt-panel .pilot-scan-card:has(input:checked) .pilot-scan-card-body em {
+  color: #000000 !important;
+}
+
+.panel.crt-panel .model-option:hover,
+.panel.crt-panel .model-option.active {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Offensive: painéis claros — texto escuro no hover */
+html.mode-offensive .panel.crt-panel .panel-close:hover,
+html.mode-offensive .panel.crt-panel .files-refresh-btn:hover,
+html.mode-offensive .panel.crt-panel .files-simple-btn:hover,
+html.mode-offensive .panel.crt-panel .threat-mode-btn:hover,
+html.mode-offensive .panel.crt-panel .tool-use-btn:hover,
+html.mode-offensive .panel.crt-panel .tool-cat-tab:hover {
+  color: #000000 !important;
+  border-color: #000000 !important;
+  background: #e8e8e8 !important;
+}
+
+html.mode-offensive .panel.crt-panel .panel-search,
+html.mode-offensive .panel.crt-panel .panel-field,
+html.mode-offensive .panel.crt-panel .autopilot-input {
+  color: #000000 !important;
+  background: #f2f2f2 !important;
+  border-color: #000000 !important;
+  caret-color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .panel-search::placeholder,
+html.mode-offensive .panel.crt-panel .panel-field::placeholder,
+html.mode-offensive .panel.crt-panel .autopilot-input::placeholder {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-card,
+html.mode-offensive .panel.crt-panel .pilot-scan-card {
+  background: #f2f2f2 !important;
+  color: #000000 !important;
+  border-color: rgba(0, 0, 0, 0.35) !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-card:hover,
+html.mode-offensive .panel.crt-panel .pilot-scan-card:hover {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-card:hover .tool-item-name,
+html.mode-offensive .panel.crt-panel .tool-card:hover .tool-item-cat,
+html.mode-offensive .panel.crt-panel .tool-card:hover .tool-item-desc,
+html.mode-offensive .panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body strong,
+html.mode-offensive .panel.crt-panel .pilot-scan-card:hover .pilot-scan-card-body span {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-item-name,
+html.mode-offensive .panel.crt-panel .pilot-scan-card-body strong,
+html.mode-offensive .panel.crt-panel .autopilot-label,
+html.mode-offensive .panel.crt-panel .panel-callout,
+html.mode-offensive .panel.crt-panel .tools-hint,
+html.mode-offensive .panel.crt-panel .pilot-foot {
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-item-cat,
+html.mode-offensive .panel.crt-panel .tool-item-desc,
+html.mode-offensive .panel.crt-panel .pilot-scan-card-body span {
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+
+html.mode-offensive .sidebar .history-item:hover,
+html.mode-offensive .sidebar .history-item:hover .history-item-title,
+html.mode-offensive .sidebar .history-item:hover .history-item-meta,
+html.mode-offensive .sidebar .history-item:hover .history-item-rename,
+html.mode-offensive .sidebar .history-item:hover .history-item-del,
+html.mode-offensive .sidebar .nav-item:hover {
+  color: #000000 !important;
+}
+
+/* Sessão ativa: fundo preto + texto branco (nunca branco+branco) */
+html.mode-offensive .sidebar .history-item,
+html.mode-offensive .sidebar .history-item .history-item-title,
+html.mode-offensive .sidebar .history-item .history-item-rename,
+html.mode-offensive .sidebar .history-item .history-item-del,
+html.mode-offensive .sidebar .history-item::before {
+  color: #000000 !important;
+}
+
+html.mode-offensive .sidebar .history-item .history-item-meta {
+  color: #555555 !important;
+}
+
+html.mode-offensive .sidebar .history-item.active,
+html.mode-offensive .sidebar .history-item.active:hover {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .sidebar .history-item.active .history-item-title,
+html.mode-offensive .sidebar .history-item.active .history-item-meta,
+html.mode-offensive .sidebar .history-item.active .history-item-rename,
+html.mode-offensive .sidebar .history-item.active .history-item-del,
+html.mode-offensive .sidebar .history-item.active::before,
+html.mode-offensive .sidebar .history-item.active:hover .history-item-title,
+html.mode-offensive .sidebar .history-item.active:hover .history-item-meta,
+html.mode-offensive .sidebar .history-item.active:hover .history-item-rename,
+html.mode-offensive .sidebar .history-item.active:hover .history-item-del {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .sidebar .nav-item,
+html.mode-offensive .sidebar .nav-item .term-badge,
+html.mode-offensive .sidebar .rail-label {
+  color: #000000 !important;
+}
+
+html.mode-offensive .sidebar .rail-label,
+html.mode-offensive .sidebar .nav-item .term-badge {
+  color: #555555 !important;
+}
+
+html.mode-offensive .sidebar .sidebar-new:hover {
+  color: #000000 !important;
+}
+
+/* Campos de texto no modo ofensivo — contraste explícito */
+html.mode-offensive .main-area,
+html.mode-offensive .terminal.crt,
+html.mode-offensive .paper,
+html.mode-offensive .term-screen.crt-screen {
+  color: #f2f2f2;
+}
+
+html.mode-offensive .cmd-input,
+html.mode-offensive .composer-mark,
+html.mode-offensive #model-label {
+  color: #000000 !important;
+}
+
+html.mode-offensive .cmd-input::placeholder {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+html.mode-offensive .history-item-rename-input,
+html.mode-offensive .history-item-rename-input:focus {
+  color: #000000 !important;
+  background: #ffffff !important;
+  border: 1px solid #000000 !important;
+  caret-color: #000000 !important;
+}
+
+html.mode-offensive input[type="text"],
+html.mode-offensive input[type="password"],
+html.mode-offensive input[type="search"],
+html.mode-offensive textarea {
+  color: inherit;
+  caret-color: currentColor;
+}
+
+html.mode-offensive .panel.crt-panel input,
+html.mode-offensive .panel.crt-panel textarea,
+html.mode-offensive .panel.crt-panel .panel-field,
+html.mode-offensive .panel.crt-panel .panel-search,
+html.mode-offensive .panel.crt-panel .autopilot-input {
+  color: #000000 !important;
+  background: #f2f2f2 !important;
+  border-color: #000000 !important;
+  caret-color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel input::placeholder,
+html.mode-offensive .panel.crt-panel textarea::placeholder {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+html.mode-offensive .cmd-line--out .md-body,
+html.mode-offensive .boot-ready,
+html.mode-offensive .boot-msg,
+html.mode-offensive .term-bar-title,
+html.mode-offensive .title-kicker,
+html.mode-offensive #status-bar-text,
+html.mode-offensive .status-tag {
+  color: #f2f2f2 !important;
+}
+
+html.mode-offensive .boot-hint,
+html.mode-offensive .title-kicker,
+html.mode-offensive .status-tag {
+  color: #9a9a9a !important;
+}
+
+html.mode-offensive .term-bar-title {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .welcome-brand .brand-name {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .cmd-line--out .md-body code {
+  color: #ffffff !important;
+  background: #1a1a1a !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+html.mode-offensive .cmd-line--out .md-body pre,
+html.mode-offensive .cmd-line--out .md-body pre code {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+html.mode-offensive .term-exec,
+html.mode-offensive .dash-panel {
+  background: #111111 !important;
+  color: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+html.mode-offensive .term-exec *,
+html.mode-offensive .dash-panel * {
+  color: inherit;
+}
+
+html.mode-offensive .model-menu {
+  background: #000000 !important;
+  border-color: #ffffff !important;
+  box-shadow: 6px 6px 0 #ffffff !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .model-option {
+  background: #111111 !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+html.mode-offensive .model-option .model-option-name,
+html.mode-offensive .model-option .model-option-marker,
+html.mode-offensive .model-option .model-option-provider {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .model-option .model-option-desc {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+html.mode-offensive .model-option:hover,
+html.mode-offensive .model-option.active {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+html.mode-offensive .model-option:hover .model-option-name,
+html.mode-offensive .model-option:hover .model-option-marker,
+html.mode-offensive .model-option:hover .model-option-provider,
+html.mode-offensive .model-option:hover .model-option-desc,
+html.mode-offensive .model-option.active .model-option-name,
+html.mode-offensive .model-option.active .model-option-marker,
+html.mode-offensive .model-option.active .model-option-provider,
+html.mode-offensive .model-option.active .model-option-desc {
+  color: #000000 !important;
+}
+
+/* Mapa / piloto / listas em painel claro (offensive) */
+html.mode-offensive .panel.crt-panel .threatmap-sidebar {
+  background: #ececec !important;
+  color: #000000 !important;
+  border-right-color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .threatmap-sidebar-head,
+html.mode-offensive .panel.crt-panel .threat-label,
+html.mode-offensive .panel.crt-panel .threatmap-note,
+html.mode-offensive .panel.crt-panel .threat-code {
+  color: #111111 !important;
+}
+
+html.mode-offensive .panel.crt-panel .threat-mode-btn,
+html.mode-offensive .panel.crt-panel .threatmap-link,
+html.mode-offensive .panel.crt-panel .threat-open-full,
+html.mode-offensive .panel.crt-panel .files-refresh-btn,
+html.mode-offensive .panel.crt-panel .panel-close {
+  color: #000000 !important;
+  border-color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .threat-mode-btn.active {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .panel.crt-panel .pilot-tool-grid {
+  background: #ffffff !important;
+  border-color: #000000 !important;
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .pilot-tool-check,
+html.mode-offensive .panel.crt-panel .pilot-tool-check strong {
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-cat-tab {
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-cat-tab.active,
+html.mode-offensive .panel.crt-panel .tool-cat-tab[aria-pressed="true"] {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .panel.crt-panel .tool-use-btn {
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .panel-title-main,
+html.mode-offensive .panel.crt-panel .panel-title-sub {
+  color: #000000 !important;
+}
+
+html.mode-offensive .panel.crt-panel .panel-title-sub {
+  opacity: 0.55 !important;
+}
+
+/* ── Responsive ──────────────────────────────────────── */
+@media (min-width: 769px) {
+  body.sidebar-collapsed .sidebar {
+    width: 0;
+    min-width: 0;
+    overflow: hidden;
+    border: none;
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 120;
+    width: min(340px, 92vw);
+    transform: translateX(-105%);
+    transition: transform var(--ease);
+    box-shadow: 12px 0 0 rgba(0, 0, 0, 0.35);
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .sidebar-close {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-backdrop:not([hidden]) {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 110;
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .spine {
+    width: 56px;
+  }
+
+  .spine-brand {
+    font-size: 1.7rem;
+  }
+
+  .term-bar.crt-titlebar,
+  .composer.crt-dock,
+  .term-screen.crt-screen {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .term-bar-title {
+    font-size: 1.25rem;
+  }
+
+  .welcome-brand .brand-name {
+    font-size: 2.6rem;
+  }
+
+  .composer-send {
+    padding: 0 0.7rem;
+    font-size: 0.6rem;
+  }
+
+  .model-picker-wrap,
+  .model-trigger {
+    width: auto !important;
+  }
+}

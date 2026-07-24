@@ -1,13 +1,29 @@
-export const STORAGE_KEY = "chat-ia-kali-sessions";
-export const MODEL_STORAGE_KEY = "chat-ia-kali-model";
-export const API_TOKEN_KEY = "chat-ia-kali-api-token";
-export const SOUND_STORAGE_KEY = "chat-ia-kali-sound";
-export const ONBOARDING_STORAGE_KEY = "chat-ia-kali-onboarded";
+export const STORAGE_KEY = "darkstar-sessions";
+export const MODEL_STORAGE_KEY = "darkstar-model";
+export const API_TOKEN_KEY = "darkstar-api-token";
+export const SOUND_STORAGE_KEY = "darkstar-sound";
+export const ONBOARDING_STORAGE_KEY = "darkstar-onboarded";
 /** Piloto: libera ferramentas ofensivas (risk_profile full + catálogo ampliado). */
-export const PILOT_OFFENSIVE_STORAGE_KEY = "chat-ia-kali-pilot-offensive";
+export const PILOT_OFFENSIVE_STORAGE_KEY = "darkstar-pilot-offensive";
 export const HISTORY_LIMIT = 10;
 
+/** Mensagem inicial da Argus em todo chat novo. */
+export const ARGUS_WELCOME_MESSAGE = `Oi! Eu sou a **Argus**, sua companheira no **DarkStar**.
+
+Estou pronta pra te ajudar no pentest — a gente conversa, eu executo as tools no Kali quando fizer sentido e te explico o que aparece no caminho.
+
+Por padrão você está no **perfil B** (mais seguro, menos permissões). Se precisar do arsenal completo, use o botão **key** na barra e informe a master key.
+
+Me conta o alvo autorizado ou o que você quer fazer agora? 🙂`;
+
 export const HELP_HTML = `
+<section class="help-section">
+  <h3>DarkStar · Argus</h3>
+  <ul class="help-list">
+    <li><strong>Argus</strong> — IA do chat (amigável e prática)</li>
+    <li><strong>key</strong> — master key: perfil B (restrito) → full</li>
+  </ul>
+</section>
 <section class="help-section">
   <h3>Navegação</h3>
   <ul class="help-list">
@@ -66,13 +82,12 @@ export const HELP_HTML = `
 <section class="help-section">
   <h3>Modos</h3>
   <ul class="help-list">
-    <li><strong>Chat</strong> — a IA executa ferramentas Kali via linguagem natural</li>
+    <li><strong>Chat</strong> — a Argus executa ferramentas Kali via linguagem natural</li>
     <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
     <li><strong>pilot</strong> — alvo + tipo de scan (básico → completo); PDF ao fim da missão</li>
-    <li><strong>offensive</strong> — switch na barra: perfil de risco completo no Piloto (UI vermelha)</li>
-    <li>Ícones no prompt — <strong>logs</strong> (<em>Alt+L</em>) e <strong>relatório/triagem</strong> (<em>Alt+R</em>); PDF só ao clicar em Baixar PDF</li>
-    <li><strong>relatórios</strong> — biblioteca de PDFs baixados (<em>Alt+F</em>) · <strong>mapa</strong> — contexto global (<em>Alt+C</em>)</li>
-    <li><strong>cancel</strong> — interrompe execução em andamento</li>
+    <li><strong>offensive</strong> — requer master key (perfil full)</li>
+    <li>Ícones no prompt — <strong>logs</strong> e <strong>relatório/triagem</strong></li>
+    <li><strong>relatórios</strong> · <strong>mapa</strong> · <strong>cancel</strong></li>
   </ul>
 </section>
 <p class="help-note">Use apenas em alvos autorizados.</p>

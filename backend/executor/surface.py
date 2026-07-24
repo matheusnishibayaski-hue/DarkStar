@@ -96,7 +96,7 @@ def empty_surface(
         "risk_profile": risk_profile,
         "client": client,
         "scope_notes": scope_notes,
-        "brand_name": brand_name or "Chat IA Kali",
+        "brand_name": brand_name or "DarkStar",
         "label": label,
         "phase": "recon",
         "phases_completed": [],
@@ -331,6 +331,10 @@ def _upsert_finding(
         enrich_finding(finding)
     except (ImportError, TypeError, ValueError, KeyError):
         pass
+    # Nota: threat intel (CISA KEV/EPSS) é enriquecimento sob demanda — chamadas de
+    # rede não devem bloquear o pipeline síncrono de ingestão de achados. Use
+    # `backend.ai.threat_intel.enrich_surface_with_threat_intel(target)` (também
+    # exposto como tool MCP `enrich_target_threat_intel`) para popular os campos.
     data["findings"].append(finding)
 
 

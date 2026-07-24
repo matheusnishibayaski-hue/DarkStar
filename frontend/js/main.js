@@ -45,7 +45,7 @@ import {
   onChatScroll,
 } from "./chat-view.js";
 import { initChat, sendMessage, rebuildInputHistoryRef } from "./chat.js";
-import { initSessionLogsModal } from "./session-logs-modal.js";
+import { initSessionLogsModal, openSessionLogsModal } from "./session-logs-modal.js";
 import { initSessionReportModal, openReportFromShortcut } from "./session-report-modal.js";
 import { initAutopilot, onPilotOffensiveModeChanged } from "./autopilot.js";
 import { initOffensiveMode, onOffensiveModeChange } from "./offensive-mode.js";
@@ -57,6 +57,7 @@ import { initAudio, bindSoundButton } from "./audio.js";
 import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 import { initGuidedTour, startGuidedTour, stopGuidedTour, isGuidedTourActive } from "./guided-tour.js";
 import { deleteSessionLogs, deleteIntelSession } from "./data-admin.js";
+import { initMasterKey, isElevated } from "./master-key.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -94,6 +95,7 @@ const autopilotTarget = document.getElementById("autopilot-target");
 const autopilotStart = document.getElementById("autopilot-start");
 const btnToolbarMore = document.getElementById("btn-toolbar-more");
 const toastContainer = document.getElementById("toast-container");
+void btnToolbarMore; // stub legado (tour / HTML)
 
 const inputHistory = { list: [], idx: -1 };
 
@@ -155,7 +157,7 @@ initShortcuts({
   openThreats: () => openThreatsPanel(),
   openFiles: () => openFilesPanel(),
   downloadReport: () => openReportFromShortcut(),
-  openSessionLogs: () => document.getElementById("btn-session-logs")?.click(),
+  openSessionLogs: () => openSessionLogsModal(),
   newChat: () => newChat(),
   focusInput: () => input?.focus(),
   toggleSidebar: () => toggleSidebar(),
@@ -230,6 +232,12 @@ onOffensiveModeChange(() => {
   void onPilotOffensiveModeChanged();
 });
 
+initMasterKey({
+  onChange: () => {
+    refreshStatusBar();
+  },
+});
+
 initMissionControl(btnCancelMission);
 
 initFilesPanel({
@@ -298,16 +306,20 @@ initOnboarding({
   input,
 });
 
-initGuidedTour({
-  overlayHelp,
-  overlayAutopilot,
-  overlayTools,
-  input,
-  openToolsPanel,
-  openFilesPanel,
-  openThreatsPanel,
-  closeAllOverlays,
-});
+try {
+  initGuidedTour({
+    overlayHelp,
+    overlayAutopilot,
+    overlayTools,
+    input,
+    openToolsPanel,
+    openFilesPanel,
+    openThreatsPanel,
+    closeAllOverlays,
+  });
+} catch (err) {
+  console.error("Falha ao iniciar guided tour:", err);
+}
 
 // --- Events ---
 btnMenu?.addEventListener("click", toggleSidebar);
@@ -324,6 +336,7 @@ window.addEventListener("resize", () => {
 });
 sidebarNew?.addEventListener("click", newChat);
 sidebarHelp?.addEventListener("click", () => startGuidedTour());
+btnNew?.addEventListener("click", newChat);
 
 btnTools?.addEventListener("click", () => openToolsPanel());
 modelTrigger?.addEventListener("click", (e) => {
@@ -341,12 +354,7 @@ btnFiles?.addEventListener("click", () => openFilesPanel());
 btnThreats?.addEventListener("click", () => openThreatsPanel());
 btnCancelMission?.addEventListener("click", () => cancelActiveMission(toast));
 btnHelp?.addEventListener("click", () => startGuidedTour());
-btnNew?.addEventListener("click", newChat);
 btnScrollBottom?.addEventListener("click", () => scrollChatToBottom());
-
-btnToolbarMore?.addEventListener("click", () => {
-  document.getElementById("term-toolbar-extra")?.classList.toggle("open");
-});
 
 toolSearch?.addEventListener("input", () => renderToolList(toolSearch.value));
 input?.addEventListener("keydown", handleInputKeydown);

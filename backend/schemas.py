@@ -75,6 +75,10 @@ class LoginRequest(BaseModel):
     token: str = Field(..., min_length=1, max_length=256)
 
 
+class MasterKeyRequest(BaseModel):
+    key: str = Field(..., min_length=1, max_length=512)
+
+
 class PlaybookRunRequest(BaseModel):
     target: str = Field(..., min_length=1, max_length=253)
     mission_id: str = Field(default="", max_length=64)

@@ -154,6 +154,14 @@ def run_playbook(playbook_id: str, target: str, mission_id: str | None = None, c
         except (OSError, ValueError, TypeError, KeyError, RuntimeError):
             verify_summary = {}
 
+    # Intelligence Hub — best-effort (nunca falha o playbook)
+    try:
+        from backend.intelligence.hub import try_record_from_surface
+
+        try_record_from_surface(target)
+    except Exception:
+        pass
+
     return {
         "playbook_id": playbook_id,
         "target": target,

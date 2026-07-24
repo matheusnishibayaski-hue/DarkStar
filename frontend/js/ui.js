@@ -158,6 +158,8 @@ export function closeAllOverlays(closeToolsPanelMenus) {
     ctx.overlayThreats,
     ctx.overlaySessionLogs,
     ctx.overlaySessionReport,
+    document.getElementById("overlay-master-key"),
+    document.getElementById("overlay-login"),
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");
@@ -223,7 +225,7 @@ function updateScopeBanner() {
     banner.innerHTML = `
       <div class="health-banner-body">
         <strong class="health-banner-title">// AVISO: escopo aberto</strong>
-        <p class="health-banner-text">Defina <code>ALLOWED_TARGETS</code> no <code>.env</code> para restringir scans a alvos autorizados.</p>
+        <p class="health-banner-text">Defina <code>ALLOWED_TARGETS</code> no <code>.env</code> para restringir scans a alvos autorizados. Sem isso, qualquer alvo pode ser usado — apenas em lab com permissão.</p>
       </div>
     `;
   } else {
@@ -297,32 +299,20 @@ export function renderWelcome() {
   const wrap = document.createElement("div");
   wrap.className = "welcome boot";
 
-  const bootLines = [
-    "[ OK ] pentest-ai kernel 1.1.0 — local mode",
-    "[ OK ] docker bridge .................... linked",
-    "[ OK ] kali toolchain ................... ready",
-    "[ OK ] openrouter agent ................. online",
-    "[ OK ] logs + relatório ............... barra do chat",
-    "[ OK ] output volume ..................... /tools/output",
-  ];
-
-  const log = document.createElement("div");
-  log.className = "boot-log";
-  for (const line of bootLines) {
-    const row = document.createElement("div");
-    row.className = "boot-line";
-    row.innerHTML = `<span class="boot-tag">[ OK ]</span> ${escapeHtml(line.replace("[ OK ] ", ""))}`;
-    log.appendChild(row);
-  }
-  wrap.appendChild(log);
+  const brand = document.createElement("div");
+  brand.className = "welcome-brand";
+  brand.innerHTML = `<span class="brand-name">DarkStar</span>`;
+  wrap.appendChild(brand);
 
   const ready = document.createElement("p");
   ready.className = "boot-ready";
-  ready.innerHTML = `
-    <span class="cmd-prompt-inline"><span class="cmd-user">kali@pentest</span><span class="cmd-at">:</span><span class="cmd-path">~</span><span class="cmd-sym">$</span></span>
-    <span class="boot-msg"> session ready — awaiting input</span>
-  `;
+  ready.innerHTML = `<span class="boot-msg">Canal aberto com Argus. Nomeie o alvo — ou dispare o piloto.</span>`;
   wrap.appendChild(ready);
+
+  const hint = document.createElement("p");
+  hint.className = "boot-hint";
+  hint.textContent = "coluna negra = sistema · papel branco = conversa";
+  wrap.appendChild(hint);
 
   return wrap;
 }

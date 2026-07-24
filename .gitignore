@@ -16,5 +16,7 @@ backend/surface/*
 backend/audit/*
 !backend/audit/.gitkeep
 backend/data/
+backend/intelligence_data/*
+!backend/intelligence_data/.gitkeep
 backend/outputs/*
 !backend/outputs/.gitkeep

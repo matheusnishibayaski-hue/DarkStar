@@ -3,41 +3,68 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>kali@pentest</title>
-  <link rel="stylesheet" href="/static/styles.css?v=41" />
+  <title>DarkStar · Argus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=50" />
+  <link rel="stylesheet" href="/static/shell.css?v=9" />
   <script>
     (function () {
       try {
-        if (localStorage.getItem("chat-ia-kali-pilot-offensive") === "1") {
+        if (localStorage.getItem("darkstar-pilot-offensive") === "1"
+            || localStorage.getItem("chat-ia-kali-pilot-offensive") === "1") {
           document.documentElement.classList.add("mode-offensive");
         }
       } catch (e) { /* ignore */ }
     })();
   </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="app-bg" aria-hidden="true"></div>
-  <div class="crt-vignette" aria-hidden="true"></div>
-
   <div class="app-shell">
-    <aside class="sidebar" id="sidebar" aria-label="Sessões">
-      <div class="sidebar-head">
-        <span class="sidebar-logo"><span class="logo-dim">//</span> sessions<span class="logo-dim">/</span></span>
-        <div class="sidebar-head-actions">
-          <button type="button" class="sidebar-collapse" id="sidebar-collapse" title="Recolher barra (M)" aria-label="Recolher barra lateral">‹</button>
-          <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Fechar">×</button>
-        </div>
+    <aside class="sidebar" id="sidebar" aria-label="Navegação">
+      <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Fechar">×</button>
+
+      <div class="spine">
+        <div class="spine-eye" aria-hidden="true" title="Argus"></div>
+        <p class="spine-brand" aria-label="DarkStar">DARKSTAR</p>
+        <p class="spine-meta">ARGUS</p>
       </div>
 
-      <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa"><span class="cmd-sym">$</span> new</button>
+      <div class="rail">
+        <div class="sidebar-head">
+          <span class="sidebar-logo" aria-hidden="true">
+            <span class="brand-mark"><span class="brand-name">DarkStar</span></span>
+          </span>
+        </div>
 
-      <div class="sidebar-section-label">ls -la</div>
-      <div class="sidebar-sessions" id="sidebar-sessions"></div>
+        <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa">+ NOVO</button>
 
-      <div class="sidebar-footer">
-        <button type="button" class="sidebar-link" id="sidebar-help" title="Guia (F1)"><span class="cmd-sym">?</span> guia <kbd>F1</kbd></button>
+        <p class="rail-label">SESSÕES</p>
+        <div class="sidebar-sessions" id="sidebar-sessions"></div>
+
+        <nav class="sidebar-nav" aria-label="Ações">
+          <p class="rail-label">SISTEMA</p>
+          <button type="button" class="nav-item" id="btn-tools" title="Alt+T">
+            <span>01 ferramentas</span>
+            <span class="term-badge" id="tool-badge">auto</span>
+          </button>
+          <button type="button" class="nav-item" id="btn-session-logs" title="Alt+L">02 logs</button>
+          <button type="button" class="nav-item" id="btn-session-report" title="Alt+R">03 relatório</button>
+          <button type="button" class="nav-item" id="btn-files" title="Alt+F">04 pdfs</button>
+          <button type="button" class="nav-item" id="btn-threats" title="Alt+C">05 mapa</button>
+          <div class="nav-sep"></div>
+          <button type="button" class="nav-item" id="btn-master-key" title="Master key">
+            <span data-key-label>06 master key</span>
+          </button>
+          <label class="nav-item nav-toggle" id="offensive-mode-control" for="offensive-mode-toggle">
+            <span>07 offensive</span>
+            <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
+            <span class="offensive-mode-switch" aria-hidden="true"></span>
+          </label>
+          <button type="button" class="nav-item" id="btn-sound">08 som</button>
+          <button type="button" class="nav-item" id="btn-help" title="F1">09 ajuda</button>
+        </nav>
       </div>
     </aside>
 
@@ -47,83 +74,65 @@
       <div class="terminal crt" id="terminal">
         <header class="term-bar crt-titlebar">
           <div class="term-bar-left">
-            <div class="crt-lights" aria-hidden="true">
-              <span class="crt-light crt-light--r"></span>
-              <span class="crt-light crt-light--y"></span>
-              <span class="crt-light crt-light--g"></span>
+            <button type="button" class="term-btn term-btn-menu" id="btn-menu" title="Menu (M)" aria-label="Abrir ou recolher menu" aria-controls="sidebar" aria-expanded="true">☰</button>
+            <div class="title-stack">
+              <span class="title-kicker">CANAL</span>
+              <h1 class="term-bar-title" id="session-title">Chat</h1>
             </div>
-            <button type="button" class="term-btn term-btn-menu" id="btn-menu" title="Barra lateral (M)" aria-label="Abrir ou recolher barra lateral" aria-controls="sidebar" aria-expanded="true">☰</button>
-            <h1 class="term-bar-title" id="session-title">kali@pentest: ~/chat</h1>
           </div>
           <nav class="term-bar-actions crt-toolbar">
-            <button type="button" class="term-btn" id="btn-tools" title="Alt+T">tools:<span class="term-badge" id="tool-badge">auto</span></button>
-            <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Alt+P">pilot</button>
-            <label class="term-offensive-toggle" id="offensive-mode-control" for="offensive-mode-toggle" title="Modo ofensivo — libera ferramentas agressivas no Piloto">
-              <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
-              <span class="offensive-mode-switch" aria-hidden="true"></span>
-              <span class="offensive-mode-label">offensive</span>
-            </label>
-            <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar">stop</button>
-            <span class="term-toolbar-extra" id="term-toolbar-extra">
-              <button type="button" class="term-btn term-btn-files" id="btn-files" title="Alt+F — relatórios PDF">relatórios</button>
-              <button type="button" class="term-btn term-btn-threats" id="btn-threats" title="Alt+C — mapa mundial">mapa</button>
-            </span>
-            <button type="button" class="term-btn term-btn-more" id="btn-toolbar-more" title="Mais" aria-haspopup="true">⋯</button>
-            <span class="term-bar-divider" aria-hidden="true"></span>
-            <button type="button" class="term-btn term-btn-ghost" id="btn-help" title="Tour guiado (F1)">?</button>
-            <button type="button" class="term-btn term-btn-ghost" id="btn-new" title="Alt+N">+</button>
+            <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Piloto automático (Alt+P)">PILOTO</button>
+            <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar missão">PARAR</button>
           </nav>
         </header>
 
         <div class="health-banner" id="health-banner" hidden role="status"></div>
         <div class="health-banner scope-banner" id="scope-banner" hidden role="status"></div>
 
-        <div class="term-screen crt-screen" id="chat"></div>
+        <div class="paper">
+          <div class="term-screen crt-screen" id="chat"></div>
 
-        <footer class="composer crt-dock">
-          <form class="term-prompt cmd-form" id="form" autocomplete="off">
-            <span class="cmd-prompt" aria-hidden="true">
-              <span class="cmd-user">kali@pentest</span><span class="cmd-at">:</span><span class="cmd-path">~</span><span class="cmd-sym">$</span>
-            </span>
-            <input type="text" class="cmd-input" id="input" spellcheck="false" autofocus
-              placeholder="" aria-label="Comando" />
-            <span class="cmd-cursor" id="cmd-cursor" aria-hidden="true"></span>
-            <div class="chat-conversation-actions" role="group" aria-label="Logs e relatório">
-              <button type="button" class="chat-icon-btn" id="btn-session-logs" title="Logs desta conversa (Alt+L)" aria-label="Logs desta conversa">
-                <svg class="chat-icon-btn-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M8 6h12M8 12h12M8 18h7"/>
-                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M4 6h.01M4 12h.01M4 18h.01"/>
-                </svg>
-              </button>
-              <button type="button" class="chat-icon-btn" id="btn-session-report" title="Relatório e achados (Alt+R)" aria-label="Relatório e achados">
-                <svg class="chat-icon-btn-svg" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
-                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round" d="M9 3h8l2 2v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h3"/>
-                  <path fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" d="M16 3v4h4M8 13h8M8 17h6"/>
-                </svg>
-              </button>
+          <footer class="composer crt-dock">
+            <form class="term-prompt cmd-form" id="form" autocomplete="off">
+              <div class="composer-box">
+                <span class="composer-mark" aria-hidden="true">›</span>
+                <input type="text" class="cmd-input" id="input" spellcheck="true" autofocus
+                  placeholder="falar com Argus…" aria-label="Mensagem" />
+                <div class="composer-tools">
+                  <div class="model-picker-wrap">
+                    <button type="button" class="model-trigger" id="model-trigger" title="Modelo" aria-haspopup="listbox" aria-expanded="false">
+                      <span id="model-label">flash</span>
+                      <span class="model-trigger-caret" aria-hidden="true">▾</span>
+                    </button>
+                    <div class="model-menu" id="model-menu" hidden role="listbox" aria-label="Selecionar modelo"></div>
+                  </div>
+                  <button type="submit" class="composer-send" title="Enviar" aria-label="Enviar">ENVIAR</button>
+                </div>
+              </div>
+            </form>
+            <div class="status-bar crt-status" id="status-bar">
+              <div class="status-bar-left">
+                <span class="status-tag" id="status-pill-docker" title="Docker">docker</span>
+                <span class="status-tag" id="status-pill-kali" title="Kali">kali</span>
+                <span class="status-tag status-tag--warn" id="status-pill-privilege" title="Privilégio">priv:B</span>
+                <span id="status-bar-text"></span>
+              </div>
             </div>
-            <div class="model-picker-wrap">
-              <button type="button" class="model-trigger" id="model-trigger" title="Modelo" aria-haspopup="listbox" aria-expanded="false">
-                <span class="model-trigger-prefix">llm:</span>
-                <span id="model-label">flash</span>
-                <span class="model-trigger-caret" aria-hidden="true">▾</span>
-              </button>
-              <div class="model-menu" id="model-menu" hidden role="listbox" aria-label="Selecionar modelo"></div>
-            </div>
-          </form>
-          <div class="status-bar crt-status" id="status-bar">
-            <div class="status-bar-left">
-              <span class="status-tag" id="status-pill-docker" title="Docker">docker:--</span>
-              <span class="status-tag" id="status-pill-kali" title="Kali">kali:--</span>
-              <span class="status-clock" id="status-clock" aria-hidden="true"></span>
-              <span id="status-bar-text">init…</span>
-              <button type="button" class="status-sound-btn" id="btn-sound" title="Sons CRT">snd:on</button>
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </div>
       </div>
     </main>
   </div>
+
+  <button type="button" id="btn-new" hidden tabindex="-1" aria-hidden="true"></button>
+  <button type="button" id="sidebar-help" hidden tabindex="-1" aria-hidden="true"></button>
+  <button type="button" id="sidebar-collapse" hidden tabindex="-1" aria-hidden="true"></button>
+  <button type="button" id="btn-toolbar-more" hidden tabindex="-1" aria-hidden="true"></button>
+  <div id="app-menu" hidden aria-hidden="true"></div>
+  <span id="cmd-cursor" hidden aria-hidden="true"></span>
+  <span id="status-clock" hidden aria-hidden="true"></span>
+  <span id="term-toolbar-extra" hidden aria-hidden="true"></span>
+  <div class="chat-conversation-actions" hidden aria-hidden="true"></div>
 
   <button type="button" class="scroll-bottom" id="btn-scroll-bottom" hidden title="Ir ao final">↓</button>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
@@ -149,13 +158,13 @@
     <div class="panel panel-tools crt-panel" role="dialog" aria-modal="true" aria-label="Ferramentas">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">/usr/bin — whitelist</span>
-          <span class="panel-title-sub">180+ tools · busque ou fixe</span>
+          <span class="panel-title-main">Ferramentas</span>
+          <span class="panel-title-sub">whitelist · busque ou fixe</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-tools" aria-label="Fechar">×</button>
       </div>
       <div class="panel-toolbar">
-        <input type="text" class="panel-search tools-search" id="tool-search" placeholder="grep tools…" spellcheck="false" />
+        <input type="text" class="panel-search tools-search" id="tool-search" placeholder="Buscar ferramenta…" spellcheck="false" />
         <div class="tools-categories" id="tool-categories"></div>
       </div>
       <p class="tools-hint"><strong>auto</strong> = IA escolhe · <em>usar</em> = envia exemplo</p>
@@ -168,33 +177,26 @@
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main">Piloto automático</span>
-          <span class="panel-title-sub">escolha o scan, informe o alvo — relatório PDF ao final</span>
+          <span class="panel-title-sub">alvo + tipo de scan · PDF ao final</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-autopilot" aria-label="Fechar">×</button>
       </div>
       <div class="panel-body autopilot-form">
-        <p class="pilot-intro">
-          Use o switch <strong>offensive</strong> na barra superior para liberar ferramentas agressivas.
-          O progresso aparece no chat; logs e triagem ficam nos ícones ao lado do prompt.
-        </p>
-
         <div class="form-field">
           <label class="autopilot-label" for="autopilot-target">Alvo autorizado</label>
-          <input type="text" id="autopilot-target" class="panel-field autopilot-input pilot-target-input" placeholder="ex: scanme.nmap.org ou https://site.com/app" spellcheck="false" autocomplete="off" />
+          <input type="text" id="autopilot-target" class="panel-field autopilot-input pilot-target-input" placeholder="scanme.nmap.org ou https://site.com" spellcheck="false" autocomplete="off" />
         </div>
-
         <div class="form-field" id="pilot-scan-wrap">
           <span class="autopilot-label">Tipo de scan</span>
           <div class="pilot-scan-options" id="pilot-scan-options" role="radiogroup" aria-label="Tipo de scan"></div>
           <div class="pilot-custom-tools" id="pilot-custom-tools" hidden>
-            <p class="pilot-advanced-desc">Marque as ferramentas que a IA deve executar (pelo menos uma).</p>
-            <input type="search" id="pilot-tool-search" class="panel-field" placeholder="Filtrar ferramentas…" spellcheck="false" autocomplete="off" />
+            <p class="pilot-advanced-desc">Marque as ferramentas (pelo menos uma).</p>
+            <input type="search" id="pilot-tool-search" class="panel-field" placeholder="Filtrar…" spellcheck="false" autocomplete="off" />
             <div class="pilot-tool-grid" id="pilot-tool-grid"></div>
           </div>
         </div>
-
-        <button type="button" class="autopilot-start" id="autopilot-start">Iniciar missão com IA</button>
-        <p class="pilot-foot" id="pilot-foot">Ao concluir, o PDF do relatório é gerado automaticamente. Só use alvos autorizados.</p>
+        <button type="button" class="autopilot-start" id="autopilot-start">Iniciar</button>
+        <p class="pilot-foot" id="pilot-foot">Só use alvos autorizados.</p>
       </div>
     </div>
   </div>
@@ -203,8 +205,8 @@
     <div class="panel panel-help crt-panel" role="dialog" aria-modal="true" aria-label="Ajuda">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">man kali-ai</span>
-          <span class="panel-title-sub">atalhos e referência</span>
+          <span class="panel-title-main">Ajuda</span>
+          <span class="panel-title-sub">atalhos · Argus · master key</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-help" aria-label="Fechar">×</button>
       </div>
@@ -212,13 +214,12 @@
     </div>
   </div>
 
-  <!-- LOGS da conversa -->
   <div class="overlay overlay-session-logs" id="overlay-session-logs" hidden>
     <div class="panel panel-session-modal crt-panel" role="dialog" aria-modal="true" aria-label="Logs da conversa">
       <div class="panel-head">
         <div class="panel-head-text">
           <span class="panel-title-main">Logs</span>
-          <span class="panel-title-sub">comandos executados nesta conversa</span>
+          <span class="panel-title-sub">comandos desta conversa</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-session-logs" aria-label="Fechar">×</button>
       </div>
@@ -226,13 +227,12 @@
     </div>
   </div>
 
-  <!-- RELATÓRIO / triagem -->
   <div class="overlay overlay-session-report" id="overlay-session-report" hidden>
     <div class="panel panel-session-modal panel-session-report crt-panel" role="dialog" aria-modal="true" aria-label="Relatório">
       <div class="panel-head">
         <div class="panel-head-text">
           <span class="panel-title-main">Relatório</span>
-          <span class="panel-title-sub" id="session-report-meta">triagem de achados desta conversa</span>
+          <span class="panel-title-sub" id="session-report-meta">triagem de achados</span>
         </div>
         <button type="button" class="panel-close" data-close="overlay-session-report" aria-label="Fechar">×</button>
       </div>
@@ -246,13 +246,12 @@
     </div>
   </div>
 
-  <!-- FILES: modal próprio -->
   <div class="overlay" id="overlay-files" hidden>
     <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Relatórios">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">Relatórios</span>
-          <span class="panel-title-sub" id="files-meta">PDFs baixados pelo chat</span>
+          <span class="panel-title-main">PDFs</span>
+          <span class="panel-title-sub" id="files-meta">baixados pelo chat</span>
         </div>
         <div class="panel-head-right files-head-actions">
           <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
@@ -260,18 +259,17 @@
         </div>
       </div>
       <div class="files-simple-toolbar">
-        <input type="search" class="panel-search" id="files-search" placeholder="Buscar relatório…" spellcheck="false" />
+        <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
       </div>
       <div class="panel-body files-panel-body" id="files-list"></div>
     </div>
   </div>
 
-  <!-- MAPA: modal separado do Intel -->
   <div class="overlay overlay-threats" id="overlay-threats" hidden>
     <div class="panel panel-threats crt-panel" id="threat-panel" role="dialog" aria-modal="true" aria-label="Mapa de ameaças">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">Mapa mundial</span>
+          <span class="panel-title-main">Mapa</span>
           <span class="panel-title-sub">ameaça em tempo real · Kaspersky</span>
         </div>
         <div class="panel-head-right files-head-actions">
@@ -303,7 +301,7 @@
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main" id="onboarding-title">bem-vindo</span>
-          <span class="panel-title-sub">guia rápido · 60s</span>
+          <span class="panel-title-sub">guia rápido</span>
         </div>
       </div>
       <div class="panel-body onboarding-body" id="onboarding-body"></div>
@@ -318,22 +316,45 @@
     <div class="panel panel-narrow panel-login crt-panel" role="dialog" aria-modal="true" aria-label="Login">
       <div class="panel-head">
         <div class="panel-head-text">
-          <span class="panel-title-main">auth.login</span>
+          <span class="panel-title-main">Login</span>
           <span class="panel-title-sub">CHAT_API_TOKEN</span>
         </div>
         <button type="button" class="panel-close" id="login-cancel" aria-label="Fechar">×</button>
       </div>
       <div class="panel-body autopilot-form">
-        <p class="panel-callout">export token from <code>.env</code></p>
+        <p class="panel-callout">Token do <code>.env</code></p>
         <div class="form-field">
           <label class="autopilot-label" for="login-token">TOKEN</label>
           <input type="password" id="login-token" class="panel-field autopilot-input" placeholder="••••••••" spellcheck="false" autocomplete="off" />
         </div>
-        <button type="button" class="autopilot-start autopilot-start-auth" id="login-submit">authenticate</button>
+        <button type="button" class="autopilot-start autopilot-start-auth" id="login-submit">Entrar</button>
       </div>
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=38"></script>
+  <div class="overlay overlay-master-key" id="overlay-master-key" hidden>
+    <div class="panel panel-narrow panel-master-key crt-panel" role="dialog" aria-modal="true" aria-labelledby="master-key-title" aria-label="Master key">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="master-key-title">Master key</span>
+          <span class="panel-title-sub">perfil B → full</span>
+        </div>
+        <button type="button" class="panel-close" id="master-key-cancel" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body autopilot-form">
+        <p class="panel-callout" id="master-key-status">
+          Sem a key você opera no <strong>perfil B</strong> (ferramentas agressivas bloqueadas).
+        </p>
+        <div class="form-field">
+          <label class="autopilot-label" for="master-key-input">MASTER KEY</label>
+          <input type="password" id="master-key-input" class="panel-field autopilot-input" placeholder="cole a chave…" spellcheck="false" autocomplete="off" />
+        </div>
+        <button type="button" class="autopilot-start" id="master-key-submit">Desbloquear perfil full</button>
+        <button type="button" class="onboarding-skip" id="master-key-lock" hidden style="margin-top:0.75rem;width:100%">Voltar ao perfil B</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/main.js?v=46"></script>
 </body>
 </html>

@@ -47,6 +47,16 @@ def compute_risk_score(findings: list[dict[str, Any]]) -> dict[str, Any]:
             cvss = 0.0
         if cvss > 0:
             w = max(w, cvss)
+        # Threat intel: exploração ativa (CISA KEV) ou alta probabilidade (EPSS) amplifica o peso.
+        if f.get("cisa_kev_flag"):
+            w *= 1.25
+        else:
+            try:
+                epss_score = float(f.get("epss_score") or 0)
+            except (TypeError, ValueError):
+                epss_score = 0.0
+            if epss_score >= 0.5:
+                w *= 1.15
         conf = str(f.get("confidence") or "medium").lower()
         if conf == "high":
             w *= 1.1

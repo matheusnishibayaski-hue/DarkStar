@@ -2,12 +2,11 @@
  * Tour guiado — overlay cinza, destaque no elemento e explicação em linguagem simples.
  */
 
-import { isMobile, openOverlay, closeOverlay, openSidebar } from "./ui.js";
+import { openOverlay, openSidebar } from "./ui.js";
 
 let ctx = {};
 let stepIndex = 0;
 let active = false;
-let resizeObserver = null;
 
 const delay = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -41,45 +40,34 @@ function spotlightTarget(step) {
 function buildSteps() {
   return [
     {
-      title: "Bem-vindo ao assistente",
-      text:
-        "Você está no Chat IA Kali: a assistente Kali conversa com você e roda ferramentas reais no Docker — " +
-        "sempre só em alvos que você tem permissão para testar. " +
-        "Este tour mostra cada área da interface em linguagem simples.",
+      title: "Bem-vindo",
+      text: "DarkStar com Argus: converse e rode ferramentas no Kali — só em alvos autorizados.",
       centered: true,
       before: async () => resetPanels(),
     },
     {
       selector: "#chat",
-      title: "Área da conversa",
-      text:
-        "Suas mensagens e as respostas da Kali aparecem aqui. Ela age como assistente de pentest (não só lista de comandos): " +
-        "explica, sugere próximos passos e mostra o resultado quando uma ferramenta roda.",
+      title: "Conversa",
+      text: "Mensagens e respostas da Argus aparecem aqui.",
       placement: "top",
       before: async () => resetPanels(),
     },
     {
       selector: "#input",
-      title: "Campo de mensagem",
-      text:
-        "Converse em português, como no WhatsApp. Ex.: “faça um scan leve em scanme.nmap.org e resuma”. " +
-        "Enter envia · ↑/↓ recupera mensagens anteriores desta conversa.",
+      title: "Mensagem",
+      text: "Escreva e pressione Enter. Ex.: scan leve em scanme.nmap.org.",
       placement: "top",
     },
     {
       selector: "#model-trigger",
-      title: "Escolha da inteligência artificial",
-      text:
-        "Clique aqui para trocar o “cérebro” da IA. Opções mais rápidas gastam menos; " +
-        "opções mais inteligentes analisam com mais cuidado, mas demoram um pouco mais.",
+      title: "Modelo",
+      text: "Troque o modelo da IA.",
       placement: "top",
     },
     {
       selector: "#sidebar",
-      title: "Menu lateral — suas conversas",
-      text:
-        "À esquerda ficam todas as conversas salvas no navegador. " +
-        "Clique em uma conversa antiga para voltar a ela; cada conversa guarda seu próprio histórico.",
+      title: "Barra lateral",
+      text: "Conversas, ferramentas, logs, relatório, PDFs, mapa, master key e ajuda — tudo aqui.",
       placement: "right",
       before: async () => {
         resetPanels();
@@ -90,111 +78,69 @@ function buildSteps() {
     {
       selector: "#sidebar-new",
       title: "Nova conversa",
-      text:
-        "Começa um chat em branco. Use quando quiser testar outro alvo ou assunto " +
-        "sem misturar com a conversa anterior.",
+      text: "Começa um chat em branco.",
       placement: "right",
-    },
-    {
-      selector: "#sidebar-sessions",
-      title: "Lista de conversas",
-      text:
-        "Cada linha é uma conversa. A conversa ativa fica destacada. " +
-        "Passe o mouse (ou toque no X) para apagar uma conversa que não precisa mais.",
-      placement: "right",
-    },
-    {
-      selector: "#sidebar-help",
-      title: "Guia no menu lateral",
-      text:
-        "Reabre este tour guiado. Atalhos: F1, Alt+H ou o botão ? na barra superior (fora de campos de texto).",
-      placement: "right",
-    },
-    {
-      selector: "#sidebar-collapse",
-      title: "Recolher conversas",
-      text:
-        "No desktop, deixa a barra lateral estreita (só ícones) para ganhar espaço no chat. Atalho M.",
-      placement: "right",
-      when: () => !isMobile() && visible($("#sidebar-collapse")),
-    },
-    {
-      selector: "#btn-menu",
-      title: "Menu (celular)",
-      text:
-        "Em telas pequenas, este botão abre e fecha o menu lateral com suas conversas.",
-      placement: "bottom",
-      when: () => isMobile(),
     },
     {
       selector: "#btn-tools",
       title: "Ferramentas",
-      text:
-        "Abre a lista de programas de segurança disponíveis (como nmap, nuclei, etc.). " +
-        "Você pode deixar em automático e a IA escolhe, ou fixar uma ferramenta específica.",
-      placement: "bottom",
-      before: async () => resetPanels(),
+      text: "Whitelist de programas. Auto = a IA escolhe.",
+      placement: "right",
     },
     {
-      selector: "#tool-search",
-      title: "Buscar ferramenta",
-      text: "Digite o nome de uma ferramenta para filtrar a lista grande. Útil quando você já sabe o que quer usar.",
-      placement: "bottom",
-      before: async () => {
-        await ctx.openToolsPanel?.();
-        await delay(220);
-      },
+      selector: "#btn-session-logs",
+      title: "Logs",
+      text: "Comandos executados nesta conversa.",
+      placement: "right",
     },
     {
-      selector: "#tool-categories",
-      title: "Categorias",
-      text:
-        "Filtros por tipo: rede, web, enumeração, etc. Clique em uma categoria para ver só ferramentas daquele grupo.",
-      placement: "bottom",
+      selector: "#btn-session-report",
+      title: "Relatório",
+      text: "Triagem de achados e PDF.",
+      placement: "right",
     },
     {
-      selector: "#tool-list",
-      title: "Lista de ferramentas",
-      text:
-        "Cada cartão é um programa. “auto” significa que a IA decide. “usar” coloca um exemplo no campo de mensagem " +
-        "para você enviar ou editar.",
-      placement: "top",
+      selector: "#btn-master-key",
+      title: "Master key",
+      text: "Desbloqueia o perfil full e o modo offensive.",
+      placement: "right",
     },
     {
       selector: "#offensive-mode-control",
-      title: "Modo offensive",
-      text:
-        "Switch na barra superior: interface fica vermelha e o Piloto automático pode usar perfil de risco completo " +
-        "(ferramentas agressivas no scan completo/personalizado). Use só em alvos autorizados.",
-      placement: "bottom",
-      before: async () => {
-        resetPanels();
-        if (isMobile()) $("#term-toolbar-extra")?.classList.remove("open");
-        await delay(80);
-      },
+      title: "Offensive",
+      text: "Ferramentas agressivas — requer master key.",
+      placement: "right",
     },
     {
-      selector: "#btn-autopilot",
-      title: "Piloto automático",
-      text:
-        "Missão em várias etapas sem digitar cada comando: você informa o alvo e o tipo de scan; a IA executa e, ao terminar, gera PDF.",
+      selector: "#btn-help",
+      title: "Ajuda",
+      text: "Reabre este tour. Atalho F1.",
+      placement: "right",
+    },
+    {
+      selector: "#btn-menu",
+      title: "Menu",
+      text: "Abre ou recolhe a barra lateral. Atalho M.",
       placement: "bottom",
       before: async () => resetPanels(),
     },
     {
+      selector: "#btn-autopilot",
+      title: "Piloto",
+      text: "Missão automática: alvo + tipo de scan → PDF.",
+      placement: "bottom",
+    },
+    {
       selector: "#btn-cancel-mission",
-      title: "Parar missão",
-      text:
-        "Quando uma missão automática está rodando, este botão vermelho “stop” aparece aqui. " +
-        "Use para interromper se algo demorar demais ou você quiser cancelar.",
+      title: "Parar",
+      text: "Interrompe a missão em andamento.",
       placement: "bottom",
       when: () => visible($("#btn-cancel-mission")),
     },
     {
       selector: "#autopilot-target",
-      title: "Alvo da missão",
-      text:
-        "Domínio, IP ou URL que você tem autorização para testar. O objetivo técnico é definido automaticamente conforme o tipo de scan.",
+      title: "Alvo",
+      text: "Domínio, IP ou URL autorizado.",
       placement: "bottom",
       before: async () => {
         resetPanels();
@@ -203,157 +149,21 @@ function buildSteps() {
       },
     },
     {
-      selector: "#pilot-scan-options",
-      title: "Tipo de scan",
-      text:
-        "Básico · Intermediário · Completo · Personalizado. Em Personalizado, marque as ferramentas na grade abaixo. " +
-        "Com offensive ligado, o scan Completo usa o catálogo ampliado.",
-      placement: "top",
-    },
-    {
       selector: "#autopilot-start",
-      title: "Iniciar missão",
-      text:
-        "A IA planeja e executa as ferramentas do perfil. Ao concluir, o PDF é salvo em Relatórios (Alt+F) e você pode triar achados no ícone de relatório ao lado do prompt.",
+      title: "Iniciar",
+      text: "A IA executa o perfil escolhido.",
       placement: "top",
-      before: async () => {
-        if (ctx.overlayAutopilot?.hidden) {
-          resetPanels();
-          openOverlay(ctx.overlayAutopilot);
-          await delay(180);
-        }
-      },
-    },
-    {
-      selector: "#btn-toolbar-more",
-      title: "Mais opções (celular)",
-      text: "Em telas pequenas, abre Relatórios (PDFs baixados) e Mapa mundial.",
-      placement: "bottom",
-      when: () => isMobile(),
-      before: async () => resetPanels(),
-    },
-    {
-      selector: ".chat-conversation-actions",
-      title: "Logs e relatório",
-      text:
-        "Ícones ao lado do prompt: Logs listam cada execução desta conversa; Relatório abre a triagem de achados (vulnerabilidade, falso positivo, descartar).",
-      placement: "top",
-      before: async () => {
-        resetPanels();
-        await delay(80);
-      },
-    },
-    {
-      selector: "#btn-session-logs",
-      title: "Logs da conversa",
-      text: "Detalhe de cada comando: horário, status e saída completa quando precisar auditar o que rodou.",
-      placement: "top",
-    },
-    {
-      selector: "#btn-session-report",
-      title: "Relatório e triagem",
-      text:
-        "Modal largo com resumo por severidade. Classifique cada achado; nada é baixado até você clicar em Baixar PDF no rodapé. Alt+R.",
-      placement: "top",
-    },
-    {
-      selector: "#btn-files",
-      title: "Biblioteca de PDFs",
-      text: "Relatórios PDF que você baixou pelo chat ou pelo Piloto — salvos neste navegador (Alt+F).",
-      placement: "bottom",
-      before: async () => {
-        resetPanels();
-        if (isMobile()) $("#term-toolbar-extra")?.classList.add("open");
-        await delay(120);
-      },
-    },
-    {
-      selector: "#files-list",
-      title: "Seus relatórios",
-      text: "Abra de novo, baixe outra cópia ou exclua entradas da biblioteca local.",
-      placement: "top",
-      before: async () => {
-        await ctx.openFilesPanel?.();
-        await delay(220);
-      },
-    },
-    {
-      selector: "#btn-threats",
-      title: "Mapa mundial",
-      text:
-        "Mapa ao vivo de ataques no mundo (Kaspersky). É só contexto geral — não mistura com seus alvos.",
-      placement: "bottom",
-      before: async () => {
-        resetPanels();
-        if (isMobile()) $("#term-toolbar-extra")?.classList.add("open");
-        await delay(100);
-        await ctx.openThreatsPanel?.();
-        await delay(220);
-      },
-    },
-    {
-      selector: "#btn-new",
-      title: "Novo chat (+)",
-      text: "Atalho rápido para começar uma conversa nova sem abrir o menu lateral.",
-      placement: "bottom",
-      before: async () => resetPanels(),
-    },
-    {
-      selector: "#btn-help",
-      title: "Ajuda (este tour)",
-      text:
-        "O botão com “?” abre este tour guiado de novo, sempre que precisar relembrar o que cada coisa faz.",
-      placement: "bottom",
-      before: async () => {
-        resetPanels();
-        await delay(80);
-      },
     },
     {
       selector: "#status-bar",
-      title: "Barra de status",
-      text:
-        "Mostra se o Docker e o ambiente Kali estão funcionando, quantas mensagens há na conversa " +
-        "e outras informações rápidas do sistema.",
+      title: "Status",
+      text: "Docker, Kali e privilégio (B ou full). Clique em priv para a master key.",
       placement: "top",
-      before: async () => {
-        resetPanels();
-        await delay(80);
-      },
-    },
-    {
-      selector: "#btn-sound",
-      title: "Sons",
-      text:
-        "Liga ou desliga os bipes do terminal retrô. Algumas pessoas preferem silencioso em ambiente de escritório.",
-      placement: "top",
-    },
-    {
-      selector: "#btn-scroll-bottom",
-      title: "Ir ao final",
-      text:
-        "Aparece quando você rola a conversa para cima. Clique para voltar rapidamente à mensagem mais recente.",
-      placement: "top",
-      when: () => {
-        const el = $("#btn-scroll-bottom");
-        if (visible(el)) return true;
-        el?.removeAttribute("hidden");
-        return true;
-      },
-      after: () => {
-        const el = $("#btn-scroll-bottom");
-        if (el && $("#chat")) {
-          const nearBottom =
-            $("#chat").scrollHeight - $("#chat").scrollTop - $("#chat").clientHeight < 80;
-          if (nearBottom) el.hidden = true;
-        }
-      },
+      before: async () => resetPanels(),
     },
     {
       title: "Pronto!",
-      text:
-        "Você viu chat, ferramentas, Piloto, modo offensive, logs, triagem e PDFs. " +
-        "Use só alvos autorizados. Para atalhos de teclado, clique em “Atalhos avançados” abaixo ou F1 de novo.",
+      text: "Use só alvos autorizados. F1 reabre este guia.",
       centered: true,
       before: async () => resetPanels(),
     },
@@ -364,9 +174,6 @@ let steps = [];
 
 function resetPanels() {
   ctx.closeAllOverlays?.();
-  if (isMobile()) {
-    $("#term-toolbar-extra")?.classList.remove("open");
-  }
 }
 
 function getActiveSteps() {
@@ -421,6 +228,15 @@ function positionCard(rect, placement, centered) {
       card.dataset.place = "left";
     } else {
       card.dataset.place = "right";
+    }
+  } else if (placement === "left") {
+    top = rect.top;
+    left = rect.left - cardRect.width - margin;
+    if (left < margin) {
+      left = rect.right + margin;
+      card.dataset.place = "right";
+    } else {
+      card.dataset.place = "left";
     }
   } else {
     top = rect.bottom + margin;

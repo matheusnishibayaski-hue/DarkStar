@@ -80,6 +80,24 @@ async def rate_limit_guard(request: Request, call_next):
     return await call_next(request)
 
 
+async def privilege_guard(request: Request, call_next):
+    """Propaga elevação de privilégio (cookie/header da master key) no contexto da request."""
+    from backend.security.privileges import (
+        PRIVILEGE_COOKIE,
+        PRIVILEGE_HEADER,
+        set_elevated,
+        validate_privilege_token,
+    )
+
+    token = (
+        request.cookies.get(PRIVILEGE_COOKIE)
+        or request.headers.get(PRIVILEGE_HEADER)
+        or ""
+    ).strip()
+    set_elevated(validate_privilege_token(token))
+    return await call_next(request)
+
+
 async def api_token_guard(request: Request, call_next):
     if not CHAT_API_TOKEN:
         return await call_next(request)

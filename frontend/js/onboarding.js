@@ -77,11 +77,15 @@ function renderStep() {
       next: "continuar",
     },
     {
-      title: "3/3 — Primeiro scan",
+      title: "3/3 — Primeira vitória",
       html: `
-        <p>Experimente um alvo de laboratório público:</p>
-        <pre class="onboarding-code">nmap -sV scanme.nmap.org</pre>
-        <p>Converse com a Kali ou use o <strong>pilot</strong> para um scan guiado. Depois, abra <strong>Relatório</strong> (ícone ao lado do prompt) para triar achados.</p>
+        <p>Fluxo lab recomendado (alvo público autorizado):</p>
+        <ol class="onboarding-steps">
+          <li>Peça: <code>nmap -sV scanme.nmap.org</code> (ou abra o <strong>pilot</strong>)</li>
+          <li>Aguarde <code>[ok]</code> e o dashboard</li>
+          <li>Abra <strong>Relatório</strong> (<kbd>Alt+R</kbd>) → triagem → <strong>Baixar PDF</strong></li>
+        </ol>
+        <p class="onboarding-note">Se aparecer <code>[blocked]</code>: confira whitelist e <code>ALLOWED_TARGETS</code>.</p>
       `,
       next: "começar",
     },

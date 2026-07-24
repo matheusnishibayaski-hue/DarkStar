@@ -1,0 +1,123 @@
+﻿python : test_cancel_before_llm_call (test_agent_unit.TestAgentUnit.test_cancel_before_llm_call) ... ok
+No C:\Users\pc\AppData\Local\Temp\ps-script-ec5d95ec-9af6-4a2f-8bb7-5dd25009f003.ps1:81 caractere:1
++ python -m unittest discover -s tests -v 2>&1 | Out-File -FilePath tes ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (test_cancel_bef...lm_call) ... ok:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+test_conversational_answer_without_forcing_tools 
+(test_agent_unit.TestAgentUnit.test_conversational_answer_without_forcing_tools) ... ok
+test_generate_report_contains_sections (test_agent_unit.TestAgentUnit.test_generate_report_contains_sections) ... ok
+test_missing_api_key (test_agent_unit.TestAgentUnit.test_missing_api_key) ... ok
+test_tool_call_then_final_text (test_agent_unit.TestAgentUnit.test_tool_call_then_final_text) ... ok
+test_concurrent_cancel_from_thread (test_agent_unit.TestMissionConcurrency.test_concurrent_cancel_from_thread) ... ok
+test_multiple_missions_independent_cancel 
+(test_agent_unit.TestMissionConcurrency.test_multiple_missions_independent_cancel) ... ok
+test_header_from_template (test_assertiveness.TestClassify.test_header_from_template) ... ok
+test_nuclei_template_dedup_by_cve (test_assertiveness.TestDedupAndTemplate.test_nuclei_template_dedup_by_cve) ... ok
+test_delta_fixed_and_new (test_assertiveness.TestDelta.test_delta_fixed_and_new) ... ok
+test_gate_and_triage_routes (test_assertiveness.TestGateAndApi.test_gate_and_triage_routes) ... ok
+test_build_uses_template_id (test_assertiveness.TestPocSpecific.test_build_uses_template_id) ... ok
+test_cve_command (test_assertiveness.TestPocSpecific.test_cve_command) ... ok
+test_hsts_remediation (test_assertiveness.TestRemediation.test_hsts_remediation) ... ok
+test_list_for_confirmed (test_assertiveness.TestRemediation.test_list_for_confirmed) ... ok
+test_executive_only_confirmed_and_remediation 
+(test_assertiveness.TestUnifiedReport.test_executive_only_confirmed_and_remediation) ... ok
+test_waf_stays_inconclusive (test_assertiveness.TestWafScoring.test_waf_stays_inconclusive) ... ok
+test_audit_api (test_audit.TestAudit.test_audit_api) ... ok
+test_audit_api_requires_auth_when_token_set (test_audit.TestAudit.test_audit_api_requires_auth_when_token_set) ... ok
+test_record_and_list_events (test_audit.TestAudit.test_record_and_list_events) ... ok
+test_redacts_secrets (test_audit.TestAudit.test_redacts_secrets) ... ok
+test_cancel_on_mission_start (test_autopilot_unit.TestAutopilotUnit.test_cancel_on_mission_start) ... ok
+test_finish_mission_tool_ends_loop (test_autopilot_unit.TestAutopilotUnit.test_finish_mission_tool_ends_loop) ... ok
+test_missing_api_key (test_autopilot_unit.TestAutopilotUnit.test_missing_api_key) ... ok
+test_missing_target_or_objective (test_autopilot_unit.TestAutopilotUnit.test_missing_target_or_objective) ... ok
+test_healing_prompt_contains_error (test_core.TestHealing.test_healing_prompt_contains_error) ... ok
+test_no_heal_when_success (test_core.TestHealing.test_no_heal_when_success) ... ok
+test_should_heal_on_failure (test_core.TestHealing.test_should_heal_on_failure) ... ok
+test_allow_nmap (test_core.TestKaliValidation.test_allow_nmap) ... ok
+test_parse_simple_command (test_core.TestKaliValidation.test_parse_simple_command) ... ok
+test_reject_path_traversal_in_args (test_core.TestKaliValidation.test_reject_path_traversal_in_args) ... ok
+test_reject_unknown_binary (test_core.TestKaliValidation.test_reject_unknown_binary) ... ok
+test_extract_targets_filters_examples (test_core.TestReconDb.test_extract_targets_filters_examples) ... ok
+test_is_recon_target_lab_host (test_core.TestReconDb.test_is_recon_target_lab_host) ... ok
+test_normalize_domain (test_core.TestReconDb.test_normalize_domain) ... ok
+test_allows_in_scope_command (test_core.TestScopeLock.test_allows_in_scope_command) ... ok
+test_autonomous_target_validation (test_core.TestScopeLock.test_autonomous_target_validation) ... ok
+test_blocks_out_of_scope_command (test_core.TestScopeLock.test_blocks_out_of_scope_command) ... ok
+test_chat_stream_emits_done (test_coverage_ai_system.TestAgentStreamAndHealing.test_chat_stream_emits_done) ... ok
+test_llm_retry_fallback (test_coverage_ai_system.TestAgentStreamAndHealing.test_llm_retry_fallback) ... {"ts": 
+"2026-07-24T03:24:30.214810+00:00", "level": "WARNING", "module": "chat_ia_kali", "message": "llm_call_failed", 
+"request_id": "", "correlation_id": "", "tool": "m1"}
+ok
+test_persist_recon_and_healing_path 
+(test_coverage_ai_system.TestAgentStreamAndHealing.test_persist_recon_and_healing_path) ... ok
+test_preferred_tool_and_recon_context 
+(test_coverage_ai_system.TestAgentStreamAndHealing.test_preferred_tool_and_recon_context) ... ok
+test_report_artifacts_and_recon_sections 
+(test_coverage_ai_system.TestAgentStreamAndHealing.test_report_artifacts_and_recon_sections) ... ok
+test_run_kali_in_cycle (test_coverage_ai_system.TestAutopilotStream.test_run_kali_in_cycle) ... ok
+test_stream_wrapper (test_coverage_ai_system.TestAutopilotStream.test_stream_wrapper) ... ok
+test_request_failure_increments_errors 
+(test_coverage_ai_system.TestMiddlewareError.test_request_failure_increments_errors) ... {"ts": 
+"2026-07-24T03:24:30.237576+00:00", "level": "ERROR", "module": "chat_ia_kali", "message": "request_failed", 
+"request_id": "a7ab9c7c6ac84513", "correlation_id": "a7ab9c7c6ac84513", "path": "/x", "method": "GET"}
+ok
+test_health_branches (test_coverage_ai_system.TestSystemHealthMocks.test_health_branches) ... ok
+test_format_result_for_llm (test_coverage_core_modules.TestLogsAndResult.test_format_result_for_llm) ... ok
+test_save_and_read_log (test_coverage_core_modules.TestLogsAndResult.test_save_and_read_log) ... ok
+test_catalog_and_resolve (test_coverage_core_modules.TestModelsCatalog.test_catalog_and_resolve) ... ok
+test_empty_and_short (test_coverage_core_modules.TestSummarize.test_empty_and_short) ... ok
+test_truncates_long_output_with_critical 
+(test_coverage_core_modules.TestSummarize.test_truncates_long_output_with_critical) ... ok
+test_unknown_and_enrich (test_coverage_core_modules.TestToolCatalog.test_unknown_and_enrich) ... ok
+test_execute_host_wifi_dispatch (test_coverage_core_modules.TestWifiScan.test_execute_host_wifi_dispatch) ... ok
+test_linux_scan_paths (test_coverage_core_modules.TestWifiScan.test_linux_scan_paths) ... ok
+test_windows_errors (test_coverage_core_modules.TestWifiScan.test_windows_errors) ... ok
+test_windows_interfaces_and_scan (test_coverage_core_modules.TestWifiScan.test_windows_interfaces_and_scan) ... ok
+test_windows_wifi_health (test_coverage_core_modules.TestWifiScan.test_windows_wifi_health) ... ok
+test_list_events_date_and_cancel_cleanup 
+(test_coverage_executor_routes.TestAuditAndMissionsExtra.test_list_events_date_and_cancel_cleanup) ... ok
+test_client_ip_fallbacks_and_tool_response 
+(test_coverage_executor_routes.TestDepsAndMiddleware.test_client_ip_fallbacks_and_tool_response) ... ok
+test_kinds_list_media (test_coverage_executor_routes.TestFilesStoreCoverage.test_kinds_list_media) ... ok
+test_docker_success_timeout_notfound_exception 
+(test_coverage_executor_routes.TestKaliCoverage.test_docker_success_timeout_notfound_exception) ... ok
+test_emit_and_stream_text (test_coverage_executor_routes.TestKaliCoverage.test_emit_and_stream_text) ... ok
+test_execute_kali_command_wrapper (test_coverage_executor_routes.TestKaliCoverage.test_execute_kali_command_wrapper) 
+... ok
+test_host_wifi_stream_path (test_coverage_executor_routes.TestKaliCoverage.test_host_wifi_stream_path) ... ok
+test_interrupted_and_execute_in_kali 
+(test_coverage_executor_routes.TestKaliCoverage.test_interrupted_and_execute_in_kali) ... ok
+test_parse_and_flags (test_coverage_executor_routes.TestKaliCoverage.test_parse_and_flags) ... ok
+test_validate_length (test_coverage_executor_routes.TestKaliCoverage.test_validate_length) ... ok
+test_generic_error_and_normalize_scope 
+(test_coverage_executor_routes.TestOpenrouterAndConfig.test_generic_error_and_normalize_scope) ... ok
+test_invalid_yaml_and_run (test_coverage_executor_routes.TestPlaybooksLoader.test_invalid_yaml_and_run) ... ok
+test_merge_list_get_ttl (test_coverage_executor_routes.TestReconDbCoverage.test_merge_list_get_ttl) ... ok
+test_autonomous_and_system_extras (test_coverage_executor_routes.TestRoutesCoverage.test_autonomous_and_system_extras) 
+... ok
+test_chat_report_auth_logout (test_coverage_executor_routes.TestRoutesCoverage.test_chat_report_auth_logout) ... ok
+test_scope_subdomain_and_ip (test_coverage_executor_routes.TestScopeAndSessions.test_scope_subdomain_and_ip) ... ok
+test_sessions_edge (test_coverage_executor_routes.TestScopeAndSessions.test_sessions_edge) ... ok
+test_subscribe_missing_and_keepalive 
+(test_coverage_executor_routes.TestStreamHubCoverage.test_subscribe_missing_and_keepalive) ... ok
+test_cancelled_mission_in_body (test_coverage_remaining.TestAgentGaps.test_cancelled_mission_in_body) ... ok
+test_chat_stream_error_event (test_coverage_remaining.TestAgentGaps.test_chat_stream_error_event) ... ok
+test_max_iterations_finalization (test_coverage_remaining.TestAgentGaps.test_max_iterations_finalization) ... ok
+test_max_iterations_finalization_error (test_coverage_remaining.TestAgentGaps.test_max_iterations_finalization_error) 
+... ok
+test_no_api_key_and_mission_lifecycle (test_coverage_remaining.TestAgentGaps.test_no_api_key_and_mission_lifecycle) 
+... ok
+test_non_retryable_llm_error (test_coverage_remaining.TestAgentGaps.test_non_retryable_llm_error) ... {"ts": 
+"2026-07-24T03:24:31.951357+00:00", "level": "WARNING", "module": "chat_ia_kali", "message": "llm_call_failed", 
+"request_id": "", "correlation_id": "", "tool": "m1"}
+ok
+test_persist_recon_early_exits (test_coverage_remaining.TestAgentGaps.test_persist_recon_early_exits) ... ok
+test_record_execution_with_emit (test_coverage_remaining.TestAgentGaps.test_record_execution_with_emit) ... ok
+test_skip_unknown_tool_and_bad_json_args 
+(test_coverage_remaining.TestAgentGaps.test_skip_unknown_tool_and_bad_json_args) ... ok
+test_cycle_cancel_retry_healing_budget 
+(test_coverage_remaining.TestAutopilotGaps.test_cycle_cancel_retry_healing_budget) ... ok
+test_cycle_nudge_and_text_return (test_coverage_remaining.TestAutopilotGaps.test_cycle_nudge_and_text_return) ... ok
+test_missing_fields_and_no_key (test_coverage_remaining.TestAutopilotGaps.test_missing_fields_and_no_key) ... ok

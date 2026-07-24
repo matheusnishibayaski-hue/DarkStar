@@ -1,4 +1,4 @@
-import { STORAGE_KEY } from "./constants.js";
+import { STORAGE_KEY, ARGUS_WELCOME_MESSAGE } from "./constants.js";
 import { deleteSessionLogs } from "./data-admin.js";
 import { escapeHtml } from "./exec.js";
 
@@ -15,6 +15,14 @@ export function loadStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  // migração leve do storage antigo
+  try {
+    const legacy = localStorage.getItem("chat-ia-kali-sessions");
+    if (legacy) {
+      localStorage.setItem(STORAGE_KEY, legacy);
+      return JSON.parse(legacy);
+    }
   } catch { /* ignore */ }
   return { sessions: [], activeId: null };
 }
@@ -38,7 +46,14 @@ export function createSession() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     preferredTool: "auto",
-    messages: [],
+    messages: [
+      {
+        role: "assistant",
+        content: ARGUS_WELCOME_MESSAGE,
+        at: Date.now(),
+        toolExecutions: [],
+      },
+    ],
   };
   store.sessions.unshift(session);
   store.activeId = session.id;
@@ -106,11 +121,11 @@ export function collectSessionHistory(session) {
 
 export function updateSessionTitle() {
   const session = getActiveSession();
-  const title = session ? sessionTitle(session) : "kali@ai";
+  const title = session ? sessionTitle(session) : "chat";
   if (ctx.sessionTitleEl) {
-    ctx.sessionTitleEl.textContent = `kali@pentest: ~/${title}`;
+    ctx.sessionTitleEl.textContent = title;
   }
-  document.title = `${title} — kali@pentest`;
+  document.title = `${title} — DarkStar`;
 }
 
 export function collectSessionLogIds(session) {

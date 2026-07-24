@@ -32,13 +32,27 @@ class TestOpenApi(unittest.TestCase):
             "/api/intel/sessions/{session_id}/report",
             "/api/data/summary",
             "/api/data/purge",
+            "/api/mcp/info",
+            "/api/mcp/tools",
+            "/api/mcp/tools/{name}",
+            "/api/mcp/resources",
+            "/api/mcp/rpc",
+            "/api/intelligence/record",
+            "/api/intelligence/suggest/{target}",
+            "/api/intelligence/stats",
+            "/api/intelligence/similar/{target}",
+            "/api/intelligence/threat-model",
+            "/api/intelligence/threat-model/{target}",
+            "/api/compliance/frameworks",
+            "/api/compliance/report",
+            "/api/compliance/report/{target}",
         ):
             self.assertIn(route, paths, f"Rota ausente no OpenAPI: {route}")
 
-    def test_health_version_110(self):
+    def test_health_version_200(self):
         from backend.main import app
 
         client = TestClient(app)
         res = client.get("/api/health")
-        self.assertEqual(res.json()["version"], "1.1.0")
+        self.assertEqual(res.json()["version"], "2.0.0")
         self.assertIn("scope_warning", res.json())

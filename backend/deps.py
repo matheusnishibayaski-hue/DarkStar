@@ -8,7 +8,7 @@ from backend.config import CHAT_API_TOKEN, SESSION_TTL_HOURS, TRUST_PROXY
 from backend.schemas import ToolExecutionResponse
 from backend.security.sessions import SESSION_COOKIE_NAME, get_session_store
 
-APP_VERSION = "1.1.0"
+APP_VERSION = "2.0.0"
 
 PUBLIC_API_PATHS = frozenset(
     {
@@ -16,6 +16,9 @@ PUBLIC_API_PATHS = frozenset(
         "/api/client-config",
         "/api/auth/login",
         "/api/auth/session",
+        "/api/auth/privilege",
+        "/api/auth/master-key",
+        "/api/auth/master-key/lock",
     }
 )
 

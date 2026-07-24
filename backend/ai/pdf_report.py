@@ -148,7 +148,7 @@ def generate_report_pdf(
     story.append(Paragraph(_pdf_text(doc_title), title_style))
     meta_lines = [
         f"<b>Data:</b> {now}",
-        f"<b>Ferramenta:</b> Chat IA Kali v{APP_VERSION}",
+        f"<b>Ferramenta:</b> DarkStar v{APP_VERSION}",
     ]
     if display_name and display_name != target:
         meta_lines.append(f"<b>Nome:</b> {_pdf_text(display_name)}")

@@ -355,6 +355,35 @@ def execute_kali_command_stream(
         )
         return
 
+    from backend.security.privileges import privilege_blocks_tool
+
+    priv_blocked, priv_error = privilege_blocks_tool(binary)
+    if priv_blocked:
+        result = ExecutionResult(
+            command=command_display,
+            reason=reason,
+            stdout="",
+            stderr=priv_error,
+            exit_code=-1,
+            success=False,
+            blocked=True,
+            block_reason=priv_error,
+            tool=binary,
+            log_file_id=log_id,
+        )
+        for line in _stream_text_lines(execution_id, "stderr", priv_error):
+            yield line
+        yield _finalize_stream_result(
+            result=result,
+            args=args,
+            reason=reason,
+            mission_id=mission_id,
+            execution_id=execution_id,
+            hub=hub,
+            chat_session_id=chat_session_id,
+        )
+        return
+
     if binary in HOST_WIFI_TOOLS:
         result = execute_host_wifi(command_display, reason, log_id=log_id)
         combined = "\n".join(filter(None, [result.stdout, result.stderr]))

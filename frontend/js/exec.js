@@ -109,6 +109,25 @@ export function buildExecBlock(t) {
   const body = document.createElement("div");
   body.className = "term-exec-body";
 
+  if (t.blocked) {
+    const tip = document.createElement("div");
+    tip.className = "exec-blocked-tip";
+    const reason = String(t.block_reason || t.stderr || output || "").slice(0, 400);
+    const scopeHint = /escopo|allowed_targets|fora do escopo/i.test(reason);
+    const toolHint = /whitelist|não permitid|not allowed|ferramenta/i.test(reason);
+    tip.innerHTML = `
+      <strong>Comando bloqueado</strong>
+      <p>${escapeHtml(reason || "Validação de segurança impediu a execução.")}</p>
+      <ul>
+        ${scopeHint ? "<li>Inclua o alvo em <code>ALLOWED_TARGETS</code> no <code>.env</code> e reinicie o servidor.</li>" : ""}
+        ${toolHint ? "<li>Use uma ferramenta da whitelist (painel <strong>tools</strong>) ou peça um binário permitido.</li>" : ""}
+        ${!scopeHint && !toolHint ? "<li>Verifique escopo (<code>ALLOWED_TARGETS</code>), whitelist e ausência de <code>..</code> nos args.</li>" : ""}
+        <li>Fluxo lab: <code>nmap -sV scanme.nmap.org</code> → Relatório (<kbd>Alt+R</kbd>) para triagem/PDF.</li>
+      </ul>
+    `;
+    body.appendChild(tip);
+  }
+
   let hasDashboard = false;
 
   if (tool === "nmap" || output.match(/\d+\/tcp\s+open/i)) {

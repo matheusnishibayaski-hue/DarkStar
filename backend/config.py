@@ -65,7 +65,7 @@ if RISK_PROFILE not in {"passive", "safe-active", "full"}:
 # Teto do pipeline PoC (high/critical sempre entram; hard-cap 80 no verify)
 VERIFY_MAX_FINDINGS = int(os.getenv("VERIFY_MAX_FINDINGS", "40"))
 VERIFY_MAX_FINDINGS = max(12, min(VERIFY_MAX_FINDINGS, 80))
-REPORT_BRAND_NAME = os.getenv("REPORT_BRAND_NAME", "Chat IA Kali").strip() or "Chat IA Kali"
+REPORT_BRAND_NAME = os.getenv("REPORT_BRAND_NAME", "DarkStar").strip() or "DarkStar"
 _max_dl_mb = int(os.getenv("MAX_FILE_DOWNLOAD_MB", "50"))
 MAX_FILE_DOWNLOAD_BYTES = _max_dl_mb * 1024 * 1024
 
@@ -88,6 +88,49 @@ ALLOWED_TARGETS: frozenset[str] = (
     if _allowed_targets_raw
     else frozenset()
 )
+
+# Threat Intelligence — CISA KEV (Known Exploited Vulnerabilities) + FIRST EPSS
+THREAT_INTEL_ENABLED = os.getenv("THREAT_INTEL_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+# TTL do cache em memória (segundos) para catálogo KEV e scores EPSS
+THREAT_INTEL_CACHE_TTL = int(os.getenv("THREAT_INTEL_CACHE_TTL", "21600"))
+
+# Servidor MCP (Model Context Protocol) — expõe o motor via /api/mcp/* e stdio
+MCP_ENABLED = os.getenv("MCP_ENABLED", "true").strip().lower() in {"1", "true", "yes", "on"}
+
+# Intelligence Hub — histórico/padrões/sugestões (JSON local ou PostgreSQL)
+INTELLIGENCE_ENABLED = os.getenv("INTELLIGENCE_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+INTELLIGENCE_TTL_DAYS = int(os.getenv("INTELLIGENCE_TTL_DAYS", "90"))
+_intel_dir_raw = os.getenv("INTELLIGENCE_DIR", "").strip()
+INTELLIGENCE_DIR = (
+    Path(_intel_dir_raw).expanduser().resolve()
+    if _intel_dir_raw
+    else BASE_DIR / "backend" / "intelligence_data"
+)
+# postgres | json — postgres exige DATABASE_URL
+INTELLIGENCE_STORAGE = (os.getenv("INTELLIGENCE_STORAGE", "json") or "json").strip().lower()
+if INTELLIGENCE_STORAGE not in {"json", "postgres"}:
+    INTELLIGENCE_STORAGE = "json"
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+COMPLIANCE_ENABLED = os.getenv("COMPLIANCE_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+# Master key DarkStar — sem ela o operador fica no perfil B (restrito).
+# Gere com: python -c "import secrets; print(secrets.token_urlsafe(64))"
+MASTER_KEY = os.getenv("MASTER_KEY", "").strip()
 
 from backend.config_prompts import AUTONOMOUS_SYSTEM_PROMPT, SYSTEM_PROMPT
 from backend.config_tools import (
@@ -133,6 +176,16 @@ __all__ = [
     "RISK_PROFILE",
     "MAX_FILE_DOWNLOAD_BYTES",
     "ALLOWED_TARGETS",
+    "THREAT_INTEL_ENABLED",
+    "THREAT_INTEL_CACHE_TTL",
+    "MCP_ENABLED",
+    "INTELLIGENCE_ENABLED",
+    "INTELLIGENCE_TTL_DAYS",
+    "INTELLIGENCE_DIR",
+    "INTELLIGENCE_STORAGE",
+    "DATABASE_URL",
+    "COMPLIANCE_ENABLED",
+    "MASTER_KEY",
     "HOST_WIFI_TOOLS",
     "WIFI_CONTAINER_TOOLS",
     "WIFI_TOOLS",

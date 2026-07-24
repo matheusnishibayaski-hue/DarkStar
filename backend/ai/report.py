@@ -302,6 +302,17 @@ def generate_report(
                 lines.append(f"- **CVSS:** {f.get('cvss_score')} (`{f.get('cvss_vector', '')}`)")
                 lines.append(f"- **Impacto:** {f.get('impact', '—')}")
                 lines.append(f"- **Esforço:** {f.get('effort', '—')}")
+                if f.get("cisa_kev_flag"):
+                    lines.append(
+                        "- **⚠ CISA KEV:** exploração ativa confirmada em campo"
+                        + (f" (desde {f.get('kev_date_added')})" if f.get("kev_date_added") else "")
+                        + (" · uso conhecido em ransomware" if f.get("kev_ransomware_use") else "")
+                    )
+                if f.get("epss_score") is not None and f.get("cve"):
+                    lines.append(
+                        f"- **EPSS:** {float(f.get('epss_score') or 0) * 100:.1f}% de probabilidade "
+                        f"de exploração em 30 dias (percentil {float(f.get('epss_percentile') or 0) * 100:.0f})"
+                    )
                 if f.get("matched_at") or f.get("url"):
                     lines.append(f"- **Matched-at:** {f.get('matched_at') or f.get('url')}")
                 if f.get("template_id"):
