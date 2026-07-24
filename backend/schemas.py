@@ -79,6 +79,12 @@ class MasterKeyRequest(BaseModel):
     key: str = Field(..., min_length=1, max_length=512)
 
 
+class AiProviderRequest(BaseModel):
+    """Troca o provedor LLM em runtime (openrouter | ollama)."""
+
+    provider: str = Field(..., min_length=3, max_length=32)
+
+
 class PlaybookRunRequest(BaseModel):
     target: str = Field(..., min_length=1, max_length=253)
     mission_id: str = Field(default="", max_length=64)

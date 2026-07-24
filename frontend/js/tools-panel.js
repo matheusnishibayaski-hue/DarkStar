@@ -32,7 +32,31 @@ function reconcileSavedModel(saved) {
       };
     }
   }
-  return mappedId === saved.id ? saved : { ...saved, id: mappedId };
+  return null;
+}
+
+/** Escolhe o default do catálogo atual (útil ao trocar online ↔ offline). */
+export function selectDefaultModelFromCatalog() {
+  if (!modelCatalog?.tiers?.length) return false;
+  const defaultId = modelCatalog.default_model;
+  for (const tier of modelCatalog.tiers) {
+    const found =
+      tier.models.find((m) => m.id === defaultId) || tier.models[0];
+    if (found) {
+      selectedModel = {
+        id: found.id,
+        name: found.name,
+        fallback: found.fallback,
+        provider: found.provider,
+        tier_id: tier.id,
+        tier_label: tier.label,
+      };
+      saveSelectedModel(selectedModel);
+      updateModelLabel();
+      return true;
+    }
+  }
+  return false;
 }
 
 export function initToolsPanel(context) {
@@ -109,12 +133,22 @@ function saveSelectedModel(model) {
 export function updateModelLabel() {
   const { modelLabel, modelTrigger } = ctx;
   if (!modelLabel || !selectedModel) return;
-  const short = (selectedModel.name || "flash").split(" ").pop().toLowerCase();
+  const parts = String(selectedModel.name || "model").trim().split(/\s+/);
+  let short = (parts[parts.length - 1] || "model").toLowerCase();
+  // Evita rótulo só com versão ("4.5") — usa o token anterior
+  if (/^[\d.]+$/.test(short) && parts.length >= 2) {
+    short = parts[parts.length - 2].toLowerCase();
+  }
   modelLabel.textContent = short;
   if (modelTrigger) {
     modelTrigger.title = `${selectedModel.name} · ${selectedModel.tier_label || "model"}`;
-    modelTrigger.classList.toggle("model-gemini", selectedModel.provider === "gemini");
-    modelTrigger.classList.toggle("model-deepseek", selectedModel.provider === "deepseek");
+    for (const cls of [...modelTrigger.classList]) {
+      if (cls.startsWith("model-") && cls !== "model-trigger") {
+        modelTrigger.classList.remove(cls);
+      }
+    }
+    const provider = String(selectedModel.provider || "llm").toLowerCase();
+    modelTrigger.classList.add(`model-${provider}`);
   }
 }
 
@@ -208,31 +242,22 @@ export async function loadModels() {
     if (!res.ok) return false;
     modelCatalog = await res.json();
     const saved = loadSelectedModel();
+    let picked = false;
     if (saved?.id) {
       const reconciled = reconcileSavedModel(saved);
-      const tier = resolveTierForModel(reconciled.id, reconciled.tier_id);
-      selectedModel = {
-        ...reconciled,
-        tier_id: tier?.id || reconciled.tier_id,
-        tier_label: tier?.label || reconciled.tier_label,
-      };
-      if (reconciled.id !== saved.id) saveSelectedModel(selectedModel);
-    } else {
-      const defaultId = modelCatalog.default_model;
-      for (const tier of modelCatalog.tiers) {
-        const found = tier.models.find((m) => m.id === defaultId);
-        if (found) {
-          selectedModel = {
-            id: found.id,
-            name: found.name,
-            fallback: found.fallback,
-            provider: found.provider,
-            tier_id: tier.id,
-            tier_label: tier.label,
-          };
-          break;
-        }
+      if (reconciled) {
+        const tier = resolveTierForModel(reconciled.id, reconciled.tier_id);
+        selectedModel = {
+          ...reconciled,
+          tier_id: tier?.id || reconciled.tier_id,
+          tier_label: tier?.label || reconciled.tier_label,
+        };
+        if (reconciled.id !== saved.id) saveSelectedModel(selectedModel);
+        picked = true;
       }
+    }
+    if (!picked) {
+      selectDefaultModelFromCatalog();
     }
     updateModelLabel();
     return true;

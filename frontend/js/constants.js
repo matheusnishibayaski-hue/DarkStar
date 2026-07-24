@@ -5,6 +5,8 @@ export const SOUND_STORAGE_KEY = "darkstar-sound";
 export const ONBOARDING_STORAGE_KEY = "darkstar-onboarded";
 /** Piloto: libera ferramentas ofensivas (risk_profile full + catálogo ampliado). */
 export const PILOT_OFFENSIVE_STORAGE_KEY = "darkstar-pilot-offensive";
+/** LLM local (Ollama) — air-gapped / sem OpenRouter. */
+export const OFFLINE_MODE_STORAGE_KEY = "darkstar-offline-mode";
 export const HISTORY_LIMIT = 10;
 
 /** Mensagem inicial da Argus em todo chat novo. */
@@ -86,6 +88,7 @@ export const HELP_HTML = `
     <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
     <li><strong>pilot</strong> — alvo + tipo de scan (básico → completo); PDF ao fim da missão</li>
     <li><strong>offensive</strong> — requer master key (perfil full)</li>
+    <li><strong>offline</strong> — Argus via Ollama local (sem OpenRouter)</li>
     <li>Ícones no prompt — <strong>logs</strong> e <strong>relatório/triagem</strong></li>
     <li><strong>relatórios</strong> · <strong>mapa</strong> · <strong>cancel</strong></li>
   </ul>

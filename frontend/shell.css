@@ -449,6 +449,19 @@ html.mode-offensive .nav-toggle .offensive-mode-input:checked + .offensive-mode-
   opacity: 0.35;
 }
 
+/* Offline (Ollama) — mesmo switch, acento distinto quando ativo */
+.nav-toggle .offline-mode-input:checked + .offline-mode-switch {
+  background: var(--paper);
+}
+
+html.mode-offline .nav-toggle#offline-mode-control {
+  outline: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+html.mode-offline.mode-offensive .nav-toggle#offline-mode-control {
+  outline-color: rgba(0, 0, 0, 0.35);
+}
+
 .term-offensive-toggle {
   display: none !important;
 }
@@ -928,7 +941,13 @@ html.mode-offensive .model-trigger.open {
 }
 
 .model-trigger.model-deepseek #model-label,
-.model-trigger.model-gemini #model-label {
+.model-trigger.model-gemini #model-label,
+.model-trigger.model-openai #model-label,
+.model-trigger.model-claude #model-label,
+.model-trigger.model-grok #model-label,
+.model-trigger.model-llama #model-label,
+.model-trigger.model-mistral #model-label,
+.model-trigger.model-qwen #model-label {
   text-shadow: none;
   color: inherit;
 }

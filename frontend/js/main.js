@@ -49,6 +49,7 @@ import { initSessionLogsModal, openSessionLogsModal } from "./session-logs-modal
 import { initSessionReportModal, openReportFromShortcut } from "./session-report-modal.js";
 import { initAutopilot, onPilotOffensiveModeChanged } from "./autopilot.js";
 import { initOffensiveMode, onOffensiveModeChange } from "./offensive-mode.js";
+import { initOfflineMode, onOfflineModeChange } from "./offline-mode.js";
 import { initMissionControl, cancelActiveMission } from "./mission.js";
 import { initShortcuts, handleGlobalKeydown } from "./shortcuts.js";
 import { initFilesPanel, openFilesPanel } from "./files.js";
@@ -230,6 +231,11 @@ initAutopilot({
 initOffensiveMode(document.getElementById("offensive-mode-toggle"));
 onOffensiveModeChange(() => {
   void onPilotOffensiveModeChanged();
+});
+
+initOfflineMode(document.getElementById("offline-mode-toggle"));
+onOfflineModeChange(() => {
+  refreshStatusBar();
 });
 
 initMasterKey({

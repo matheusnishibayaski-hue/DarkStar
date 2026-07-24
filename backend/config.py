@@ -9,6 +9,23 @@ load_dotenv(BASE_DIR / ".env")
 # OpenRouter — chave em https://openrouter.ai/keys
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
+# Provedor de IA: openrouter (nuvem) | ollama (local / air-gapped)
+AI_PROVIDER = (os.getenv("AI_PROVIDER", "openrouter") or "openrouter").strip().lower()
+if AI_PROVIDER in {"local"}:
+    AI_PROVIDER = "ollama"
+if AI_PROVIDER not in {"openrouter", "ollama"}:
+    AI_PROVIDER = "openrouter"
+
+# Ollama — API OpenAI-compatible (https://ollama.com)
+OLLAMA_BASE_URL = (os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1") or "").strip().rstrip(
+    "/"
+) or "http://localhost:11434/v1"
+OLLAMA_MODEL = (os.getenv("OLLAMA_MODEL", "llama3.1:8b") or "llama3.1:8b").strip()
+OLLAMA_FALLBACK_MODEL = (
+    os.getenv("OLLAMA_FALLBACK_MODEL", "") or OLLAMA_MODEL
+).strip() or OLLAMA_MODEL
+OLLAMA_API_KEY = (os.getenv("OLLAMA_API_KEY", "ollama") or "ollama").strip()
+
 # Aliases novos (preferidos) com retrocompatibilidade GEMINI_*
 PRIMARY_MODEL = (
     os.getenv("OPENROUTER_PRIMARY_MODEL") or os.getenv("GEMINI_MODEL") or "google/gemini-2.5-flash"
@@ -18,8 +35,13 @@ FALLBACK_MODEL = (
     or os.getenv("GEMINI_FALLBACK_MODEL")
     or "deepseek/deepseek-v3.2"
 )
-GEMINI_MODEL = PRIMARY_MODEL
-GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
+# Quando AI_PROVIDER=ollama, os defaults efetivos vêm de OLLAMA_* via factory
+if AI_PROVIDER == "ollama":
+    GEMINI_MODEL = OLLAMA_MODEL
+    GEMINI_FALLBACK_MODEL = OLLAMA_FALLBACK_MODEL
+else:
+    GEMINI_MODEL = PRIMARY_MODEL
+    GEMINI_FALLBACK_MODEL = FALLBACK_MODEL
 
 # Servidor / segurança local
 UVICORN_HOST = os.getenv("UVICORN_HOST", "127.0.0.1")
@@ -144,6 +166,11 @@ from backend.config_tools import (
 __all__ = [
     "BASE_DIR",
     "OPENROUTER_API_KEY",
+    "AI_PROVIDER",
+    "OLLAMA_BASE_URL",
+    "OLLAMA_MODEL",
+    "OLLAMA_FALLBACK_MODEL",
+    "OLLAMA_API_KEY",
     "PRIMARY_MODEL",
     "FALLBACK_MODEL",
     "GEMINI_MODEL",

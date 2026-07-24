@@ -1,30 +1,22 @@
-"""Constantes e helpers compartilhados entre chat e Auto-Pilot (OpenRouter)."""
+"""Helpers compartilhados — reexports + mensagens de erro (compat)."""
 
 from __future__ import annotations
 
-OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+from typing import Any
 
-OPENROUTER_HEADERS = {
-    "HTTP-Referer": "https://github.com/matheusnishibayaski-hue/Chat-IA-Kali",
-    "X-Title": "DarkStar",
-}
+from backend.ai.providers.base import LLMMessage, ToolCall
+from backend.ai.providers.openrouter import OPENROUTER_BASE_URL, OPENROUTER_HEADERS
+from backend.ai.providers.tool_heal import assistant_dict_from_message
+from backend.ai.providers.tool_parse import sdk_message_to_tool_calls
 
 
-def assistant_message_dict(message) -> dict:
-    data: dict = {"role": "assistant", "content": message.content}
-    if message.tool_calls:
-        data["tool_calls"] = [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {
-                    "name": tc.function.name,
-                    "arguments": tc.function.arguments,
-                },
-            }
-            for tc in message.tool_calls
-        ]
-    return data
+def assistant_message_dict(message: Any) -> dict:
+    """Aceita LLMMessage ou mensagem SDK OpenAI (compat com testes/legado)."""
+    if isinstance(message, LLMMessage):
+        return assistant_dict_from_message(message)
+    content = getattr(message, "content", None)
+    tool_calls = sdk_message_to_tool_calls(message)
+    return assistant_dict_from_message(LLMMessage(content=content, tool_calls=tool_calls))
 
 
 def is_retryable_error(error: str) -> bool:
@@ -33,19 +25,16 @@ def is_retryable_error(error: str) -> bool:
 
 
 def openrouter_error_message(error: str) -> str:
-    lowered = error.lower()
-    if "401" in error or ("invalid" in lowered and "key" in lowered):
-        return (
-            "Chave OpenRouter inválida. Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
-            "Obtenha uma chave em: https://openrouter.ai/keys"
-        )
-    if is_retryable_error(error):
-        return (
-            "Cota ou limite de requisições atingido no OpenRouter.\n\n"
-            "O que fazer:\n"
-            "• Aguarde alguns minutos se enviou muitas mensagens seguidas\n"
-            "• Verifique saldo/cota em https://openrouter.ai/\n"
-            "• O fallback tentará deepseek/deepseek-v3.2 automaticamente\n"
-            "• Cada comando no chat gera 2–6 chamadas à API (ferramentas + resposta)"
-        )
-    return f"Erro ao chamar OpenRouter: {error}"
+    from backend.ai.providers.openrouter import OpenRouterAdapter
+
+    return OpenRouterAdapter().format_error(error)
+
+
+__all__ = [
+    "OPENROUTER_BASE_URL",
+    "OPENROUTER_HEADERS",
+    "ToolCall",
+    "assistant_message_dict",
+    "is_retryable_error",
+    "openrouter_error_message",
+]

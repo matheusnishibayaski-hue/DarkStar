@@ -5,8 +5,6 @@ from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
 from queue import Queue
 
-from openai import OpenAI
-
 from backend.ai.agent import (
     KALI_TOOL_DEFINITION,
     ToolExecution,
@@ -17,12 +15,11 @@ from backend.ai.findings import findings_for_report
 from backend.ai.healing import healing_prompt, should_attempt_healing
 from backend.ai.verify import run_verification_pipeline
 from backend.ai.openrouter_common import (
-    OPENROUTER_BASE_URL,
-    OPENROUTER_HEADERS,
-    assistant_message_dict,
     is_retryable_error,
-    openrouter_error_message,
 )
+from backend.ai.providers import get_llm_provider
+from backend.ai.providers.base import BaseLLMProvider
+from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.phases import (
     advance_surface_phase,
     is_tool_allowed,
@@ -42,7 +39,6 @@ from backend.config import (
     MAX_AUTONOMOUS_ROUNDS,
     MAX_AUTONOMOUS_TOOLS,
     MAX_TOOL_ITERATIONS,
-    OPENROUTER_API_KEY,
     RISK_PROFILE,
 )
 from backend.executor.recon_db import build_recon_context, normalize_target
@@ -53,7 +49,6 @@ from backend.executor.surface import (
     save_surface,
     surface_summary,
 )
-from backend.models_catalog import resolve_model
 from backend.observability import timed
 from backend.security.missions import get_mission_registry
 
@@ -98,26 +93,26 @@ class AutonomousResponse:
     tools_executed: int = 0
 
 
-def _create_client() -> OpenAI:
-    return OpenAI(base_url=OPENROUTER_BASE_URL, api_key=OPENROUTER_API_KEY)
+def _create_client() -> BaseLLMProvider:
+    """Compat: retorna o provider ativo (antes retornava OpenAI)."""
+    return get_llm_provider()
 
 
-def _completion(client: OpenAI, model: str, messages: list[dict], tools: list[dict]):
+def _completion(provider: BaseLLMProvider, model: str, messages: list[dict], tools: list[dict]):
     from backend.observability import incr
 
     incr("llm_calls_total")
     with timed("llm_call", tool=model):
-        return client.chat.completions.create(
+        return provider.complete(
             model=model,
             messages=messages,
             tools=tools,
             tool_choice="auto",
-            extra_headers=OPENROUTER_HEADERS,
         )
 
 
 def _run_autonomous_cycle(
-    client: OpenAI,
+    provider: BaseLLMProvider,
     messages: list[dict],
     executions: list[ToolExecution],
     model_to_use: str,
@@ -144,16 +139,18 @@ def _run_autonomous_cycle(
             return "Missão cancelada pelo usuário.", True, False, model_to_use
 
         try:
-            response = _completion(client, model_to_use, messages, AUTONOMOUS_TOOLS)
+            completion = _completion(provider, model_to_use, messages, AUTONOMOUS_TOOLS)
         except Exception as e:
             err = str(e)
-            if model_to_use != fallback_model and is_retryable_error(err):
+            if model_to_use != fallback_model and (
+                provider.is_retryable_error(err) or is_retryable_error(err)
+            ):
                 time.sleep(1)
                 model_to_use = fallback_model
                 continue
-            raise RuntimeError(openrouter_error_message(err)) from e
+            raise RuntimeError(provider.format_error(err)) from e
 
-        assistant_message = response.choices[0].message
+        assistant_message = completion.message
 
         if not assistant_message.tool_calls:
             if not nudged and not executions:
@@ -173,19 +170,24 @@ def _run_autonomous_cycle(
             messages.append({"role": "assistant", "content": text or "(aguardando próxima etapa)"})
             return text, False, False, model_to_use
 
-        messages.append(assistant_message_dict(assistant_message))
+        messages.append(assistant_dict_from_message(assistant_message))
 
         for tool_call in assistant_message.tool_calls:
-            name = tool_call.function.name
+            name = tool_call.name
 
             if name == "finish_mission":
-                try:
-                    args = json.loads(tool_call.function.arguments)
+                args, heal_err = resolve_tool_arguments(
+                    provider,
+                    model=model_to_use,
+                    tool_call=tool_call,
+                    messages=messages,
+                )
+                if args is None:
+                    summary = heal_err or "Missão encerrada (erro ao ler parâmetros)."
+                    objective_met = False
+                else:
                     summary = args.get("summary", "Missão encerrada.")
                     objective_met = bool(args.get("objective_met", False))
-                except Exception:
-                    summary = "Missão encerrada (erro ao ler parâmetros)."
-                    objective_met = False
 
                 messages.append(
                     {
@@ -199,13 +201,18 @@ def _run_autonomous_cycle(
                 return summary, True, objective_met, model_to_use
 
             if name == "run_kali_tool":
-                try:
-                    args = json.loads(tool_call.function.arguments)
+                args, heal_err = resolve_tool_arguments(
+                    provider,
+                    model=model_to_use,
+                    tool_call=tool_call,
+                    messages=messages,
+                )
+                if args is None:
+                    command = ""
+                    reason = heal_err or "Falha ao decodificar argumentos."
+                else:
                     command = args.get("command", "")
                     reason = args.get("reason", "")
-                except Exception:
-                    command = ""
-                    reason = "Falha ao decodificar argumentos."
 
                 allowed, block_msg = is_tool_allowed(
                     command, phase=phase, risk_profile=risk_profile
@@ -316,12 +323,10 @@ def _run_autonomous_body(
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
 ) -> AutonomousResponse:
-    if not OPENROUTER_API_KEY:
+    provider = get_llm_provider()
+    if not provider.is_configured():
         return AutonomousResponse(
-            message=(
-                "Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
-                "Obtenha uma chave em: https://openrouter.ai/keys"
-            ),
+            message=provider.configuration_error(),
             stopped_reason="error",
         )
 
@@ -352,7 +357,7 @@ def _run_autonomous_body(
             stopped_reason="error",
         )
 
-    client = _create_client()
+    client = provider
     recon_target = normalize_target(target)
     surface = get_or_create_surface(
         recon_target,
@@ -378,7 +383,7 @@ def _run_autonomous_body(
     messages: list[dict] = [{"role": "system", "content": system}]
 
     executions: list[ToolExecution] = []
-    model_to_use, fallback_to_use = resolve_model(model, fallback_model)
+    model_to_use, fallback_to_use = provider.resolve_models(model, fallback_model)
     final_message = ""
     objective_met = False
     stopped_reason = "max_rounds"

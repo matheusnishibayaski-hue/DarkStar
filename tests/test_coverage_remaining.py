@@ -8,6 +8,7 @@ import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from tests.llm_test_utils import make_openrouter_provider
 
 from fastapi.testclient import TestClient
 
@@ -111,12 +112,14 @@ class TestAgentGaps(unittest.TestCase):
     def test_no_api_key_and_mission_lifecycle(self):
         from backend.ai import agent as ag
 
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", ""):
+        provider = make_openrouter_provider(api_key="")
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider):
             res = ag._run_openrouter([], "hi")
         self.assertIn("OPENROUTER_API_KEY", res.message)
 
         mid = "missioncov1"
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
+        provider = make_openrouter_provider(api_key="sk")
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
             "backend.ai.agent._run_openrouter_body",
             return_value=ChatResponse(message="ok"),
         ) as body:
@@ -129,11 +132,8 @@ class TestAgentGaps(unittest.TestCase):
 
         client = MagicMock()
         client.chat.completions.create.side_effect = RuntimeError("401 invalid key")
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m2")
-        ):
+        provider = make_openrouter_provider(client, models=("m1", "m2"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider):
             result = _run_openrouter_body([], "hi", None, None, None, None, None)
         self.assertIn("inválida", result.message.lower())
 
@@ -156,10 +156,10 @@ class TestAgentGaps(unittest.TestCase):
             MagicMock(choices=[MagicMock(message=MagicMock(content="", tool_calls=[unknown, bad]))]),
             MagicMock(choices=[MagicMock(message=final)]),
         ]
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m1")
+        provider = make_openrouter_provider(client, models=("m1", "m1"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
+            "backend.ai.agent.resolve_tool_arguments",
+            return_value=(None, "Falha ao decodificar os argumentos fornecidos pela IA."),
         ), patch(
             "backend.ai.agent._record_execution", return_value="out"
         ) as rec, patch(
@@ -221,11 +221,8 @@ class TestAgentGaps(unittest.TestCase):
             )
             return "out"
 
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m1")
-        ), patch(
+        provider = make_openrouter_provider(client, models=("m1", "m1"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
             "backend.ai.agent.MAX_TOOL_ITERATIONS", 2
         ), patch(
             "backend.ai.agent._record_execution", side_effect=_rec
@@ -253,11 +250,8 @@ class TestAgentGaps(unittest.TestCase):
             executions.append(MagicMock(success=True, blocked=False, exit_code=0))
             return "out"
 
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m1")
-        ), patch(
+        provider = make_openrouter_provider(client, models=("m1", "m1"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
             "backend.ai.agent.MAX_TOOL_ITERATIONS", 1
         ), patch(
             "backend.ai.agent._record_execution", side_effect=_rec
@@ -281,11 +275,7 @@ class TestAgentGaps(unittest.TestCase):
         mid = "cancelbody1"
         get_mission_registry().register(mid)
         get_mission_registry().cancel(mid)
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI"
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m1")
-        ):
+        with patch("backend.ai.agent.get_llm_provider", return_value=make_openrouter_provider()):
             result = _run_openrouter_body([], "hi", None, None, None, None, mid)
         self.assertEqual(result.stopped_reason, "cancelled")
 
@@ -295,10 +285,12 @@ class TestAutopilotGaps(unittest.TestCase):
         get_mission_registry()._missions.clear()
 
     def test_missing_fields_and_no_key(self):
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", ""):
+        provider = make_openrouter_provider(api_key="")
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=provider):
             r = run_autonomous("t", "o")
         self.assertEqual(r.stopped_reason, "error")
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"):
+        provider = make_openrouter_provider(api_key="sk")
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=provider):
             r = run_autonomous("", "obj")
             self.assertEqual(r.stopped_reason, "error")
             r = run_autonomous("t", "  ")
@@ -306,14 +298,13 @@ class TestAutopilotGaps(unittest.TestCase):
 
     def test_cycle_nudge_and_text_return(self):
         from backend.ai import autopilot as ap
+        from backend.ai.providers.base import LLMCompletion, LLMMessage
 
-        empty = MagicMock(content="", tool_calls=None)
-        text = MagicMock(content="waiting", tool_calls=None)
         with patch(
             "backend.ai.autopilot._completion",
             side_effect=[
-                MagicMock(choices=[MagicMock(message=empty)]),
-                MagicMock(choices=[MagicMock(message=text)]),
+                LLMCompletion(message=LLMMessage(content="")),
+                LLMCompletion(message=LLMMessage(content="waiting")),
             ],
         ):
             out, finished, met, model = ap._run_autonomous_cycle(
@@ -324,6 +315,7 @@ class TestAutopilotGaps(unittest.TestCase):
 
     def test_cycle_cancel_retry_healing_budget(self):
         from backend.ai import autopilot as ap
+        from backend.ai.providers.base import LLMCompletion, LLMMessage, ToolCall
 
         mid = "apcancel1"
         get_mission_registry().register(mid)
@@ -335,31 +327,29 @@ class TestAutopilotGaps(unittest.TestCase):
         self.assertIn("cancelada", text.lower())
 
         # retryable then success finish
-        finish = MagicMock()
-        finish.id = "f"
-        finish.function.name = "finish_mission"
-        finish.function.arguments = "{bad"
+        finish = ToolCall(id="f", name="finish_mission", arguments="{bad")
+        provider = MagicMock()
+        provider.is_retryable_error.side_effect = lambda e: "429" in e or "rate" in e.lower()
+        provider.format_error.side_effect = lambda e: e
         with patch(
             "backend.ai.autopilot._completion",
             side_effect=[
                 RuntimeError("429 rate"),
-                MagicMock(
-                    choices=[MagicMock(message=MagicMock(content="", tool_calls=[finish]))]
-                ),
+                LLMCompletion(message=LLMMessage(content="", tool_calls=[finish])),
             ],
-        ), patch("backend.ai.autopilot.time.sleep"):
+        ), patch("backend.ai.autopilot.time.sleep"), patch(
+            "backend.ai.autopilot.resolve_tool_arguments",
+            return_value=(None, "args inválidos"),
+        ):
             text, finished, met, model = ap._run_autonomous_cycle(
-                MagicMock(), [{"role": "system", "content": "s"}], [], "m1", "m2", 2
+                provider, [{"role": "system", "content": "s"}], [], "m1", "m2", 2
             )
         self.assertTrue(finished)
         self.assertFalse(met)
         self.assertEqual(model, "m2")
 
         # bad kali args + healing + budget 1
-        tool = MagicMock()
-        tool.id = "k"
-        tool.function.name = "run_kali_tool"
-        tool.function.arguments = "not-json"
+        tool = ToolCall(id="k", name="run_kali_tool", arguments="not-json")
 
         def _record(command, reason, executions, **kwargs):
             executions.append(
@@ -369,9 +359,10 @@ class TestAutopilotGaps(unittest.TestCase):
 
         with patch(
             "backend.ai.autopilot._completion",
-            return_value=MagicMock(
-                choices=[MagicMock(message=MagicMock(content="", tool_calls=[tool]))]
-            ),
+            return_value=LLMCompletion(message=LLMMessage(content="", tool_calls=[tool])),
+        ), patch(
+            "backend.ai.autopilot.resolve_tool_arguments",
+            return_value=({"command": "nmap", "reason": "x"}, ""),
         ), patch(
             "backend.ai.autopilot._record_execution", side_effect=_record
         ), patch(
@@ -392,14 +383,10 @@ class TestAutopilotGaps(unittest.TestCase):
 
         events = []
 
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="scanme.nmap.org"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value="CTX"
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2
         ), patch(
@@ -418,14 +405,10 @@ class TestAutopilotGaps(unittest.TestCase):
         self.assertIn("mission_start", events)
         self.assertIn("CTX", "CTX")  # recon context applied in system
 
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot._run_autonomous_cycle",
             side_effect=RuntimeError("llm down"),
@@ -434,16 +417,14 @@ class TestAutopilotGaps(unittest.TestCase):
         self.assertEqual(res.stopped_reason, "error")
 
         # max tools path
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
         ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
-        ), patch(
             "backend.ai.autopilot.MAX_AUTONOMOUS_TOOLS", 0
+        ), patch(
+            "backend.ai.autopilot.max_tool_budget", return_value=0
         ), patch(
             "backend.ai.autopilot.generate_report", return_value="# r"
         ):
@@ -721,21 +702,23 @@ class TestFinalCoveragePush(unittest.TestCase):
     def test_autopilot_create_client_and_nonretry(self):
         from backend.ai import autopilot as ap
 
-        with patch("backend.ai.autopilot.OpenAI") as oa:
-            ap._create_client()
-            oa.assert_called_once()
+        with patch("backend.ai.autopilot.get_llm_provider") as gp:
+            fake = make_openrouter_provider()
+            gp.return_value = fake
+            self.assertIs(ap._create_client(), fake)
 
+        provider = MagicMock()
+        provider.is_retryable_error.return_value = False
+        provider.format_error.side_effect = lambda e: f"Erro: {e}"
         with patch(
             "backend.ai.autopilot._completion",
             side_effect=RuntimeError("hard fail"),
         ):
             with self.assertRaises(RuntimeError):
-                ap._run_autonomous_cycle(
-                    MagicMock(), [], [], "m1", "m1", 2
-                )
+                ap._run_autonomous_cycle(provider, [], [], "m1", "m1", 2)
 
         text, finished, met, _ = ap._run_autonomous_cycle(
-            MagicMock(), [], [], "m1", "m2", 0
+            provider, [], [], "m1", "m2", 0
         )
         self.assertEqual(text, "")
         self.assertFalse(finished)
@@ -763,14 +746,10 @@ class TestFinalCoveragePush(unittest.TestCase):
             return "early", True, False, "m1"
 
         events = []
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t.com"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2
         ), patch(
@@ -800,14 +779,10 @@ class TestFinalCoveragePush(unittest.TestCase):
             )
             return "partial text", False, False, "m1"
 
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t.com"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1
         ), patch(
@@ -826,14 +801,10 @@ class TestFinalCoveragePush(unittest.TestCase):
             get_mission_registry().cancel(mid)
             return "bye", True, True, "m1"
 
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t.com"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle3
         ), patch(
@@ -856,14 +827,10 @@ class TestFinalCoveragePush(unittest.TestCase):
             )
             return "", False, False, "m1"
 
-        with patch("backend.ai.autopilot.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.autopilot._create_client", return_value=MagicMock()
-        ), patch(
+        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
             "backend.ai.autopilot.normalize_target", return_value="t.com"
         ), patch(
             "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.resolve_model", return_value=("m1", "m2")
         ), patch(
             "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1
         ), patch(
@@ -1006,6 +973,8 @@ class TestFinalCoveragePush(unittest.TestCase):
         # wifi rfkill path
         with patch.object(k, "validate_command", return_value=(True, "")), patch(
             "backend.executor.kali.validate_command_scope", return_value=(True, "")
+        ), patch(
+            "backend.security.privileges.privilege_blocks_tool", return_value=(False, "")
         ), patch.object(k, "_is_wifi_tool", return_value=True), patch(
             "backend.executor.kali.subprocess.run", return_value=MagicMock()
         ) as run, patch.object(

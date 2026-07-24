@@ -7,14 +7,17 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=50" />
-  <link rel="stylesheet" href="/static/shell.css?v=9" />
+  <link rel="stylesheet" href="/static/styles.css?v=52" />
+  <link rel="stylesheet" href="/static/shell.css?v=11" />
   <script>
     (function () {
       try {
         if (localStorage.getItem("darkstar-pilot-offensive") === "1"
             || localStorage.getItem("chat-ia-kali-pilot-offensive") === "1") {
           document.documentElement.classList.add("mode-offensive");
+        }
+        if (localStorage.getItem("darkstar-offline-mode") === "1") {
+          document.documentElement.classList.add("mode-offline");
         }
       } catch (e) { /* ignore */ }
     })();
@@ -62,8 +65,13 @@
             <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
             <span class="offensive-mode-switch" aria-hidden="true"></span>
           </label>
-          <button type="button" class="nav-item" id="btn-sound">08 som</button>
-          <button type="button" class="nav-item" id="btn-help" title="F1">09 ajuda</button>
+          <label class="nav-item nav-toggle" id="offline-mode-control" for="offline-mode-toggle" title="LLM local (Ollama)">
+            <span>08 offline</span>
+            <input type="checkbox" id="offline-mode-toggle" class="offensive-mode-input offline-mode-input" />
+            <span class="offensive-mode-switch offline-mode-switch" aria-hidden="true"></span>
+          </label>
+          <button type="button" class="nav-item" id="btn-sound">09 som</button>
+          <button type="button" class="nav-item" id="btn-help" title="F1">10 ajuda</button>
         </nav>
       </div>
     </aside>
@@ -114,6 +122,7 @@
               <div class="status-bar-left">
                 <span class="status-tag" id="status-pill-docker" title="Docker">docker</span>
                 <span class="status-tag" id="status-pill-kali" title="Kali">kali</span>
+                <span class="status-tag" id="status-pill-llm" title="Provedor de IA">llm</span>
                 <span class="status-tag status-tag--warn" id="status-pill-privilege" title="Privilégio">priv:B</span>
                 <span id="status-bar-text"></span>
               </div>
@@ -355,6 +364,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=46"></script>
+  <script type="module" src="/static/js/main.js?v=48"></script>
 </body>
 </html>

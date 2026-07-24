@@ -41,6 +41,13 @@ class TestModelsCatalog(unittest.TestCase):
         cat = get_models_catalog()
         self.assertIn("tiers", cat)
         self.assertIn("default_model", cat)
+        providers = {
+            m["provider"]
+            for tier in cat["tiers"]
+            for m in tier["models"]
+        }
+        for expected in ("openai", "claude", "gemini", "grok", "deepseek"):
+            self.assertIn(expected, providers)
         primary, fb = resolve_model(None, None)
         self.assertTrue(primary)
         self.assertTrue(fb)
@@ -51,6 +58,8 @@ class TestModelsCatalog(unittest.TestCase):
         self.assertEqual(alias_p, "deepseek/deepseek-v3.2")
         self.assertIsNotNone(find_model_display("deepseek/deepseek-chat-v3.2"))
         self.assertIsNotNone(find_model_display("google/gemini-2.5-flash"))
+        self.assertIsNotNone(find_model_display("openai/gpt-4o-mini"))
+        self.assertIsNotNone(find_model_display("anthropic/claude-haiku-4.5"))
         self.assertIsNone(find_model_display("no/such-model"))
 
 

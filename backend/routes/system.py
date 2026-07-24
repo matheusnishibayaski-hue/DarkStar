@@ -19,7 +19,7 @@ from backend.deps import APP_VERSION
 from backend.executor.logs import read_execution_log
 from backend.executor.recon_db import get_recon_data, list_recon_summaries
 from backend.executor.stream_hub import get_stream_hub
-from backend.models_catalog import get_models_catalog
+from backend.schemas import AiProviderRequest
 from backend.security.scope import scope_lock_enabled
 from backend.tool_catalog import enrich_categories
 
@@ -29,7 +29,9 @@ router = APIRouter(prefix="/api", tags=["system"])
 @router.get("/client-config")
 def client_config():
     from backend.security.privileges import master_key_configured, privilege_status
+    from backend.ai.providers.runtime import get_active_provider_name
 
+    active = get_active_provider_name()
     return {
         "version": APP_VERSION,
         "brand": "DarkStar",
@@ -41,6 +43,8 @@ def client_config():
         "scope_lock_enabled": scope_lock_enabled(),
         "scope_warning": not scope_lock_enabled(),
         "master_key_configured": master_key_configured(),
+        "ai_provider": active,
+        "ai_offline": active == "ollama",
         **privilege_status(),
     }
 
@@ -116,7 +120,30 @@ def health():
         "auth_required": bool(CHAT_API_TOKEN),
         "scope_lock_enabled": scope_lock_enabled(),
         "scope_warning": not scope_lock_enabled(),
+        "ai_provider": _active_provider(),
+        "ai_offline": _active_provider() == "ollama",
+        "llm": _llm_health(),
     }
+
+
+def _active_provider() -> str:
+    from backend.ai.providers.runtime import get_active_provider_name
+
+    return get_active_provider_name()
+
+
+def _llm_health() -> dict:
+    try:
+        from backend.ai.providers import get_llm_provider
+
+        return get_llm_provider().health()
+    except Exception as e:
+        return {
+            "provider": _active_provider(),
+            "ok": False,
+            "configured": False,
+            "detail": str(e),
+        }
 
 
 @router.get("/metrics")
@@ -156,7 +183,32 @@ def api_scan_profiles(offensive: bool = False):
 
 @router.get("/models")
 def api_models():
-    return get_models_catalog()
+    from backend.ai.providers import get_llm_provider
+
+    return get_llm_provider().models_catalog()
+
+
+@router.get("/ai-provider")
+def api_ai_provider_get():
+    from backend.ai.providers.runtime import provider_status
+
+    return provider_status()
+
+
+@router.post("/ai-provider")
+def api_ai_provider_set(body: AiProviderRequest):
+    """Alterna OpenRouter ↔ Ollama sem reiniciar o servidor."""
+    from backend.ai.providers.runtime import (
+        normalize_provider_name,
+        provider_status,
+        set_active_provider,
+    )
+
+    normalized = normalize_provider_name(body.provider)
+    if normalized not in {"openrouter", "ollama"}:
+        raise HTTPException(status_code=422, detail="Provider inválido. Use openrouter ou ollama.")
+    set_active_provider(normalized)
+    return provider_status()
 
 
 @router.get("/recon")

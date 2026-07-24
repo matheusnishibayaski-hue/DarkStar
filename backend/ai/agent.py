@@ -1,26 +1,22 @@
-import json
 import threading
 import time
 from collections.abc import Callable, Generator
 from dataclasses import asdict, dataclass, field
 from queue import Queue
 
-from openai import OpenAI
-
 from backend.ai.healing import healing_prompt, should_attempt_healing
 from backend.ai.openrouter_common import (
-    OPENROUTER_BASE_URL,
-    OPENROUTER_HEADERS,
     assistant_message_dict,
     is_retryable_error,
     openrouter_error_message,
 )
+from backend.ai.providers import get_llm_provider
+from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.report import generate_report
 from backend.ai.sse import format_sse
 from backend.config import (
     MAX_HISTORY_MESSAGES,
     MAX_TOOL_ITERATIONS,
-    OPENROUTER_API_KEY,
     SYSTEM_PROMPT,
 )
 from backend.config_prompts import CHAT_FINALIZE_NUDGE, CHAT_POST_TOOL_NUDGE
@@ -35,7 +31,6 @@ from backend.executor.recon_db import (
 from backend.executor.result import ExecutionResult, format_result_for_llm
 from backend.executor.stream_hub import get_stream_hub
 from backend.executor.summarize import summarize_output
-from backend.models_catalog import resolve_model
 from backend.observability import incr, log_event, timed
 from backend.security.missions import get_mission_registry
 
@@ -282,13 +277,9 @@ def _run_openrouter(
     *,
     force_tool_use: bool = False,
 ) -> ChatResponse:
-    if not OPENROUTER_API_KEY:
-        return ChatResponse(
-            message=(
-                "Configure OPENROUTER_API_KEY no arquivo .env.\n\n"
-                "Obtenha uma chave em: https://openrouter.ai/keys"
-            )
-        )
+    provider = get_llm_provider()
+    if not provider.is_configured():
+        return ChatResponse(message=provider.configuration_error())
 
     registry = get_mission_registry()
     if mission_id:
@@ -323,17 +314,14 @@ def _run_openrouter_body(
     *,
     force_tool_use: bool = False,
 ) -> ChatResponse:
-    client = OpenAI(
-        base_url=OPENROUTER_BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-    )
+    provider = get_llm_provider()
 
     messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(_convert_history(history))
     messages.append({"role": "user", "content": user_message})
 
     executions: list[ToolExecution] = []
-    model_to_use, fallback_to_use = resolve_model(model, fallback_model)
+    model_to_use, fallback_to_use = provider.resolve_models(model, fallback_model)
     nudged = False
     healing_attempts = 0
     final_text = ""
@@ -349,23 +337,22 @@ def _run_openrouter_body(
         try:
             incr("llm_calls_total")
             with timed("llm_call", tool=model_to_use):
-                response = client.chat.completions.create(
+                completion = provider.complete(
                     model=model_to_use,
                     messages=messages,
                     tools=[KALI_TOOL_DEFINITION],
                     tool_choice="auto",
-                    extra_headers=OPENROUTER_HEADERS,
                 )
         except Exception as e:
             err = str(e)
             log_event("WARNING", "llm_call_failed", tool=model_to_use)
-            if model_to_use != fallback_to_use and _is_retryable_error(err):
+            if model_to_use != fallback_to_use and provider.is_retryable_error(err):
                 time.sleep(1)
                 model_to_use = fallback_to_use
                 continue
-            return ChatResponse(message=_openrouter_error_message(err))
+            return ChatResponse(message=provider.format_error(err))
 
-        assistant_message = response.choices[0].message
+        assistant_message = completion.message
 
         if not assistant_message.tool_calls:
             if not nudged and not executions and force_tool_use:
@@ -385,22 +372,27 @@ def _run_openrouter_body(
             final_text = assistant_message.content or "Sem resposta da IA."
             return ChatResponse(message=final_text, tool_executions=executions)
 
-        messages.append(_assistant_message_dict(assistant_message))
+        messages.append(assistant_dict_from_message(assistant_message))
 
         batch_ran_kali = False
         batch_needs_healing = False
         for tool_call in assistant_message.tool_calls:
-            if tool_call.function.name != "run_kali_tool":
+            if tool_call.name != "run_kali_tool":
                 continue
 
             batch_ran_kali = True
-            try:
-                arguments = json.loads(tool_call.function.arguments)
+            arguments, heal_err = resolve_tool_arguments(
+                provider,
+                model=model_to_use,
+                tool_call=tool_call,
+                messages=messages,
+            )
+            if arguments is None:
+                command = ""
+                reason = heal_err or "Falha ao decodificar os argumentos fornecidos pela IA."
+            else:
                 command = arguments.get("command", "")
                 reason = arguments.get("reason", "")
-            except Exception:
-                command = ""
-                reason = "Falha ao decodificar os argumentos fornecidos pela IA."
 
             result_text = _record_execution(
                 command,
@@ -446,15 +438,13 @@ def _run_openrouter_body(
     )
 
     try:
-        final_response = client.chat.completions.create(
+        final_completion = provider.complete(
             model=model_to_use,
             messages=messages,
-            extra_headers=OPENROUTER_HEADERS,
+            tools=None,
+            tool_choice=None,
         )
-        final_text = (
-            final_response.choices[0].message.content
-            or "Limite de iterações de ferramentas atingido."
-        )
+        final_text = final_completion.message.content or "Limite de iterações de ferramentas atingido."
     except Exception as e:
         final_text = f"Limite de iterações atingido. Erro na finalização: {e}"
 

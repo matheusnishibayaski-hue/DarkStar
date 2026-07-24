@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import MagicMock, patch
+from tests.llm_test_utils import make_openrouter_provider
 
 from fastapi.testclient import TestClient
 
@@ -95,11 +96,8 @@ class TestAgentStreamAndHealing(unittest.TestCase):
             truncated_for_llm=False,
         )
 
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m2")
-        ), patch(
+        provider = make_openrouter_provider(client, models=("m1", "m2"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
             "backend.ai.agent.execute_in_kali", return_value=fail
         ), patch(
             "backend.ai.agent.summarize_output", return_value=("fail", False)
@@ -131,11 +129,8 @@ class TestAgentStreamAndHealing(unittest.TestCase):
             MagicMock(choices=[MagicMock(message=ok_msg)]),
             MagicMock(choices=[MagicMock(message=ok_msg)]),
         ]
-        with patch("backend.ai.agent.OPENROUTER_API_KEY", "sk"), patch(
-            "backend.ai.agent.OpenAI", return_value=client
-        ), patch(
-            "backend.ai.agent.resolve_model", return_value=("m1", "m2")
-        ), patch(
+        provider = make_openrouter_provider(client, models=("m1", "m2"))
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
             "backend.ai.agent.time.sleep"
         ):
             result = _run_openrouter_body([], "hi", None, None, None, None, None)
@@ -187,24 +182,18 @@ class TestAutopilotStream(unittest.TestCase):
 
     def test_run_kali_in_cycle(self):
         from backend.ai import autopilot as ap
+        from backend.ai.providers.base import LLMCompletion, LLMMessage, ToolCall
 
-        tool_call = MagicMock()
-        tool_call.id = "1"
-        tool_call.function.name = "run_kali_tool"
-        tool_call.function.arguments = '{"command":"nmap -V","reason":"v"}'
-        msg = MagicMock(content="", tool_calls=[tool_call])
-
-        finish = MagicMock()
-        finish.id = "2"
-        finish.function.name = "finish_mission"
-        finish.function.arguments = '{"summary":"ok","objective_met":true}'
-        msg2 = MagicMock(content="", tool_calls=[finish])
-
-        client = MagicMock()
-        client.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=msg)]),
-            MagicMock(choices=[MagicMock(message=msg2)]),
-        ]
+        tool_call = ToolCall(
+            id="1",
+            name="run_kali_tool",
+            arguments='{"command":"nmap -V","reason":"v"}',
+        )
+        finish = ToolCall(
+            id="2",
+            name="finish_mission",
+            arguments='{"summary":"ok","objective_met":true}',
+        )
 
         def _record(command, reason, executions, **kwargs):
             executions.append(
@@ -227,12 +216,12 @@ class TestAutopilotStream(unittest.TestCase):
         ), patch(
             "backend.ai.autopilot._completion",
             side_effect=[
-                MagicMock(choices=[MagicMock(message=msg)]),
-                MagicMock(choices=[MagicMock(message=msg2)]),
+                LLMCompletion(message=LLMMessage(tool_calls=[tool_call])),
+                LLMCompletion(message=LLMMessage(tool_calls=[finish])),
             ],
         ):
             text, finished, met, model = ap._run_autonomous_cycle(
-                client,
+                MagicMock(),
                 [{"role": "system", "content": "s"}],
                 executions,
                 "m1",

@@ -1437,7 +1437,13 @@ body.has-overlay { overflow: hidden; }
 .model-trigger.open .model-trigger-caret { transform: rotate(180deg); opacity: 0.7; }
 
 .model-trigger.model-gemini #model-label { color: var(--pilot); }
-.model-trigger.model-deepseek #model-label {
+.model-trigger.model-deepseek #model-label,
+.model-trigger.model-openai #model-label,
+.model-trigger.model-claude #model-label,
+.model-trigger.model-grok #model-label,
+.model-trigger.model-llama #model-label,
+.model-trigger.model-mistral #model-label,
+.model-trigger.model-qwen #model-label {
   color: var(--phosphor);
   text-shadow: none;
 }
@@ -1452,8 +1458,23 @@ body.has-overlay { overflow: hidden; }
 .model-trigger.model-gemini:hover,
 .model-trigger.model-gemini.open { border-color: rgba(94, 179, 255, 0.35); }
 
+.model-trigger.model-openai:hover,
+.model-trigger.model-openai.open { border-color: rgba(116, 185, 120, 0.4); }
+
+.model-trigger.model-claude:hover,
+.model-trigger.model-claude.open { border-color: rgba(210, 153, 34, 0.45); }
+
+.model-trigger.model-grok:hover,
+.model-trigger.model-grok.open { border-color: rgba(180, 180, 180, 0.5); }
+
 .model-trigger.model-deepseek:hover,
-.model-trigger.model-deepseek.open { border-color: var(--phosphor-dim); }
+.model-trigger.model-deepseek.open,
+.model-trigger.model-llama:hover,
+.model-trigger.model-llama.open,
+.model-trigger.model-mistral:hover,
+.model-trigger.model-mistral.open,
+.model-trigger.model-qwen:hover,
+.model-trigger.model-qwen.open { border-color: var(--phosphor-dim); }
 
 .status-bar.crt-status {
   padding: 0.25rem 0.75rem 0.4rem;

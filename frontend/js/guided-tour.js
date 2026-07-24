@@ -112,6 +112,12 @@ function buildSteps() {
       placement: "right",
     },
     {
+      selector: "#offline-mode-control",
+      title: "Offline",
+      text: "Troca a Argus para Ollama local (sem OpenRouter). Ideal para lab air-gapped.",
+      placement: "right",
+    },
+    {
       selector: "#btn-help",
       title: "Ajuda",
       text: "Reabre este tour. Atalho F1.",

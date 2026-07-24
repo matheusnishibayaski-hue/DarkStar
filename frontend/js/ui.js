@@ -177,6 +177,7 @@ export function updateStatusBar({ loading }) {
 
   const dockerTag = document.getElementById("status-pill-docker");
   const kaliTag = document.getElementById("status-pill-kali");
+  const llmTag = document.getElementById("status-pill-llm");
 
   if (healthData && dockerTag && kaliTag) {
     dockerTag.textContent = healthData.docker ? "docker:ok" : "docker:off";
@@ -190,6 +191,23 @@ export function updateStatusBar({ loading }) {
     } else {
       kaliTag.textContent = "kali:off";
       kaliTag.className = "status-tag status-off";
+    }
+  }
+
+  if (llmTag) {
+    const offline =
+      healthData?.ai_offline === true ||
+      healthData?.ai_provider === "ollama" ||
+      healthData?.llm?.provider === "ollama";
+    const llmOk = healthData?.llm?.ok !== false;
+    if (offline) {
+      llmTag.textContent = llmOk ? "llm:local" : "llm:ollama?";
+      llmTag.className = "status-tag " + (llmOk ? "status-ok" : "status-warn");
+      llmTag.title = "Modo offline (Ollama)";
+    } else {
+      llmTag.textContent = "llm:cloud";
+      llmTag.className = "status-tag status-ok";
+      llmTag.title = "Modo online (OpenRouter)";
     }
   }
 
