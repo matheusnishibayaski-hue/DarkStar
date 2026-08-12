@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
   <title>DarkStar · Argus</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -403,6 +405,27 @@
     </div>
   </div>
 
+  <div class="overlay overlay-client-new" id="overlay-client-new" hidden>
+    <div class="panel panel-narrow panel-client-new crt-panel" role="dialog" aria-modal="true" aria-labelledby="client-new-title" aria-label="Novo cliente">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="client-new-title">Novo cliente</span>
+          <span class="panel-title-sub">nome do workspace</span>
+        </div>
+        <button type="button" class="panel-close" id="client-new-cancel" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body autopilot-form">
+        <form id="client-new-form" autocomplete="off">
+          <div class="form-field">
+            <label class="autopilot-label" for="client-new-name">NOME</label>
+            <input type="text" id="client-new-name" class="panel-field autopilot-input" placeholder="Ex.: Empresa de Teste" spellcheck="true" maxlength="200" required />
+          </div>
+          <button type="submit" class="autopilot-start" id="client-new-submit">Criar</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay overlay-master-key" id="overlay-master-key" hidden>
     <div class="panel panel-narrow panel-master-key crt-panel" role="dialog" aria-modal="true" aria-labelledby="master-key-title" aria-label="Master key">
       <div class="panel-head panel-head-accent">
@@ -427,6 +450,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/main.js?v=58"></script>
+  <script type="module" src="/static/js/main.js?v=61"></script>
 </body>
 </html>

@@ -8,10 +8,10 @@ import {
   initSessions,
   createSession,
   ensureSession,
-  bootSessionsFromDb,
   renderSessions,
   updateSessionTitle,
 } from "./sessions.js";
+import { bootSessionsFromDb } from "./sessions-boot.js";
 import {
   initToolsPanel,
   syncToolFromSession,

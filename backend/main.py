@@ -155,7 +155,13 @@ def favicon():
 
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    return FileResponse(
+        FRONTEND_DIR / "index.html",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")

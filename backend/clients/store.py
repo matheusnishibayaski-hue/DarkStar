@@ -13,6 +13,18 @@ from backend.config import CLIENTS_DIR, CONSULTING_PRIMARY_COLOR, SURFACE_DIR
 
 logger = logging.getLogger(__name__)
 _CLIENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}[a-z0-9]$|^[a-z0-9]$")
+# Pasta CLIENTS_DIR também hospeda o pacote Python — não são workspaces.
+_RESERVED_DIR_NAMES = frozenset(
+    {
+        "__pycache__",
+        ".git",
+        "store",
+        "backup",
+        "runtime",
+        "tests",
+        "test",
+    }
+)
 
 
 def normalize_client_id(value: str | None) -> str:
@@ -217,11 +229,23 @@ def list_client_targets(client_id: str) -> list[str]:
     return sorted(found)
 
 
+def _is_client_workspace_dir(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    name = path.name
+    if name.startswith(".") or name in _RESERVED_DIR_NAMES:
+        return False
+    # Workspace real tem meta.json (ou será criado via API)
+    return bool(_CLIENT_ID_RE.match(normalize_client_id(name))) or (
+        path / "meta.json"
+    ).is_file()
+
+
 def _migrate_all_client_files() -> None:
     if not CLIENTS_DIR.is_dir():
         return
     for path in CLIENTS_DIR.iterdir():
-        if not path.is_dir():
+        if not _is_client_workspace_dir(path):
             continue
         get_client(path.name)
 
