@@ -283,6 +283,7 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
     Remove workspace do cliente.
     Não permite apagar `default`.
     Com purge_surfaces=True, apaga também surfaces associados a esse client_id.
+    Idempotente: pasta/DB órfãos também são limpos (não 404 se já sumiu do meta).
     """
     import shutil
 
@@ -294,10 +295,38 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
     cid = normalize_client_id(client_id)
     if cid == "default":
         raise ValueError("Não é permitido excluir o cliente padrão (default).")
-    if not get_client(cid):
-        raise FileNotFoundError(f"Cliente '{cid}' não encontrado.")
 
-    targets = list_client_targets(cid)
+    meta = get_client(cid)
+    cdir = client_dir(cid)
+    has_dir = cdir.is_dir()
+    has_db = False
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            has_db = (
+                db.query(ClientRecord)
+                .filter(ClientRecord.client_id == cid)
+                .first()
+                is not None
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("client_db_exists_check_failed: %s", exc)
+
+    if not meta and not has_dir and not has_db:
+        # Já inexistente — trata como sucesso para o UI não ficar preso
+        if get_active_client_id() == cid:
+            set_active_client_id("default")
+        return {
+            "deleted": True,
+            "client_id": cid,
+            "already_gone": True,
+            "targets_cleared": 0,
+            "targets_listed": 0,
+            "purge_surfaces": purge_surfaces,
+            "active_client_id": get_active_client_id(),
+        }
+
+    targets = list_client_targets(cid) if (meta or has_dir) else []
     removed_surfaces = 0
     if purge_surfaces:
         for t in targets:
@@ -313,7 +342,6 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
     except Exception as exc:  # noqa: BLE001
         logger.warning("client_db_delete_failed: %s", exc)
 
-    cdir = client_dir(cid)
     if cdir.is_dir():
         shutil.rmtree(cdir, ignore_errors=True)
 
@@ -323,6 +351,7 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
     return {
         "deleted": True,
         "client_id": cid,
+        "already_gone": False,
         "targets_cleared": removed_surfaces if purge_surfaces else 0,
         "targets_listed": len(targets),
         "purge_surfaces": purge_surfaces,

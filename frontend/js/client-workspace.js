@@ -85,7 +85,9 @@ function renderSelect() {
     const opt = document.createElement("option");
     opt.value = c.client_id;
     const n = c.targets_count ?? (c.targets || []).length;
-    opt.textContent = `${c.display_name || c.client_id} (${n})`;
+    const label = c.display_name || c.client_id;
+    opt.textContent = n ? `${label} · ${n}` : label;
+    opt.title = `${label} (${c.client_id}) — ${n} alvo(s)`;
     if (c.client_id === prev) opt.selected = true;
     sel.appendChild(opt);
   }
@@ -184,8 +186,10 @@ async function deleteClient() {
     toast("Cliente padrão não pode ser excluído", "err");
     return;
   }
+  const label =
+    clientsCache.find((c) => c.client_id === id)?.display_name || id;
   const purge = confirm(
-    `Excluir o cliente "${id}"?\n\nOK = apaga workspace e engajamentos\nCancelar = aborta`
+    `Excluir o cliente "${label}"?\n\nOK = apaga workspace e engajamentos\nCancelar = aborta`
   );
   if (!purge) return;
   try {
@@ -193,16 +197,23 @@ async function deleteClient() {
       `/api/clients/${encodeURIComponent(id)}?purge_surfaces=true`,
       { method: "DELETE" }
     );
-    const data = await parseJson(res);
+    // 404 = já não existe — limpa UI do mesmo jeito
+    if (!res.ok && res.status !== 404) {
+      await parseJson(res);
+      return;
+    }
+    const data = res.ok ? await res.json().catch(() => ({})) : {};
     activeClientId = data.active_client_id || "default";
     localStorage.setItem(STORAGE_KEY, activeClientId);
-    toast(`Cliente "${id}" excluído`, "ok");
+    clientsCache = clientsCache.filter((c) => c.client_id !== id);
+    toast(`Cliente "${label}" excluído`, "ok");
     await loadClients();
     window.dispatchEvent(
       new CustomEvent("darkstar:client-changed", { detail: { clientId: activeClientId } })
     );
   } catch (err) {
     toast(err.message || "Falha ao excluir cliente", "err");
+    await loadClients();
   }
 }
 
