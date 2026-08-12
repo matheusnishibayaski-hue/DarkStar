@@ -106,6 +106,18 @@ app.middleware("http")(role_guard)
 app.middleware("http")(rate_limit_guard)
 app.middleware("http")(api_token_guard)
 
+
+@app.middleware("http")
+async def static_no_cache(request, call_next):
+    """Evita JS/CSS stale no browser (módulos ES sem ?v= na cadeia de imports)."""
+    response = await call_next(request)
+    path = request.url.path
+    if path == "/" or path.startswith("/static/"):
+        if path == "/" or path.endswith((".js", ".css", ".html", ".mjs")):
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+    return response
+
 app.include_router(system.router)
 app.include_router(files.router)
 app.include_router(data.router)
