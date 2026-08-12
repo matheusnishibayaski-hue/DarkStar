@@ -39,7 +39,7 @@ class PentestRecord(Base):
     summary_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
-    findings: Mapped[list["FindingHistory"]] = relationship(
+    findings: Mapped[list[FindingHistory]] = relationship(
         "FindingHistory", back_populates="pentest", cascade="all, delete-orphan"
     )
 

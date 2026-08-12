@@ -1,0 +1,126 @@
+name: DarkStar Scheduled Scan (manual template)
+
+# Cron desligado por padrão (air-gapped / lab). Ative o schedule só com alvo em secret.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Alvo autorizado (obrigatório se DARKSTAR_TARGET não estiver set)"
+        required: false
+        type: string
+      risk_profile:
+        description: "Risk profile"
+        required: true
+        default: safe-active
+        type: choice
+        options:
+          - passive
+          - safe-active
+          - full
+  # Descomente somente com secrets.DARKSTAR_TARGET configurado:
+  # schedule:
+  #   - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scheduled-pentest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Resolve target
+        id: target
+        env:
+          INPUT_TARGET: ${{ github.event.inputs.target }}
+          SECRET_TARGET: ${{ secrets.DARKSTAR_TARGET }}
+        run: |
+          TARGET="${INPUT_TARGET:-${SECRET_TARGET:-}}"
+          if [ -z "$TARGET" ]; then
+            echo "::error::Set input target or secret DARKSTAR_TARGET"
+            exit 1
+          fi
+          case "$TARGET" in
+            *github.com*)
+              echo "::error::Refusing github.com URL as pentest target."
+              exit 1
+              ;;
+          esac
+          echo "value=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: Start Kali
+        working-directory: docker
+        run: |
+          docker compose up -d kali-tools
+          sleep 20
+          docker exec kali-tools nmap --version
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Scan
+        id: scan
+        continue-on-error: true
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          KALI_CONTAINER: kali-tools
+          ALLOWED_TARGETS: ${{ secrets.DARKSTAR_ALLOWED_TARGETS }}
+        run: |
+          set +e
+          python -m backend.cli autonomous \
+            --target "${{ steps.target.outputs.value }}" \
+            --risk-profile "${{ github.event.inputs.risk_profile || 'safe-active' }}" \
+            --scan-profile intermediate \
+            --output json \
+            --output-file scheduled-report.json \
+            --quiet
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scheduled-reports
+          path: scheduled-report.json
+          retention-days: 180
+          if-no-files-found: ignore
+
+      - name: Issue on critical
+        if: steps.scan.outputs.exit_code == '2'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let report = { critical: '?', target: 'unknown' };
+            try {
+              report = JSON.parse(fs.readFileSync('scheduled-report.json', 'utf8'));
+            } catch (e) {}
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[SCHEDULED] Critical issues — ${report.target}`,
+              body: `DarkStar scheduled/manual scan found ${report.critical} critical issue(s).\n\nRun: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              labels: ['security', 'darkstar', 'scheduled-scan'],
+            });
+
+      - name: Cleanup
+        if: always()
+        working-directory: docker
+        run: docker compose down || true
+        continue-on-error: true
+
+      - name: Fail on critical
+        if: always()
+        run: |
+          CODE="${{ steps.scan.outputs.exit_code || 100 }}"
+          if [ "$CODE" = "2" ] || [ "$CODE" = "100" ] || [ "$CODE" = "102" ]; then
+            exit "$CODE"
+          fi

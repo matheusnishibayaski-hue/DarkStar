@@ -163,10 +163,17 @@ def delete_recon(target: str) -> bool:
 def delete_surface(target: str) -> bool:
     if not target or len(target) > 128 or ".." in target:
         return False
-    path = SURFACE_DIR / f"{normalize_target(target)}.json"
+    from backend.executor.surface import _find_surface_path
+
+    path = _find_surface_path(target)
     removed = False
-    if path.is_file():
+    if path and path.is_file():
         path.unlink()
+        removed = True
+    # Fallback legado
+    legacy = SURFACE_DIR / f"{normalize_target(target)}.json"
+    if legacy.is_file():
+        legacy.unlink()
         removed = True
     ev_count = delete_evidence_for_target(target)
     return removed or ev_count > 0
@@ -279,6 +286,61 @@ def _purge_glob(root: Path, pattern: str) -> int:
         if path.is_file():
             path.unlink()
             removed += 1
+    return removed
+
+
+def purge_older_than(days: int) -> dict[str, int]:
+    """Remove logs/audit/recon/risk_history/delivery mais antigos que N dias."""
+    from datetime import datetime, timedelta, timezone
+
+    from backend.config import RISK_HISTORY_DIR, SCHEDULE_DIR
+
+    if days <= 0:
+        return {"skipped": 1}
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    removed: dict[str, int] = {
+        "logs": 0,
+        "audit": 0,
+        "recon": 0,
+        "risk_history": 0,
+        "delivery": 0,
+    }
+
+    def _old(path: Path) -> bool:
+        try:
+            mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        except OSError:
+            return False
+        return mtime < cutoff
+
+    if LOG_DIR.is_dir():
+        for path in LOG_DIR.glob("*.log"):
+            if path.is_file() and _old(path):
+                path.unlink()
+                removed["logs"] += 1
+    if AUDIT_DIR.is_dir():
+        for path in AUDIT_DIR.glob("events-*.jsonl"):
+            if path.is_file() and _old(path):
+                path.unlink()
+                removed["audit"] += 1
+    if RECON_DIR.is_dir():
+        for path in RECON_DIR.glob("*.json"):
+            if path.is_file() and _old(path):
+                path.unlink()
+                removed["recon"] += 1
+    if RISK_HISTORY_DIR.is_dir():
+        for path in RISK_HISTORY_DIR.glob("*.jsonl"):
+            if path.is_file() and _old(path):
+                path.unlink()
+                removed["risk_history"] += 1
+    delivery = OUTPUTS_DIR / "delivery"
+    if delivery.is_dir():
+        for path in delivery.glob("*.zip"):
+            if path.is_file() and _old(path):
+                path.unlink()
+                removed["delivery"] += 1
+    # schedules órfãos não apagamos por mtime — só artefatos
+    _ = SCHEDULE_DIR
     return removed
 
 

@@ -160,6 +160,9 @@ export function closeAllOverlays(closeToolsPanelMenus) {
     ctx.overlaySessionReport,
     document.getElementById("overlay-master-key"),
     document.getElementById("overlay-login"),
+    document.getElementById("overlay-portfolio"),
+    document.getElementById("overlay-dashboard"),
+    document.getElementById("overlay-remediation"),
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");

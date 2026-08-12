@@ -185,7 +185,7 @@ Kali executa de verdade
         ↓
 Evidência + triagem
         ↓
-PDF / relatório
+PDF / dashboard / alertas / remediação / (opcional) GitHub
 ```
 
 **DarkStar** = a cabine  
@@ -201,13 +201,87 @@ Você manda. O sistema trabalha.
 - Pedir scans e enumerações em linguagem natural  
 - Rodar missão automática com o Piloto  
 - Ver logs ao vivo e histórico completo  
-- Triar achados e baixar PDF  
+- Triar achados e baixar PDF executivo + técnico (white-label da consultoria)  
+- Isolar workspaces por cliente (sidebar → CLIENTE), carteira, agenda recorrente e delta mensal  
+- Automatizar por **CLI** e **GitHub Actions** (só quando você disparar)  
+- Ver **dashboard** de métricas e histórico de scans  
+- Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
+- Abrir **wizard de remediação IA** na triagem (plano step-by-step + tracker)  
 - Trocar de modelo de IA (ChatGPT, Claude, Gemini, Grok, DeepSeek…)  
 - Ligar modo offline com Ollama  
 - Desbloquear perfil avançado com master key  
 - Integrar com Cursor/Claude via MCP (para quem quer ir além)
 
 Se você é consultor solo, lab de estudo ou time pequeno: isso aqui foi feito para o seu fluxo.
+
+---
+
+## Automação, métricas, alertas e remediação
+
+Além do chat e do Piloto no navegador, o DarkStar cobre o ciclo **depois** da execução — sem virar SaaS e sem vazar alvo por engano.
+
+### 1. CLI (pipelines e lab sem UI)
+
+Comandos: `autonomous`, `chat`, `health`, `list-tools`.
+
+```bash
+# Ative o venv do projeto, depois:
+python -m backend.cli autonomous --target scanme.nmap.org --dry-run
+python -m backend.cli autonomous --target scanme.nmap.org -o report.json
+python -m backend.cli health
+python -m backend.cli list-tools
+```
+
+Exit codes pensados para CI: `0` ok · `1` high · `2` critical · `100` erro · `102` fora de escopo.
+
+Detalhes: [`docs/CLI.md`](docs/CLI.md)
+
+### 2. GitHub (entrega no PR / issue — sob demanda)
+
+Com `GITHUB_TOKEN` no `.env`, a CLI ou a API podem **comentar no PR**, abrir issue ou atualizar commit status.  
+**Não é automático** no chat/Piloto: só roda se você passar `--github-repo` + `--pr`, chamar a API ou disparar o workflow.
+
+Templates Actions (somente `workflow_dispatch` — sem push/PR automático; alvo via input ou secret `DARKSTAR_TARGET`):
+
+- [`.github/workflows/darkstar-pentest.yml`](.github/workflows/darkstar-pentest.yml)
+- [`.github/workflows/darkstar-scheduled.yml`](.github/workflows/darkstar-scheduled.yml)
+
+```bash
+python -m backend.cli autonomous \
+  --target SEU_ALVO_AUTORIZADO \
+  --github-repo owner/repo \
+  --pr 12 \
+  -o report.json
+```
+
+Detalhes: [`docs/GITHUB-INTEGRATION.md`](docs/GITHUB-INTEGRATION.md)
+
+### 3. Dashboard (métricas no shell)
+
+Sidebar → **dashboard**: tendência de severidade, top issues, histórico de scans e export (JSON/CSV/PDF).  
+Os scans do Piloto, da CLI e da agenda gravam histórico (Postgres via `DATABASE_URL` ou SQLite local).
+
+Detalhes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md)
+
+### 4. Notificações multicanal
+
+Quando o delta/risco sobe (e canais estiverem configurados), o sistema pode avisar em:
+
+- Slack / Discord (webhook)  
+- Telegram  
+- E-mail (SMTP)  
+- Jira (issue)
+
+Também há API `/api/notifications/*` para teste e envio manual.
+
+Detalhes: [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md)
+
+### 5. Remediação inteligente (wizard)
+
+Na **triagem**, botão **fix** por finding → overlay com plano gerado por IA (seed no mapa estático do relatório).  
+Passos, before/after opcional, comando de verificação **só como texto** (não executa no host), progresso e “marcar resolvido” em `backend/data/remediation_track.json`.
+
+Detalhes: [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
 ---
 
@@ -262,7 +336,9 @@ A partir daí: Argus + Kali **só no seu PC**.
 3. Digite algo como:  
    *“faz um scan leve de portas em scanme.nmap.org”*  
 4. Ou clique **PILOTO** e deixe a missão rodar  
-5. Revise em **relatório** e baixe o PDF  
+5. Revise em **relatório** / **triagem**, baixe o PDF  
+6. (Opcional) Abra **dashboard** na sidebar · botão **fix** na triagem para o wizard de remediação  
+7. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
 
 Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 
@@ -277,6 +353,15 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 | `CHAT_API_TOKEN` | Protege a API local |
 | `MASTER_KEY` | Libera perfil completo / offensive |
 | `AI_PROVIDER=ollama` | Começa já em modo local |
+| `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
+| `DATABASE_URL` | Postgres do dashboard; sem isso → SQLite local |
+| `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` | Alertas em canal |
+| `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alertas Telegram |
+| `SMTP_*` / `EMAIL_*` | Alertas por e-mail |
+| `JIRA_URL` + `JIRA_USER` + `JIRA_TOKEN` | Abrir issue no Jira |
+| `ALERT_WEBHOOK_URL` / `ALERT_ON_CRITICAL` | Webhook legado + gatilho de crítico |
+
+Lista completa comentada: [`.env.example`](.env.example)
 
 ---
 
@@ -289,6 +374,10 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 | IA muda | Chave OpenRouter / saldo, ou Ollama no offline |
 | Comando bloqueado | Fora do escopo ou perfil restrito |
 | Tela antiga | `Ctrl+F5` |
+| `No module named 'github'` / CLI estranha | Use o venv: `.\venv\Scripts\Activate.ps1` (Windows) |
+| GitHub responde 501 | `GITHUB_TOKEN` vazio ou inválido |
+| Dashboard vazio | Rode pelo menos um Piloto/CLI/agenda; depois atualize o painel |
+| Alertas não chegam | Configure o canal no `.env` e teste `/api/notifications/test/{channel}` |
 
 ---
 
@@ -297,7 +386,7 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 MIT — com uso ético e autorizado.
 
 Quer ir mais fundo?  
-[`docs/MCP.md`](docs/MCP.md) · [`docs/INTELLIGENCE.md`](docs/INTELLIGENCE.md) · [`docs/POSITIONING.md`](docs/POSITIONING.md)
+[`docs/MCP.md`](docs/MCP.md) · [`docs/INTELLIGENCE.md`](docs/INTELLIGENCE.md) · [`docs/POSITIONING.md`](docs/POSITIONING.md) · [`docs/CLI.md`](docs/CLI.md) · [`docs/GITHUB-INTEGRATION.md`](docs/GITHUB-INTEGRATION.md) · [`docs/DASHBOARD.md`](docs/DASHBOARD.md) · [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md) · [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
 ---
 

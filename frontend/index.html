@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css?v=52" />
-  <link rel="stylesheet" href="/static/shell.css?v=11" />
+  <link rel="stylesheet" href="/static/shell.css?v=15" />
   <script>
     (function () {
       try {
@@ -43,6 +43,13 @@
 
         <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa">+ NOVO</button>
 
+        <p class="rail-label">CLIENTE</p>
+        <div class="client-workspace" id="client-workspace">
+          <select id="client-workspace-select" class="client-workspace-select" title="Workspace do cliente" aria-label="Cliente ativo"></select>
+          <button type="button" class="client-workspace-new" id="client-workspace-new" title="Novo cliente">+</button>
+          <button type="button" class="client-workspace-del" id="client-workspace-del" title="Excluir cliente ativo">×</button>
+        </div>
+
         <p class="rail-label">SESSÕES</p>
         <div class="sidebar-sessions" id="sidebar-sessions"></div>
 
@@ -56,6 +63,8 @@
           <button type="button" class="nav-item" id="btn-session-report" title="Alt+R">03 relatório</button>
           <button type="button" class="nav-item" id="btn-files" title="Alt+F">04 pdfs</button>
           <button type="button" class="nav-item" id="btn-threats" title="Alt+C">05 mapa</button>
+          <button type="button" class="nav-item" id="btn-portfolio" title="Carteira de engajamentos">carteira</button>
+          <button type="button" class="nav-item" id="btn-dashboard" title="Dashboard de métricas">dashboard</button>
           <div class="nav-sep"></div>
           <button type="button" class="nav-item" id="btn-master-key" title="Master key">
             <span data-key-label>06 master key</span>
@@ -255,6 +264,53 @@
     </div>
   </div>
 
+  <div class="overlay" id="overlay-remediation" hidden>
+    <div class="panel panel-wide panel-remediation crt-panel" role="dialog" aria-modal="true" aria-label="Remediação">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="remediation-title">Remediação</span>
+          <span class="panel-title-sub">plano step-by-step · IA</span>
+        </div>
+        <div class="panel-head-right files-head-actions">
+          <span class="remediation-sev" id="remediation-severity"></span>
+          <button type="button" class="panel-close" id="remediation-close" aria-label="Fechar">×</button>
+        </div>
+      </div>
+      <div class="panel-body remediation-panel-body">
+        <p class="panel-callout" id="remediation-loading">gerando plano…</p>
+        <div id="remediation-body" hidden>
+          <div class="remediation-progress">
+            <div class="remediation-progress-bar"><div class="remediation-progress-fill" id="remediation-progress-fill"></div></div>
+            <span id="remediation-progress-label">0/0 passos</span>
+          </div>
+          <h3 class="dashboard-section-title">Causa raiz</h3>
+          <p class="remediation-root" id="remediation-root-cause"></p>
+          <h3 class="dashboard-section-title">Passos</h3>
+          <div id="remediation-steps" class="remediation-steps"></div>
+          <div class="remediation-compare">
+            <div>
+              <h3 class="dashboard-section-title">Antes</h3>
+              <pre class="remediation-code"><code id="remediation-code-before"></code></pre>
+            </div>
+            <div>
+              <h3 class="dashboard-section-title">Depois</h3>
+              <pre class="remediation-code"><code id="remediation-code-after"></code></pre>
+            </div>
+          </div>
+          <h3 class="dashboard-section-title">Verificação</h3>
+          <pre class="remediation-code"><code id="remediation-test-cmd"></code></pre>
+          <p class="remediation-note" id="remediation-deploy"></p>
+          <div class="remediation-meta" id="remediation-meta"></div>
+          <h3 class="dashboard-section-title">Referências</h3>
+          <ul class="remediation-refs" id="remediation-refs"></ul>
+          <div class="remediation-footer">
+            <button type="button" class="term-btn" id="remediation-mark-resolved">marcar resolvido</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay" id="overlay-files" hidden>
     <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Relatórios">
       <div class="panel-head">
@@ -271,6 +327,78 @@
         <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
       </div>
       <div class="panel-body files-panel-body" id="files-list"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-portfolio" hidden>
+    <div class="panel panel-wide crt-panel" role="dialog" aria-modal="true" aria-label="Carteira">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <span class="panel-title-main">Carteira</span>
+          <span class="panel-title-sub">engajamentos · risco · delta · agenda</span>
+        </div>
+        <button type="button" class="panel-close" id="portfolio-close" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body" id="portfolio-body"></div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-dashboard" hidden>
+    <div class="panel panel-wide panel-dashboard crt-panel" role="dialog" aria-modal="true" aria-label="Dashboard">
+      <div class="panel-head">
+        <div class="panel-head-text">
+          <span class="panel-title-main">Dashboard</span>
+          <span class="panel-title-sub">métricas · trends · histórico</span>
+        </div>
+        <div class="panel-head-right files-head-actions">
+          <div class="dashboard-period" id="dashboard-period" role="group" aria-label="Período">
+            <button type="button" class="dashboard-period-btn" data-days="7">7d</button>
+            <button type="button" class="dashboard-period-btn active" data-days="30">30d</button>
+            <button type="button" class="dashboard-period-btn" data-days="90">90d</button>
+            <button type="button" class="dashboard-period-btn" data-days="365">1a</button>
+          </div>
+          <button type="button" class="term-btn" id="dashboard-refresh" title="Atualizar">↻</button>
+          <button type="button" class="panel-close" id="dashboard-close" aria-label="Fechar">×</button>
+        </div>
+      </div>
+      <div class="panel-body dashboard-body" id="dashboard-body">
+        <div class="dashboard-metrics" id="dashboard-metrics"></div>
+        <div class="dashboard-charts">
+          <div class="dashboard-chart-box">
+            <h3 class="dashboard-section-title">Tendência</h3>
+            <canvas id="dashboard-trend-chart" height="160"></canvas>
+          </div>
+          <div class="dashboard-chart-box">
+            <h3 class="dashboard-section-title">Severidade (soma do período)</h3>
+            <canvas id="dashboard-severity-chart" height="160"></canvas>
+          </div>
+        </div>
+        <div class="dashboard-tables">
+          <div>
+            <h3 class="dashboard-section-title">Top issues</h3>
+            <div class="dashboard-table-wrap">
+              <table class="portfolio-table" id="dashboard-top-issues">
+                <thead><tr><th>Título</th><th>Sev</th><th>Alvo</th><th>N</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div>
+            <h3 class="dashboard-section-title">Scans recentes</h3>
+            <div class="dashboard-table-wrap">
+              <table class="portfolio-table" id="dashboard-recent-scans">
+                <thead><tr><th>Alvo</th><th>Vulns</th><th>C</th><th>H</th><th>Quando</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="dashboard-export">
+          <button type="button" class="term-btn" data-export="json">Export JSON</button>
+          <button type="button" class="term-btn" data-export="csv">Export CSV</button>
+          <button type="button" class="term-btn" data-export="pdf">Export PDF</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -364,6 +492,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=48"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script type="module" src="/static/js/main.js?v=54"></script>
 </body>
 </html>

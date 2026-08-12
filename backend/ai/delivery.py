@@ -48,11 +48,15 @@ def build_delivery_bundle(target: str) -> bytes:
         history, [], title=title, surface_target=target, snapshot_baseline=False
     )
     gate = confidence_gate_buckets(target)
+    from backend.ai.delta import format_delta_markdown
+
     delta = compute_delta(target)
     risk = risk_score_for_target(target)
+    surf_delta = delta.get("surface") or {}
     meta: dict[str, Any] = {
         "target": t,
         "client": data.get("client"),
+        "client_id": data.get("client_id"),
         "summary": surface_summary(data),
         "risk": risk,
         "gate_counts": {k: len(v) for k, v in gate.items()},
@@ -61,6 +65,9 @@ def build_delivery_bundle(target: str) -> bytes:
             "fixed": len(delta.get("fixed") or []),
             "new": len(delta.get("new") or []),
             "still_open": len(delta.get("still_open") or []),
+            "ports_opened": len(surf_delta.get("ports_opened") or []),
+            "ports_closed": len(surf_delta.get("ports_closed") or []),
+            "hosts_added": len(surf_delta.get("hosts_added") or []),
         },
     }
 
@@ -70,6 +77,7 @@ def build_delivery_bundle(target: str) -> bytes:
         zf.writestr("relatorio.html", html_doc)
         zf.writestr("meta.json", json.dumps(meta, ensure_ascii=False, indent=2))
         zf.writestr("delta.json", json.dumps(delta, ensure_ascii=False, indent=2))
+        zf.writestr("delta.md", format_delta_markdown(delta))
         zf.writestr(
             "findings_executive.json",
             json.dumps(gate.get("executive") or [], ensure_ascii=False, indent=2),

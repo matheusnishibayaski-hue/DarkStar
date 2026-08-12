@@ -110,3 +110,20 @@ async def api_token_guard(request: Request, call_next):
         return await call_next(request)
 
     return JSONResponse(status_code=401, content={"detail": "Token de API inválido ou ausente."})
+
+
+async def role_guard(request: Request, call_next):
+    """Restringe writes quando OPERATOR_ROLE=viewer (uso interno, sem portal)."""
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    from backend.security.roles import method_allowed
+
+    if not method_allowed(request.method, path):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": "Papel viewer: apenas leitura. Defina OPERATOR_ROLE=analyst|admin."
+            },
+        )
+    return await call_next(request)

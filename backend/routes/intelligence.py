@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.config import INTELLIGENCE_ENABLED
@@ -83,3 +83,19 @@ def api_threat_model_get(target: str):
     if not data:
         raise HTTPException(status_code=404, detail="Threat model não encontrado.")
     return data
+
+
+@router.get("/fp-suppress")
+def api_fp_suppress_list(limit: int = 100):
+    """Padrões aprendidos como falso positivo (supressão em imports)."""
+    from backend.ai.fp_learn import list_suppressed
+
+    return {"patterns": list_suppressed(limit=limit)}
+
+
+@router.delete("/fp-suppress")
+def api_fp_suppress_clear(pattern_key: str | None = Query(default=None)):
+    from backend.ai.fp_learn import clear_suppressed
+
+    n = clear_suppressed(pattern_key)
+    return {"cleared": n, "pattern_key": pattern_key}

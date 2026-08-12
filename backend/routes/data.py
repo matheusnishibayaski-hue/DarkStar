@@ -14,6 +14,7 @@ from backend.executor.data_cleanup import (
     delete_surface,
     purge_audit,
     purge_categories,
+    purge_older_than,
     storage_summary,
 )
 
@@ -69,6 +70,25 @@ def api_data_purge(req: PurgeRequest):
         raise HTTPException(status_code=400, detail="Alvo inválido.")
     removed = purge_categories(req.categories, target=req.target)
     return {"removed": removed, "summary": storage_summary()}
+
+
+@router.post("/retention")
+def api_data_retention(
+    days: int | None = Query(default=None, ge=1, le=3650),
+    confirm: bool = Query(default=False),
+):
+    """Purge por idade (RETENTION_DAYS do .env se days omitido)."""
+    from backend.config import RETENTION_DAYS
+
+    if not confirm:
+        raise HTTPException(status_code=400, detail="Envie confirm=true.")
+    n = days if days is not None else RETENTION_DAYS
+    if not n or n <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Defina days=N ou RETENTION_DAYS>0 no .env",
+        )
+    return {"removed": purge_older_than(n), "days": n}
 
 
 @router.delete("/logs/{log_id}")

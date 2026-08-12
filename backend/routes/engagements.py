@@ -28,6 +28,7 @@ class EngagementCreateRequest(BaseModel):
     risk_profile: str = Field(default="", max_length=32)
     mission_id: str = Field(default="", max_length=64)
     client: str = Field(default="", max_length=200)
+    client_id: str = Field(default="", max_length=64)
     scope_notes: str = Field(default="", max_length=4000)
     brand_name: str = Field(default="", max_length=120)
 
@@ -36,9 +37,19 @@ class EngagementPatchRequest(BaseModel):
     objective: str | None = Field(default=None, max_length=2000)
     risk_profile: str | None = Field(default=None, max_length=32)
     client: str | None = Field(default=None, max_length=200)
+    client_id: str | None = Field(default=None, max_length=64)
     scope_notes: str | None = Field(default=None, max_length=4000)
     brand_name: str | None = Field(default=None, max_length=120)
     label: str | None = Field(default=None, max_length=120)
+    lifecycle: str | None = Field(default=None, max_length=32)
+
+
+class ScannerImportRequest(BaseModel):
+    content: str = Field(..., min_length=1, max_length=5_000_000)
+    format: str = Field(default="auto", max_length=32)
+
+
+_LIFECYCLES = frozenset({"prospect", "active", "paused", "closed"})
 
 
 class PhasePatchRequest(BaseModel):
@@ -57,8 +68,18 @@ def _ensure_scope(target: str) -> None:
 
 
 @router.get("/surface")
-def api_surface_list():
-    return {"targets": list_surface_summaries()}
+def api_surface_list(
+    client_id: str | None = Query(default=None, max_length=64),
+):
+    from backend.clients.runtime import get_active_client_id
+
+    cid = (client_id or "").strip() or None
+    # Sem filtro explícito: não força active (evita esconder legado)
+    return {
+        "targets": list_surface_summaries(client_id=cid),
+        "active_client_id": get_active_client_id(),
+        "filter_client_id": cid,
+    }
 
 
 @router.get("/surface/{target}")
@@ -73,14 +94,20 @@ def api_surface_detail(target: str):
 
 @router.post("/engagements")
 def api_engagement_create(req: EngagementCreateRequest):
+    from backend.clients.runtime import get_active_client_id
+    from backend.clients.store import ensure_default_client, normalize_client_id
+
     _ensure_scope(req.target)
+    ensure_default_client()
     profile = normalize_risk_profile(req.risk_profile or RISK_PROFILE)
+    cid = normalize_client_id(req.client_id or get_active_client_id() or "default")
     data = get_or_create_surface(
         req.target,
         objective=req.objective,
         risk_profile=profile,
         mission_id=req.mission_id,
         client=req.client,
+        client_id=cid,
         scope_notes=req.scope_notes,
         brand_name=req.brand_name or REPORT_BRAND_NAME,
     )
@@ -89,6 +116,7 @@ def api_engagement_create(req: EngagementCreateRequest):
         "phase": data.get("phase"),
         "risk_profile": data.get("risk_profile"),
         "client": data.get("client"),
+        "client_id": data.get("client_id"),
         "scope_notes": data.get("scope_notes"),
         "brand_name": data.get("brand_name"),
         "summary": surface_summary(data),
@@ -107,17 +135,31 @@ def api_engagement_patch(target: str, req: EngagementPatchRequest):
         data["risk_profile"] = normalize_risk_profile(req.risk_profile)
     if req.client is not None:
         data["client"] = req.client
+    if req.client_id is not None:
+        from backend.clients.store import normalize_client_id
+
+        data["client_id"] = normalize_client_id(req.client_id)
     if req.scope_notes is not None:
         data["scope_notes"] = req.scope_notes
     if req.brand_name is not None:
         data["brand_name"] = req.brand_name or REPORT_BRAND_NAME
     if req.label is not None:
         data["label"] = req.label.strip()[:120]
+    if req.lifecycle is not None:
+        life = req.lifecycle.strip().lower()
+        if life not in _LIFECYCLES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"lifecycle inválido. Use: {', '.join(sorted(_LIFECYCLES))}",
+            )
+        data["lifecycle"] = life
     save_surface(target, data)
     return {
         "target": normalize_target(target),
         "label": data.get("label"),
         "client": data.get("client"),
+        "client_id": data.get("client_id"),
+        "lifecycle": data.get("lifecycle"),
         "scope_notes": data.get("scope_notes"),
         "brand_name": data.get("brand_name"),
         "risk_profile": data.get("risk_profile"),
@@ -154,6 +196,8 @@ def api_engagement_get(target: str):
         "risk_profile": data.get("risk_profile"),
         "mission_id": data.get("mission_id"),
         "client": data.get("client"),
+        "client_id": data.get("client_id"),
+        "lifecycle": data.get("lifecycle") or "active",
         "scope_notes": data.get("scope_notes"),
         "brand_name": data.get("brand_name"),
         "summary": surface_summary(data),
@@ -208,16 +252,18 @@ def api_engagement_delta(target: str):
 
 @router.post("/engagements/{target}/baseline")
 def api_engagement_baseline(target: str):
-    """Congela confirmados atuais como baseline do próximo reteste."""
+    """Congela findings confirmados + superfície como baseline do próximo reteste."""
     if not load_surface(target):
         raise HTTPException(status_code=404, detail="Engajamento não encontrado.")
-    from backend.ai.delta import snapshot_confirmed
+    from backend.ai.delta import snapshot_surface_baseline
 
-    baseline = snapshot_confirmed(target)
+    snap = snapshot_surface_baseline(target)
     return {
         "target": normalize_target(target),
-        "baseline_count": len(baseline),
-        "baseline": baseline,
+        "baseline_count": snap.get("baseline_count", 0),
+        "baseline": snap.get("findings") or [],
+        "baseline_surface": snap.get("surface") or {},
+        "baseline_at": snap.get("baseline_at"),
     }
 
 
@@ -225,6 +271,7 @@ def api_engagement_baseline(target: str):
 def api_engagement_report(
     target: str,
     format: str = Query(default="pdf", pattern="^(pdf|md|html|zip)$"),
+    regenerate: bool = Query(default=False),
 ):
     """Export do relatório — padrão PDF."""
     from fastapi.responses import Response
@@ -258,7 +305,11 @@ def api_engagement_report(
         from backend.ai.pdf_report import generate_report_pdf
         from backend.executor.recon_db import normalize_target as _nt
 
-        raw = generate_report_pdf(surface_target=target, title=title)
+        raw = generate_report_pdf(
+            surface_target=target,
+            title=title,
+            regenerate_executive=regenerate,
+        )
         fname = f"{_nt(target)}-relatorio.pdf"
         return Response(
             content=raw,
@@ -294,9 +345,26 @@ def api_engagement_report(
 def api_engagement_risk(target: str):
     if not load_surface(target):
         raise HTTPException(status_code=404, detail="Engajamento não encontrado.")
+    from backend.ai.risk_history import load_risk_history, record_risk_snapshot
     from backend.ai.risk_score import risk_score_for_target
 
-    return risk_score_for_target(target)
+    risk = risk_score_for_target(target)
+    record_risk_snapshot(target, risk, source="api")
+    return {**risk, "history": load_risk_history(target, limit=60)}
+
+
+@router.post("/engagements/{target}/import")
+def api_engagement_import(target: str, req: ScannerImportRequest):
+    """Import Nuclei JSONL ou Nessus CSV para o Attack Surface."""
+    _ensure_scope(target)
+    if not load_surface(target):
+        get_or_create_surface(target)
+    from backend.ai.scanner_import import import_scanner_payload
+
+    try:
+        return import_scanner_payload(target, req.content, format=req.format)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.patch("/engagements/{target}/phase")
@@ -333,9 +401,15 @@ def api_finding_status(target: str, finding_id: str, req: FindingStatusRequest):
 def api_engagement_verify(
     target: str,
     max_findings: int = Query(default=None, ge=1, le=80),
+    auto_baseline: bool | None = Query(default=None),
 ):
     """Roda o pipeline de PoC + re-verificação e fecha findings para relatório."""
+    from backend.ai.risk_history import previous_score, record_risk_snapshot
+    from backend.ai.risk_score import risk_score_for_target
     from backend.ai.verify import run_verification_pipeline
+    from backend.alerts.webhook import maybe_alert_delta
+    from backend.ai.delta import compute_delta
+    from backend.config import AUTO_BASELINE_AFTER_VERIFY
 
     _ensure_scope(target)
     if not load_surface(target):
@@ -344,6 +418,22 @@ def api_engagement_verify(
         target, max_findings=max_findings or VERIFY_MAX_FINDINGS
     )
     data = load_surface(target)
+    risk = risk_score_for_target(target)
+    prev = previous_score(target)
+    record_risk_snapshot(target, risk, source="verify")
+    # Delta/alertas ANTES do baseline automático (senão o diff zera)
+    delta = compute_delta(target)
+    alerts = maybe_alert_delta(target, delta=delta, risk=risk, previous_score=prev)
+
+    do_baseline = (
+        AUTO_BASELINE_AFTER_VERIFY if auto_baseline is None else auto_baseline
+    )
+    baseline_info = None
+    if do_baseline:
+        from backend.ai.delta import snapshot_surface_baseline
+
+        baseline_info = snapshot_surface_baseline(target)
+
     return {
         "target": normalize_target(target),
         "confirmed": result.confirmed,
@@ -351,6 +441,15 @@ def api_engagement_verify(
         "discarded": result.discarded,
         "verify_commands_run": result.verify_commands_run,
         "summary": surface_summary(data) if data else {},
+        "auto_baseline": baseline_info,
+        "risk": risk,
+        "alerts": alerts,
+        "delta": {
+            "has_baseline": delta.get("has_baseline"),
+            "fixed": len(delta.get("fixed") or []),
+            "new": len(delta.get("new") or []),
+            "still_open": len(delta.get("still_open") or []),
+        },
         "outcomes": [
             {
                 "finding_id": o.finding_id,

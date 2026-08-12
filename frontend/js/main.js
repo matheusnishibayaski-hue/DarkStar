@@ -59,6 +59,10 @@ import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 import { initGuidedTour, startGuidedTour, stopGuidedTour, isGuidedTourActive } from "./guided-tour.js";
 import { deleteSessionLogs, deleteIntelSession } from "./data-admin.js";
 import { initMasterKey, isElevated } from "./master-key.js";
+import { initClientWorkspace } from "./client-workspace.js";
+import { initPortfolio } from "./portfolio.js";
+import { initDashboard } from "./dashboard.js";
+import { initRemediationWizard } from "./remediation-wizard.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
@@ -234,6 +238,10 @@ onOffensiveModeChange(() => {
 });
 
 initOfflineMode(document.getElementById("offline-mode-toggle"));
+initClientWorkspace();
+initPortfolio();
+initDashboard();
+initRemediationWizard();
 onOfflineModeChange(() => {
   refreshStatusBar();
 });

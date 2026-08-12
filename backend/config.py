@@ -88,6 +88,77 @@ if RISK_PROFILE not in {"passive", "safe-active", "full"}:
 VERIFY_MAX_FINDINGS = int(os.getenv("VERIFY_MAX_FINDINGS", "40"))
 VERIFY_MAX_FINDINGS = max(12, min(VERIFY_MAX_FINDINGS, 80))
 REPORT_BRAND_NAME = os.getenv("REPORT_BRAND_NAME", "DarkStar").strip() or "DarkStar"
+# White-label da consultoria (PDF / portal). Prioridade: engagement brand → estes → DarkStar
+CONSULTING_NAME = (
+    os.getenv("CONSULTING_NAME", "") or REPORT_BRAND_NAME
+).strip() or "DarkStar"
+_default_logo = BASE_DIR / "assets" / "darkstar-logo.png"
+CONSULTING_LOGO_PATH = (
+    os.getenv("CONSULTING_LOGO_PATH", "") or ""
+).strip() or (
+    "assets/darkstar-logo.png" if _default_logo.is_file() else ""
+)
+CONSULTING_PRIMARY_COLOR = (
+    os.getenv("CONSULTING_PRIMARY_COLOR", "#1E90FF") or "#1E90FF"
+).strip()
+CONSULTING_FOOTER = (
+    os.getenv("CONSULTING_FOOTER", "")
+    or "Documento confidencial — uso autorizado apenas."
+).strip()
+# Workspaces multi-cliente locais
+CLIENTS_DIR = BASE_DIR / "backend" / "clients"
+CLIENTS_DIR.mkdir(parents=True, exist_ok=True)
+# Timeout do sumário executivo via LLM (segundos)
+EXECUTIVE_SUMMARY_TIMEOUT = int(os.getenv("EXECUTIVE_SUMMARY_TIMEOUT", "15"))
+EXECUTIVE_SUMMARY_TIMEOUT = max(5, min(EXECUTIVE_SUMMARY_TIMEOUT, 60))
+# MSSP local — recorrência, alertas, retenção, papel do operador
+SCHEDULE_ENABLED = os.getenv("SCHEDULE_ENABLED", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+SCHEDULE_TICK_SEC = int(os.getenv("SCHEDULE_TICK_SEC", "60"))
+SCHEDULE_TICK_SEC = max(15, min(SCHEDULE_TICK_SEC, 3600))
+SCHEDULE_DIR = BASE_DIR / "backend" / "schedules"
+SCHEDULE_DIR.mkdir(parents=True, exist_ok=True)
+ALERT_WEBHOOK_URL = (os.getenv("ALERT_WEBHOOK_URL", "") or "").strip()
+# Token GitHub (PAT ou Actions GITHUB_TOKEN) — comentários/issues/status
+GITHUB_TOKEN = (os.getenv("GITHUB_TOKEN", "") or "").strip()
+# Notificações multicanal
+SLACK_WEBHOOK_URL = (os.getenv("SLACK_WEBHOOK_URL", "") or "").strip()
+SLACK_CHANNEL = (os.getenv("SLACK_CHANNEL", "#security") or "#security").strip()
+DISCORD_WEBHOOK_URL = (os.getenv("DISCORD_WEBHOOK_URL", "") or "").strip()
+TELEGRAM_BOT_TOKEN = (os.getenv("TELEGRAM_BOT_TOKEN", "") or "").strip()
+TELEGRAM_CHAT_ID = (os.getenv("TELEGRAM_CHAT_ID", "") or "").strip()
+SMTP_SERVER = (os.getenv("SMTP_SERVER", "") or "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
+SMTP_USER = (os.getenv("SMTP_USER", "") or "").strip()
+SMTP_PASSWORD = (os.getenv("SMTP_PASSWORD", "") or "").strip()
+EMAIL_FROM = (os.getenv("EMAIL_FROM", "") or "").strip()
+EMAIL_TO = (os.getenv("EMAIL_TO", "") or "").strip()
+JIRA_URL = (os.getenv("JIRA_URL", "") or "").strip()
+JIRA_USER = (os.getenv("JIRA_USER", "") or "").strip()
+JIRA_TOKEN = (os.getenv("JIRA_TOKEN", "") or "").strip()
+JIRA_PROJECT = (os.getenv("JIRA_PROJECT", "SEC") or "SEC").strip()
+ALERT_ON_CRITICAL = os.getenv("ALERT_ON_CRITICAL", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+ALERT_RISK_JUMP = float(os.getenv("ALERT_RISK_JUMP", "15") or 15)
+AUTO_BASELINE_AFTER_VERIFY = os.getenv(
+    "AUTO_BASELINE_AFTER_VERIFY", "true"
+).strip().lower() in {"1", "true", "yes", "on"}
+RETENTION_DAYS = int(os.getenv("RETENTION_DAYS", "0") or 0)  # 0 = desligado
+RISK_HISTORY_DIR = BASE_DIR / "backend" / "risk_history"
+RISK_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+FP_SUPPRESS_PATH = BASE_DIR / "backend" / "fp_suppress.json"
+# Papel local do operador: admin | analyst | viewer (sem portal do cliente)
+OPERATOR_ROLE = (os.getenv("OPERATOR_ROLE", "admin") or "admin").strip().lower()
+if OPERATOR_ROLE not in {"admin", "analyst", "viewer"}:
+    OPERATOR_ROLE = "admin"
 _max_dl_mb = int(os.getenv("MAX_FILE_DOWNLOAD_MB", "50"))
 MAX_FILE_DOWNLOAD_BYTES = _max_dl_mb * 1024 * 1024
 
@@ -200,8 +271,43 @@ __all__ = [
     "RECON_TTL_DAYS",
     "AUDIT_DIR",
     "SURFACE_DIR",
+    "CONSULTING_NAME",
+    "CONSULTING_LOGO_PATH",
+    "CONSULTING_PRIMARY_COLOR",
+    "CONSULTING_FOOTER",
+    "CLIENTS_DIR",
+    "EXECUTIVE_SUMMARY_TIMEOUT",
+    "SCHEDULE_ENABLED",
+    "SCHEDULE_TICK_SEC",
+    "SCHEDULE_DIR",
+    "ALERT_WEBHOOK_URL",
+    "GITHUB_TOKEN",
+    "SLACK_WEBHOOK_URL",
+    "SLACK_CHANNEL",
+    "DISCORD_WEBHOOK_URL",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+    "SMTP_SERVER",
+    "SMTP_PORT",
+    "SMTP_USER",
+    "SMTP_PASSWORD",
+    "EMAIL_FROM",
+    "EMAIL_TO",
+    "JIRA_URL",
+    "JIRA_USER",
+    "JIRA_TOKEN",
+    "JIRA_PROJECT",
+    "ALERT_ON_CRITICAL",
+    "ALERT_RISK_JUMP",
+    "AUTO_BASELINE_AFTER_VERIFY",
+    "RETENTION_DAYS",
+    "RISK_HISTORY_DIR",
+    "FP_SUPPRESS_PATH",
+    "OPERATOR_ROLE",
+    "REPORT_BRAND_NAME",
     "RISK_PROFILE",
     "MAX_FILE_DOWNLOAD_BYTES",
+    "VERIFY_MAX_FINDINGS",
     "ALLOWED_TARGETS",
     "THREAT_INTEL_ENABLED",
     "THREAT_INTEL_CACHE_TTL",

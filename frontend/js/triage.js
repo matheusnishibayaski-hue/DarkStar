@@ -4,6 +4,7 @@ import { openOverlay, closeOverlay, toast } from "./ui.js";
 import { escapeHtml } from "./exec.js";
 import { deleteEngagement } from "./data-admin.js";
 import { attachDeleteAction } from "./row-actions.js";
+import { openRemediationWizard } from "./remediation-wizard.js";
 import {
   listSurface,
   getEngagementTriage,
@@ -15,6 +16,8 @@ import {
 
 let ctx = {};
 let currentTarget = "";
+/** @type {Record<string, object>} */
+let findingsById = {};
 
 export function initTriagePanel(context) {
   ctx = context;
@@ -105,6 +108,10 @@ async function loadTriageDetail(target) {
 
     const candidates = (sum.findings_candidates || 0) + (sum.findings_inconclusive || 0);
     const total = sum.findings_total || exec.length + human.length + archive.length;
+    findingsById = {};
+    for (const f of [...exec, ...human, ...archive]) {
+      if (f?.id) findingsById[String(f.id)] = { ...f, target: currentTarget };
+    }
     wrap.innerHTML = `
       <div class="triage-summary">
         <span class="triage-risk">risco:<b>${escapeHtml(String(risk.score ?? "—"))}/100 ${escapeHtml(risk.label || "")}</b></span>
@@ -170,8 +177,10 @@ function section(title, items, kind, showActions) {
             <button type="button" data-action="confirmed" data-id="${id}">✓</button>
             <button type="button" data-action="false_positive" data-id="${id}">FP</button>
             <button type="button" data-action="discarded" data-id="${id}">✕</button>
+            <button type="button" data-action="remediate" data-id="${id}" title="Remediação IA">fix</button>
           </div>`
-        : `<span class="triage-st">${escapeHtml(f.status || "")}</span>`;
+        : `<span class="triage-st">${escapeHtml(f.status || "")}</span>
+           <button type="button" class="triage-fix-btn" data-action="remediate" data-id="${id}" title="Remediação IA">fix</button>`;
       return `<div class="triage-row triage-row--${escapeHtml(kind)}">
         <span class="triage-sev triage-sev--${escapeHtml(String(f.severity || "info").toLowerCase())}">${escapeHtml(String(f.severity || "?").toUpperCase())}</span>
         <span class="triage-title" title="${escapeHtml(f.title || "")}">${escapeHtml(f.title || "")}</span>
@@ -187,6 +196,11 @@ async function onFindingAction(btn) {
   const status = btn.getAttribute("data-action");
   const fid = btn.getAttribute("data-id");
   if (!currentTarget || !fid || !status) return;
+  if (status === "remediate") {
+    const finding = findingsById[fid] || { id: fid, title: fid, target: currentTarget };
+    await openRemediationWizard(finding);
+    return;
+  }
   try {
     await patchFindingStatus(currentTarget, fid, { status, evidence: `manual:${status}` });
     toast(`finding → ${status}`, "success");

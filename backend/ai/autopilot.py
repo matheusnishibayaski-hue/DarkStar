@@ -13,13 +13,9 @@ from backend.ai.agent import (
 )
 from backend.ai.findings import findings_for_report
 from backend.ai.healing import healing_prompt, should_attempt_healing
-from backend.ai.verify import run_verification_pipeline
 from backend.ai.openrouter_common import (
     is_retryable_error,
 )
-from backend.ai.providers import get_llm_provider
-from backend.ai.providers.base import BaseLLMProvider
-from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.phases import (
     advance_surface_phase,
     is_tool_allowed,
@@ -27,13 +23,19 @@ from backend.ai.phases import (
     normalize_risk_profile,
     phase_prompt_block,
 )
+from backend.ai.providers import get_llm_provider
+from backend.ai.providers.base import BaseLLMProvider
+from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.scan_profiles import (
     max_tool_budget,
-    normalize_profile as normalize_scan_profile,
     resolve_scan_tools,
     scan_profile_prompt_block,
 )
+from backend.ai.scan_profiles import (
+    normalize_profile as normalize_scan_profile,
+)
 from backend.ai.sse import format_sse
+from backend.ai.verify import run_verification_pipeline
 from backend.config import (
     AUTONOMOUS_SYSTEM_PROMPT,
     MAX_AUTONOMOUS_ROUNDS,
@@ -619,6 +621,20 @@ def _run_autonomous_body(
         f"{'objetivo atingido' if objective_met else stopped_reason}"
     )
     final_message = final_message + status_line
+
+    try:
+        from backend.database.db import record_scan_from_target
+
+        record_scan_from_target(
+            recon_target or target,
+            risk_profile=str(profile or ""),
+            scan_profile=str(scan_prof or ""),
+            rounds=rounds_completed,
+            status="completed",
+            scan_type="autonomous",
+        )
+    except Exception:  # noqa: BLE001
+        pass
 
     return AutonomousResponse(
         message=final_message,

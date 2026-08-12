@@ -74,8 +74,43 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _path_for(target: str) -> Path:
+def _legacy_path(target: str) -> Path:
     return SURFACE_DIR / f"{normalize_target(target)}.json"
+
+
+def _client_surface_path(target: str, client_id: str) -> Path:
+    from backend.clients.store import surface_dir
+
+    return surface_dir(client_id) / f"{normalize_target(target)}.json"
+
+
+def _path_for(target: str, client_id: str | None = None) -> Path:
+    """Resolve path: workspace do cliente (se não-default) ou legado."""
+    cid = (client_id or "").strip().lower()
+    if cid and cid != "default":
+        return _client_surface_path(target, cid)
+    return _legacy_path(target)
+
+
+def _find_surface_path(target: str) -> Path | None:
+    """Localiza surface em legado ou em qualquer workspace de cliente."""
+    norm = normalize_target(target)
+    legacy = _legacy_path(norm)
+    if legacy.is_file():
+        return legacy
+    try:
+        from backend.config import CLIENTS_DIR
+
+        if CLIENTS_DIR.is_dir():
+            for child in CLIENTS_DIR.iterdir():
+                if not child.is_dir():
+                    continue
+                cand = child / "surface" / f"{norm}.json"
+                if cand.is_file():
+                    return cand
+    except Exception:  # noqa: BLE001
+        pass
+    return None
 
 
 def empty_surface(
@@ -85,16 +120,21 @@ def empty_surface(
     risk_profile: str = "safe-active",
     mission_id: str = "",
     client: str = "",
+    client_id: str = "",
     scope_notes: str = "",
     brand_name: str = "",
     label: str = "",
 ) -> dict[str, Any]:
+    from backend.clients.store import normalize_client_id
+
+    cid = normalize_client_id(client_id or "default")
     return {
         "target": normalize_target(target),
         "objective": objective,
         "mission_id": mission_id,
         "risk_profile": risk_profile,
-        "client": client,
+        "client": client or "",
+        "client_id": cid,
         "scope_notes": scope_notes,
         "brand_name": brand_name or "DarkStar",
         "label": label,
@@ -109,15 +149,17 @@ def empty_surface(
         "tools_run": [],
         "commands_run": 0,
         "baseline_findings": [],
+        "baseline_surface": {},
         "baseline_at": None,
+        "lifecycle": "active",
         "updated_at": _now(),
         "created_at": _now(),
     }
 
 
 def load_surface(target: str) -> dict[str, Any]:
-    path = _path_for(target)
-    if not path.is_file():
+    path = _find_surface_path(target)
+    if not path:
         return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -127,10 +169,20 @@ def load_surface(target: str) -> dict[str, Any]:
 
 
 def save_surface(target: str, data: dict[str, Any]) -> dict[str, Any]:
-    path = _path_for(target)
+    from backend.clients.store import normalize_client_id
+
     data = dict(data)
     data["target"] = normalize_target(target)
     data["updated_at"] = _now()
+    cid = normalize_client_id(str(data.get("client_id") or "default"))
+    data["client_id"] = cid
+    path = _path_for(target, cid if cid != "default" else None)
+    # Se já existia no legado e client_id=default, mantém legado
+    if cid == "default":
+        existing = _find_surface_path(target)
+        if existing and existing.parent == SURFACE_DIR:
+            path = existing
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return data
 
@@ -142,10 +194,16 @@ def get_or_create_surface(
     risk_profile: str = "safe-active",
     mission_id: str = "",
     client: str = "",
+    client_id: str = "",
     scope_notes: str = "",
     brand_name: str = "",
 ) -> dict[str, Any]:
+    from backend.clients.store import normalize_client_id
+
     existing = load_surface(target)
+    cid = normalize_client_id(
+        client_id or (existing or {}).get("client_id") or "default"
+    )
     if existing:
         if objective:
             existing["objective"] = objective
@@ -155,6 +213,8 @@ def get_or_create_surface(
             existing["risk_profile"] = risk_profile
         if client:
             existing["client"] = client
+        if client_id or not existing.get("client_id"):
+            existing["client_id"] = cid
         if scope_notes:
             existing["scope_notes"] = scope_notes
         if brand_name:
@@ -167,6 +227,7 @@ def get_or_create_surface(
             objective=objective,
             risk_profile=risk_profile,
             mission_id=mission_id,
+            client_id=cid,
             client=client,
             scope_notes=scope_notes,
             brand_name=brand_name,
@@ -802,22 +863,53 @@ def mark_finding_status(
                 finding["verified_at"] = _now()
             if status == "discarded" and evidence:
                 finding["discard_reason"] = evidence[:300]
+            if status == "false_positive":
+                try:
+                    from backend.ai.fp_learn import remember_false_positive
+
+                    remember_false_positive(finding, target=normalize_target(target))
+                except Exception:  # noqa: BLE001
+                    pass
             save_surface(target, data)
             return finding
     return None
 
 
-def list_surface_summaries() -> list[dict[str, Any]]:
-    if not SURFACE_DIR.is_dir():
-        return []
+def list_surface_summaries(client_id: str | None = None) -> list[dict[str, Any]]:
+    """Lista surfaces (legado + workspaces). Filtra por client_id se informado."""
+    from backend.clients.store import normalize_client_id
+    from backend.config import CLIENTS_DIR
+
+    paths: list[Path] = []
+    if SURFACE_DIR.is_dir():
+        paths.extend(SURFACE_DIR.glob("*.json"))
+    if CLIENTS_DIR.is_dir():
+        for child in CLIENTS_DIR.iterdir():
+            sdir = child / "surface"
+            if sdir.is_dir():
+                paths.extend(sdir.glob("*.json"))
+
+    want = normalize_client_id(client_id) if client_id else None
+    seen: set[str] = set()
     items: list[dict[str, Any]] = []
-    for path in SURFACE_DIR.glob("*.json"):
+    for path in paths:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             continue
-        if isinstance(data, dict):
-            items.append(surface_summary(data))
+        if not isinstance(data, dict):
+            continue
+        t = normalize_target(str(data.get("target") or path.stem))
+        if t in seen:
+            continue
+        seen.add(t)
+        cid = normalize_client_id(str(data.get("client_id") or "default"))
+        if want and cid != want:
+            continue
+        summary = surface_summary(data)
+        summary["client_id"] = cid
+        summary["client"] = data.get("client") or ""
+        items.append(summary)
     items.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
     return items
 

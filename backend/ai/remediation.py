@@ -167,4 +167,31 @@ def remediations_for_findings(findings: list[dict[str, Any]]) -> list[dict[str, 
                 "key": rem["key"],
             }
         )
-    return rows
+        return rows
+
+
+# Re-exports da camada IA (wizard / API)
+from backend.ai.remediation_ai import (  # noqa: E402
+    RemediationAdvisor,
+    RemediationPlan,
+    RemediationStep,
+    RemediationTracker,
+    RemediationVerifier,
+    remediation_advisor,
+    remediation_tracker,
+    remediation_verifier,
+)
+
+__all__ = [
+    "classify_remediation_key",
+    "remediation_for",
+    "remediations_for_findings",
+    "RemediationAdvisor",
+    "RemediationPlan",
+    "RemediationStep",
+    "RemediationTracker",
+    "RemediationVerifier",
+    "remediation_advisor",
+    "remediation_tracker",
+    "remediation_verifier",
+]

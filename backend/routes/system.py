@@ -31,6 +31,9 @@ def client_config():
     from backend.security.privileges import master_key_configured, privilege_status
     from backend.ai.providers.runtime import get_active_provider_name
 
+    from backend.config import OPERATOR_ROLE
+    from backend.security.roles import current_role
+
     active = get_active_provider_name()
     return {
         "version": APP_VERSION,
@@ -45,6 +48,8 @@ def client_config():
         "master_key_configured": master_key_configured(),
         "ai_provider": active,
         "ai_offline": active == "ollama",
+        "operator_role": current_role(),
+        "operator_role_env": OPERATOR_ROLE,
         **privilege_status(),
     }
 
