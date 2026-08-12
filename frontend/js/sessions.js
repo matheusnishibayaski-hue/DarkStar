@@ -344,12 +344,17 @@ function beginRenameSession(sessionId, anchorEl) {
 }
 
 export function deleteSession(id, e) {
-  e?.stopPropagation();
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  if (!id) return;
   const session = store.sessions.find((s) => s.id === id);
   const logIds = session ? collectSessionLogIds(session) : [];
-  ctx.beforeDeleteSession?.(id, logIds);
+  try {
+    ctx.beforeDeleteSession?.(id, logIds);
+  } catch (err) {
+    console.warn("before_delete_session_failed", err);
+  }
   store.sessions = store.sessions.filter((s) => s.id !== id);
-  apiDelete(id).catch((err) => console.warn("chat_delete_failed", err));
   if (store.activeId === id) {
     store.activeId = store.sessions[0]?.id || null;
     writeActiveId(store.activeId);
@@ -360,6 +365,7 @@ export function deleteSession(id, e) {
   renderSessions();
   updateSessionTitle();
   ctx.afterDeleteSession?.();
+  apiDelete(id).catch((err) => console.warn("chat_delete_failed", err));
 }
 
 export function switchSession(id) {

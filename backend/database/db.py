@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 _engine: Engine | None = None
 _SessionLocal: sessionmaker[Session] | None = None
 _using_sqlite: bool = False
+_dashboard_ready: bool = False
 
 _SQLITE_PATH = BASE_DIR / "backend" / "data" / "dashboard.db"
 
@@ -136,22 +137,27 @@ def _ensure_scan_history_columns() -> None:
 
 
 def ensure_dashboard_db() -> None:
-    """Garante tabelas do dashboard (idempotente; seguro no boot)."""
+    """Garante tabelas do dashboard uma vez (evita create_all em todo request)."""
+    global _dashboard_ready
+    if _dashboard_ready:
+        return
     try:
         init_db()
         _ensure_scan_history_columns()
+        _dashboard_ready = True
     except Exception as exc:  # noqa: BLE001
         logger.warning("dashboard_db_init_failed: %s", exc)
 
 
 def reset_engine_for_tests() -> None:
     """Reinicia singleton (apenas testes)."""
-    global _engine, _SessionLocal, _using_sqlite
+    global _engine, _SessionLocal, _using_sqlite, _dashboard_ready
     if _engine is not None:
         _engine.dispose()
     _engine = None
     _SessionLocal = None
     _using_sqlite = False
+    _dashboard_ready = False
 
 
 def _utcnow() -> datetime:

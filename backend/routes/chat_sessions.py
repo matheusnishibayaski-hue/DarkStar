@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -15,6 +16,8 @@ from backend.database.chat_store import (
     patch_chat_session,
     upsert_chat_session,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat-sessions", tags=["chat-sessions"])
 
@@ -76,6 +79,9 @@ def api_put_session(session_id: str, body: ChatSessionBody):
         data = upsert_chat_session(body.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("chat_session_put_failed id=%s", session_id)
+        raise HTTPException(status_code=500, detail=f"persist failed: {exc}") from exc
     return {"status": "ok", "session": data}
 
 
@@ -93,20 +99,23 @@ def api_patch_session(session_id: str, body: ChatSessionPatch):
 
 @router.delete("/{session_id}")
 def api_delete_session(session_id: str):
-    ok = delete_chat_session(session_id)
-    if not ok:
-        raise HTTPException(status_code=404, detail="session not found")
-    # Cascata: PDFs e intel da conversa
+    """Idempotente: 200 mesmo se a conversa já não existir no banco."""
+    try:
+        delete_chat_session(session_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("chat_session_delete_failed id=%s", session_id)
+        raise HTTPException(status_code=500, detail=f"delete failed: {exc}") from exc
+    # Cascata best-effort: PDFs e intel da conversa
     try:
         from backend.database.reports_store import delete_reports_for_session
 
         delete_reports_for_session(session_id)
     except Exception:  # noqa: BLE001
-        pass
+        logger.debug("chat_delete_reports_skipped", exc_info=True)
     try:
         from backend.executor.session_intel import delete_session_intel
 
         delete_session_intel(session_id)
     except Exception:  # noqa: BLE001
-        pass
+        logger.debug("chat_delete_intel_skipped", exc_info=True)
     return {"status": "ok", "deleted": True, "session_id": session_id}

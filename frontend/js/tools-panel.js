@@ -70,9 +70,11 @@ export function getPreferredTool() {
 export function setPreferredTool(tool) {
   preferredTool = tool;
   const session = getActiveSession();
-  if (session) {
+  if (session && session.preferredTool !== tool) {
     session.preferredTool = tool;
     saveStore();
+  } else if (session) {
+    session.preferredTool = tool;
   }
   const { toolBadge } = ctx;
   if (toolBadge) {
