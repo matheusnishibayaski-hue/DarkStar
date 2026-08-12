@@ -27,7 +27,7 @@ def _session_path(session_id: str) -> Path | None:
     return INTEL_SESSIONS_DIR / f"{session_id}.json"
 
 
-def load_session(session_id: str) -> dict[str, Any]:
+def _load_session_from_file(session_id: str) -> dict[str, Any]:
     path = _session_path(session_id)
     if not path or not path.is_file():
         return {}
@@ -38,16 +38,65 @@ def load_session(session_id: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def load_session(session_id: str) -> dict[str, Any]:
+    """Carrega intel da conversa (DB; migra JSON legado se existir)."""
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import IntelSessionRow
+
+    if not session_id or not _SESSION_ID_RE.match(session_id):
+        return {}
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            row = db.query(IntelSessionRow).filter(IntelSessionRow.session_id == session_id).first()
+            if row:
+                try:
+                    data = json.loads(row.payload_json or "{}")
+                except json.JSONDecodeError:
+                    data = {}
+                return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Fallback + migrate file → DB
+    data = _load_session_from_file(session_id)
+    if data:
+        save_session(session_id, data)
+        path = _session_path(session_id)
+        if path and path.is_file():
+            try:
+                path.unlink()
+            except OSError:
+                pass
+    return data
+
+
 def save_session(session_id: str, data: dict[str, Any]) -> dict[str, Any]:
-    path = _session_path(session_id)
-    if not path:
+    """Persiste intel da conversa no banco."""
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import IntelSessionRow
+
+    if not session_id or not _SESSION_ID_RE.match(session_id):
         return {}
     payload = dict(data)
     payload["session_id"] = session_id
     payload["updated_at"] = _now()
     if not payload.get("created_at"):
         payload["created_at"] = payload["updated_at"]
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    raw = json.dumps(payload, ensure_ascii=False)
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            row = db.query(IntelSessionRow).filter(IntelSessionRow.session_id == session_id).first()
+            if row:
+                row.payload_json = raw
+            else:
+                db.add(IntelSessionRow(session_id=session_id, payload_json=raw))
+    except Exception:  # noqa: BLE001
+        # último recurso: arquivo
+        path = _session_path(session_id)
+        if path:
+            path.write_text(raw, encoding="utf-8")
     return payload
 
 
@@ -324,14 +373,26 @@ def session_summary(session_id: str) -> dict[str, Any]:
 
 
 def list_session_summaries() -> list[dict[str, Any]]:
-    if not INTEL_SESSIONS_DIR.is_dir():
-        return []
-    items: list[dict[str, Any]] = []
-    for path in INTEL_SESSIONS_DIR.glob("*.json"):
-        sid = path.stem
-        if not _SESSION_ID_RE.match(sid):
-            continue
-        items.append(session_summary(sid))
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import IntelSessionRow
+
+    ids: list[str] = []
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            ids = [r.session_id for r in db.query(IntelSessionRow.session_id).all()]
+    except Exception:  # noqa: BLE001
+        ids = []
+
+    # Migra arquivos restantes
+    if INTEL_SESSIONS_DIR.is_dir():
+        for path in INTEL_SESSIONS_DIR.glob("*.json"):
+            sid = path.stem
+            if _SESSION_ID_RE.match(sid) and sid not in ids:
+                load_session(sid)  # migrate
+                ids.append(sid)
+
+    items = [session_summary(sid) for sid in ids if _SESSION_ID_RE.match(sid)]
     items.sort(key=lambda x: str(x.get("updated_at") or ""), reverse=True)
     return items
 
@@ -372,10 +433,25 @@ def patch_session_finding(
 
 def delete_session_intel(session_id: str) -> bool:
     """Remove índice da conversa e achados vinculados a ela."""
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import IntelSessionRow
+
     meta = load_session(session_id)
     path = _session_path(session_id)
     if path and path.is_file():
-        path.unlink()
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            db.query(IntelSessionRow).filter(IntelSessionRow.session_id == session_id).delete(
+                synchronize_session=False
+            )
+    except Exception:  # noqa: BLE001
+        pass
 
     removed_any = bool(meta)
     for target in meta.get("targets") or []:
@@ -392,7 +468,7 @@ def delete_session_intel(session_id: str) -> bool:
             surface["findings"] = kept
             save_surface(target, surface)
             removed_any = True
-    return removed_any or (path is None or not path.exists())
+    return removed_any or True
 
 
 def collect_session_tool_executions(session_id: str, limit: int = 80) -> list[dict[str, Any]]:

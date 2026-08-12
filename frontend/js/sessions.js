@@ -1,38 +1,135 @@
 import { STORAGE_KEY, ARGUS_WELCOME_MESSAGE } from "./constants.js";
-import { deleteSessionLogs } from "./data-admin.js";
+import { apiFetch } from "./api.js";
 import { escapeHtml } from "./exec.js";
 
 /** @type {{ sessionsEl: HTMLElement, sessionTitleEl: HTMLElement, onChanged?: () => void }} */
 let ctx = {};
 
-export let store = loadStore();
+export let store = { sessions: [], activeId: null };
+
+const ACTIVE_KEY = "darkstar-active-session";
+const MIGRATED_KEY = "darkstar-sessions-migrated-db";
+let saveTimer = null;
+let bootPromise = null;
 
 export function initSessions(context) {
   ctx = context;
 }
 
-export function loadStore() {
+function uid() {
+  return crypto.randomUUID?.() || `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function readActiveId() {
+  try {
+    return localStorage.getItem(ACTIVE_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeActiveId(id) {
+  try {
+    if (id) localStorage.setItem(ACTIVE_KEY, id);
+    else localStorage.removeItem(ACTIVE_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function loadLegacyLocalStore() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  // migração leve do storage antigo
+  } catch {
+    /* ignore */
+  }
   try {
     const legacy = localStorage.getItem("chat-ia-kali-sessions");
-    if (legacy) {
-      localStorage.setItem(STORAGE_KEY, legacy);
-      return JSON.parse(legacy);
-    }
-  } catch { /* ignore */ }
+    if (legacy) return JSON.parse(legacy);
+  } catch {
+    /* ignore */
+  }
   return { sessions: [], activeId: null };
 }
 
-export function saveStore() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+function sessionPayload(session) {
+  return {
+    id: session.id,
+    title: session.title || "novo chat",
+    preferredTool: session.preferredTool || "auto",
+    messages: session.messages || [],
+    createdAt: session.createdAt || Date.now(),
+    updatedAt: session.updatedAt || Date.now(),
+    client_id: session.client_id || "",
+  };
 }
 
-function uid() {
-  return crypto.randomUUID?.() || `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+async function apiUpsert(session) {
+  const res = await apiFetch(`/api/chat-sessions/${encodeURIComponent(session.id)}`, {
+    method: "PUT",
+    body: JSON.stringify(sessionPayload(session)),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "falha ao salvar conversa");
+  }
+  return res.json();
+}
+
+async function apiDelete(sessionId) {
+  const res = await apiFetch(`/api/chat-sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "falha ao excluir conversa");
+  }
+}
+
+async function apiList() {
+  const res = await apiFetch("/api/chat-sessions");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "falha ao listar conversas");
+  }
+  const data = await res.json();
+  return data.sessions || [];
+}
+
+async function apiMigrate(sessions) {
+  const res = await apiFetch("/api/chat-sessions/migrate", {
+    method: "POST",
+    body: JSON.stringify({ sessions }),
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+/** Persiste no banco (debounced). Mantém API sync para callers existentes. */
+export function saveStore() {
+  writeActiveId(store.activeId);
+  const session = getActiveSession();
+  if (!session) return;
+  session.updatedAt = Date.now();
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    apiUpsert(session).catch((err) => {
+      console.warn("chat_persist_failed", err);
+    });
+  }, 350);
+}
+
+/** Flush imediato (create/rename/delete). */
+export async function saveStoreNow(session = getActiveSession()) {
+  writeActiveId(store.activeId);
+  if (!session) return;
+  session.updatedAt = Date.now();
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  await apiUpsert(session);
 }
 
 export function getActiveSession() {
@@ -57,12 +154,69 @@ export function createSession() {
   };
   store.sessions.unshift(session);
   store.activeId = session.id;
-  saveStore();
+  writeActiveId(session.id);
+  saveStoreNow(session).catch((err) => console.warn("chat_create_failed", err));
   return session;
 }
 
 export function ensureSession() {
   if (!getActiveSession()) createSession();
+}
+
+/**
+ * Carrega conversas do banco; migra localStorage uma vez se o DB estiver vazio.
+ * Chamar no boot (main.js) antes de renderizar.
+ */
+export async function bootSessionsFromDb() {
+  if (bootPromise) return bootPromise;
+  bootPromise = (async () => {
+    try {
+      let sessions = await apiList();
+      const migrated = localStorage.getItem(MIGRATED_KEY) === "1";
+      if (!sessions.length && !migrated) {
+        const legacy = loadLegacyLocalStore();
+        if (legacy.sessions?.length) {
+          await apiMigrate(legacy.sessions);
+          localStorage.setItem(MIGRATED_KEY, "1");
+          sessions = await apiList();
+          if (legacy.activeId) writeActiveId(legacy.activeId);
+        } else {
+          localStorage.setItem(MIGRATED_KEY, "1");
+        }
+      } else if (!migrated) {
+        localStorage.setItem(MIGRATED_KEY, "1");
+      }
+
+      store.sessions = sessions.map((s) => ({
+        id: s.id,
+        title: s.title || "novo chat",
+        preferredTool: s.preferredTool || "auto",
+        messages: Array.isArray(s.messages) ? s.messages : [],
+        createdAt: s.createdAt || Date.now(),
+        updatedAt: s.updatedAt || Date.now(),
+        client_id: s.client_id || "",
+      }));
+
+      const savedActive = readActiveId();
+      if (savedActive && store.sessions.some((s) => s.id === savedActive)) {
+        store.activeId = savedActive;
+      } else {
+        store.activeId = store.sessions[0]?.id || null;
+      }
+      writeActiveId(store.activeId);
+
+      if (!store.activeId) {
+        createSession();
+      }
+    } catch (err) {
+      console.warn("chat_boot_db_failed_fallback_local", err);
+      const legacy = loadLegacyLocalStore();
+      store.sessions = legacy.sessions || [];
+      store.activeId = legacy.activeId || store.sessions[0]?.id || null;
+      if (!store.activeId) createSession();
+    }
+  })();
+  return bootPromise;
 }
 
 export function sessionTitle(session) {
@@ -142,7 +296,7 @@ export function renameSession(id, newTitle) {
   const trimmed = (newTitle || "").trim().slice(0, 80);
   session.title = trimmed || "novo chat";
   session.updatedAt = Date.now();
-  saveStore();
+  saveStoreNow(session).catch((err) => console.warn("chat_rename_failed", err));
   renderSessions();
   if (store.activeId === id) updateSessionTitle();
   ctx.onChanged?.();
@@ -195,11 +349,14 @@ export function deleteSession(id, e) {
   const logIds = session ? collectSessionLogIds(session) : [];
   ctx.beforeDeleteSession?.(id, logIds);
   store.sessions = store.sessions.filter((s) => s.id !== id);
+  apiDelete(id).catch((err) => console.warn("chat_delete_failed", err));
   if (store.activeId === id) {
     store.activeId = store.sessions[0]?.id || null;
+    writeActiveId(store.activeId);
     if (!store.activeId) createSession();
+  } else {
+    writeActiveId(store.activeId);
   }
-  saveStore();
   renderSessions();
   updateSessionTitle();
   ctx.afterDeleteSession?.();
@@ -207,7 +364,7 @@ export function deleteSession(id, e) {
 
 export function switchSession(id) {
   store.activeId = id;
-  saveStore();
+  writeActiveId(id);
   renderSessions();
   updateSessionTitle();
   ctx.afterSwitchSession?.(id);
@@ -263,4 +420,9 @@ export function rebuildInputHistory(inputHistoryRef) {
     .filter((m) => m.role === "user")
     .map((m) => m.content);
   inputHistoryRef.idx = inputHistoryRef.list.length;
+}
+
+/** @deprecated compat — loadStore antigo */
+export function loadStore() {
+  return store;
 }

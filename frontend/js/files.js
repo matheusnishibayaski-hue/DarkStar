@@ -87,8 +87,12 @@ function render() {
     const id = row.dataset.reportId;
     const record = reportsCache.find((x) => x.id === id);
     if (!record) return;
-    row.querySelector(".files-open-btn")?.addEventListener("click", () => openReportRecord(record));
-    row.querySelector(".files-dl-btn")?.addEventListener("click", () => downloadReportRecord(record));
+    row.querySelector(".files-open-btn")?.addEventListener("click", () => {
+      openReportRecord(record).catch((e) => ctx.toast?.(e.message || "erro ao abrir PDF"));
+    });
+    row.querySelector(".files-dl-btn")?.addEventListener("click", () => {
+      downloadReportRecord(record).catch((e) => ctx.toast?.(e.message || "erro ao baixar PDF"));
+    });
     const delBtn = row.querySelector(".files-del-btn");
     if (delBtn) {
       attachDeleteAction(delBtn, {

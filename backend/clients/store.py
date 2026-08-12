@@ -1,15 +1,17 @@
-"""CRUD de clientes locais — meta em backend/clients/{id}/meta.json."""
+"""CRUD de clientes — meta no banco; dirs locais para surface/logs."""
 
 from __future__ import annotations
 
 import json
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.config import CLIENTS_DIR, CONSULTING_PRIMARY_COLOR
+from backend.config import CLIENTS_DIR, CONSULTING_PRIMARY_COLOR, SURFACE_DIR
 
+logger = logging.getLogger(__name__)
 _CLIENT_ID_RE = re.compile(r"^[a-z0-9][a-z0-9\-]{0,62}[a-z0-9]$|^[a-z0-9]$")
 
 
@@ -53,6 +55,80 @@ def logs_dir(client_id: str) -> Path:
     return d
 
 
+def _ensure_dirs(client_id: str) -> None:
+    cid = normalize_client_id(client_id)
+    client_dir(cid).mkdir(parents=True, exist_ok=True)
+    surface_dir(cid)
+    logs_dir(cid)
+
+
+def _read_meta_file(client_id: str) -> dict[str, Any] | None:
+    path = meta_path(client_id)
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _persist_client(data: dict[str, Any]) -> dict[str, Any]:
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import ClientRecord
+
+    cid = normalize_client_id(str(data.get("client_id") or ""))
+    data = {**data, "client_id": cid}
+    _ensure_dirs(cid)
+    ensure_dashboard_db()
+    with session_scope() as db:
+        row = db.query(ClientRecord).filter(ClientRecord.client_id == cid).first()
+        payload = json.dumps(data, ensure_ascii=False)
+        if row:
+            row.payload_json = payload
+        else:
+            db.add(ClientRecord(client_id=cid, payload_json=payload))
+        db.flush()
+    # Espelho legado (opcional) — remove após migrar
+    try:
+        meta_path(cid).write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass
+    return data
+
+
+def get_client(client_id: str) -> dict[str, Any] | None:
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import ClientRecord
+
+    cid = normalize_client_id(client_id)
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            row = db.query(ClientRecord).filter(ClientRecord.client_id == cid).first()
+            if row:
+                try:
+                    data = json.loads(row.payload_json or "{}")
+                except json.JSONDecodeError:
+                    data = {}
+                if isinstance(data, dict) and data:
+                    _ensure_dirs(cid)
+                    return data
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("client_db_get_failed: %s", exc)
+
+    file_data = _read_meta_file(cid)
+    if file_data:
+        try:
+            return _persist_client(file_data)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("client_migrate_failed: %s", exc)
+            return file_data
+    return None
+
+
 def ensure_default_client() -> dict[str, Any]:
     """Garante workspace `default` para surfaces legados."""
     existing = get_client("default")
@@ -64,17 +140,6 @@ def ensure_default_client() -> dict[str, Any]:
         consulting_name="",
         consulting_color="",
     )
-
-
-def get_client(client_id: str) -> dict[str, Any] | None:
-    path = meta_path(client_id)
-    if not path.is_file():
-        return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def create_client(
@@ -91,12 +156,8 @@ def create_client(
         raise ValueError(
             "client_id inválido — use slug [a-z0-9-] (1–64 chars)."
         )
-    path = meta_path(cid)
-    if path.is_file():
+    if get_client(cid):
         raise FileExistsError(f"Cliente '{cid}' já existe.")
-    client_dir(cid).mkdir(parents=True, exist_ok=True)
-    surface_dir(cid)
-    logs_dir(cid)
     data = {
         "client_id": cid,
         "display_name": (display_name or cid).strip()[:200],
@@ -107,8 +168,7 @@ def create_client(
         "created_at": _now(),
         "updated_at": _now(),
     }
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return data
+    return _persist_client(data)
 
 
 def update_client(client_id: str, **fields: Any) -> dict[str, Any]:
@@ -126,16 +186,12 @@ def update_client(client_id: str, **fields: Any) -> dict[str, Any]:
         if key in allowed and value is not None:
             data[key] = str(value).strip()[:500]
     data["updated_at"] = _now()
-    meta_path(client_id).write_text(
-        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    return data
+    return _persist_client(data)
 
 
 def list_client_targets(client_id: str) -> list[str]:
     """Targets sob o workspace do cliente (+ legado com client_id correspondente)."""
     from backend.executor.recon_db import normalize_target
-    from backend.config import SURFACE_DIR
 
     cid = normalize_client_id(client_id)
     found: set[str] = set()
@@ -143,7 +199,6 @@ def list_client_targets(client_id: str) -> list[str]:
     if sdir.is_dir():
         for p in sdir.glob("*.json"):
             found.add(p.stem)
-    # Surfaces legados com client_id / client display
     if SURFACE_DIR.is_dir():
         for p in SURFACE_DIR.glob("*.json"):
             try:
@@ -162,15 +217,36 @@ def list_client_targets(client_id: str) -> list[str]:
     return sorted(found)
 
 
-def list_clients() -> list[dict[str, Any]]:
-    ensure_default_client()
-    items: list[dict[str, Any]] = []
+def _migrate_all_client_files() -> None:
     if not CLIENTS_DIR.is_dir():
-        return items
-    for path in sorted(CLIENTS_DIR.iterdir()):
+        return
+    for path in CLIENTS_DIR.iterdir():
         if not path.is_dir():
             continue
-        meta = get_client(path.name)
+        get_client(path.name)
+
+
+def list_clients() -> list[dict[str, Any]]:
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import ClientRecord
+
+    ensure_default_client()
+    _migrate_all_client_files()
+
+    ids: list[str] = []
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            ids = [r.client_id for r in db.query(ClientRecord.client_id).all()]
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("client_list_db_failed: %s", exc)
+
+    if not ids and CLIENTS_DIR.is_dir():
+        ids = [p.name for p in CLIENTS_DIR.iterdir() if p.is_dir()]
+
+    items: list[dict[str, Any]] = []
+    for cid in sorted(set(ids)):
+        meta = get_client(cid)
         if not meta:
             continue
         targets = list_client_targets(meta["client_id"])
@@ -187,6 +263,8 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
     import shutil
 
     from backend.clients.runtime import get_active_client_id, set_active_client_id
+    from backend.database.db import ensure_dashboard_db, session_scope
+    from backend.database.models_store import ClientRecord
     from backend.executor.data_cleanup import delete_surface
 
     cid = normalize_client_id(client_id)
@@ -201,6 +279,15 @@ def delete_client(client_id: str, *, purge_surfaces: bool = False) -> dict[str, 
         for t in targets:
             if delete_surface(t):
                 removed_surfaces += 1
+
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            db.query(ClientRecord).filter(ClientRecord.client_id == cid).delete(
+                synchronize_session=False
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("client_db_delete_failed: %s", exc)
 
     cdir = client_dir(cid)
     if cdir.is_dir():

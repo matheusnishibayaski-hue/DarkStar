@@ -1,36 +1,12 @@
-/** Biblioteca local de relatórios PDF baixados (IndexedDB). */
+/** Biblioteca de relatórios PDF — persistidos no banco via API. */
 
-const DB_NAME = "chat-ia-kali-reports";
-const DB_VERSION = 1;
-const STORE = "reports";
+import { apiFetch } from "./api.js";
+
+const IDB_NAME = "chat-ia-kali-reports";
+const IDB_STORE = "reports";
+const MIGRATE_FLAG = "darkstar-reports-migrated-v1";
 
 let listeners = new Set();
-
-function openDb() {
-  return new Promise((resolve, reject) => {
-    if (!globalThis.indexedDB) {
-      reject(new Error("IndexedDB indisponível neste navegador."));
-      return;
-    }
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(STORE)) {
-        db.createObjectStore(STORE, { keyPath: "id" });
-      }
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error("Falha ao abrir armazenamento."));
-  });
-}
-
-function txDone(tx) {
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error("Transação abortada."));
-  });
-}
 
 function uid() {
   return crypto.randomUUID?.() || `r-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -54,6 +30,57 @@ function emitChange() {
   for (const fn of listeners) fn();
 }
 
+async function fetchReportBlob(id) {
+  const res = await apiFetch(`/api/reports/${encodeURIComponent(id)}`);
+  if (!res.ok) throw new Error("Falha ao carregar PDF.");
+  return res.blob();
+}
+
+/** Migra IndexedDB legado uma vez para o banco. */
+async function migrateIndexedDbOnce() {
+  if (localStorage.getItem(MIGRATE_FLAG) === "1") return;
+  if (!globalThis.indexedDB) {
+    localStorage.setItem(MIGRATE_FLAG, "1");
+    return;
+  }
+  try {
+    const db = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const d = req.result;
+        if (!d.objectStoreNames.contains(IDB_STORE)) {
+          d.createObjectStore(IDB_STORE, { keyPath: "id" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    const rows = await new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+    for (const row of rows) {
+      if (!row?.blob) continue;
+      try {
+        const fd = new FormData();
+        fd.append("file", row.blob, row.fileName || "relatorio.pdf");
+        fd.append("session_id", row.sessionId || "");
+        fd.append("title", row.title || "Relatório");
+        fd.append("file_name", row.fileName || "relatorio.pdf");
+        await apiFetch("/api/reports", { method: "POST", body: fd });
+      } catch {
+        /* best-effort */
+      }
+    }
+    db.close();
+    localStorage.setItem(MIGRATE_FLAG, "1");
+  } catch {
+    localStorage.setItem(MIGRATE_FLAG, "1");
+  }
+}
+
 export async function saveDownloadedReport({
   blob,
   sessionId = "",
@@ -63,52 +90,67 @@ export async function saveDownloadedReport({
   if (!blob || !(blob instanceof Blob)) {
     throw new Error("Blob de relatório inválido.");
   }
-  const db = await openDb();
-  const id = uid();
-  const record = {
-    id,
-    sessionId: sessionId || "",
-    title: (title || "Relatório de pentest").slice(0, 200),
-    fileName: fileName || safeFileName(title),
-    createdAt: Date.now(),
-    size: blob.size,
+  const name = fileName || safeFileName(title);
+  const fd = new FormData();
+  fd.append("file", blob, name);
+  fd.append("session_id", sessionId || "");
+  fd.append("title", (title || "Relatório de pentest").slice(0, 200));
+  fd.append("file_name", name);
+  const res = await apiFetch("/api/reports", { method: "POST", body: fd });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Falha ao gravar PDF no banco.");
+  }
+  const data = await res.json();
+  const meta = data.report || {};
+  emitChange();
+  return {
+    id: meta.id || uid(),
+    sessionId: meta.sessionId || sessionId || "",
+    title: meta.title || title,
+    fileName: meta.fileName || name,
+    createdAt: meta.createdAt || Date.now(),
+    size: meta.size || blob.size,
     blob,
   };
-  const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).put(record);
-  await txDone(tx);
-  db.close();
-  emitChange();
-  return record;
 }
 
-export async function listDownloadedReports() {
-  const db = await openDb();
-  const tx = db.transaction(STORE, "readonly");
-  const req = tx.objectStore(STORE).getAll();
-  const rows = await new Promise((resolve, reject) => {
-    req.onsuccess = () => resolve(req.result || []);
-    req.onerror = () => reject(req.error);
-  });
-  await txDone(tx);
-  db.close();
+export async function listDownloadedReports(sessionId = null) {
+  await migrateIndexedDbOnce();
+  const q = sessionId
+    ? `?session_id=${encodeURIComponent(sessionId)}`
+    : "";
+  const res = await apiFetch(`/api/reports${q}`);
+  if (!res.ok) throw new Error("Falha ao listar PDFs.");
+  const data = await res.json();
+  const rows = data.reports || [];
   rows.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return rows;
 }
 
 export async function deleteDownloadedReport(id) {
   if (!id) return;
-  const db = await openDb();
-  const tx = db.transaction(STORE, "readwrite");
-  tx.objectStore(STORE).delete(id);
-  await txDone(tx);
-  db.close();
+  const res = await apiFetch(`/api/reports/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) {
+    throw new Error("Falha ao excluir PDF.");
+  }
   emitChange();
 }
 
-export function downloadReportRecord(record) {
-  if (!record?.blob) return;
-  const url = URL.createObjectURL(record.blob);
+export async function purgeReportsForSession(sessionId) {
+  if (!sessionId) return;
+  await apiFetch(`/api/reports/session/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  }).catch(() => {});
+  emitChange();
+}
+
+export async function downloadReportRecord(record) {
+  if (!record?.id) return;
+  const blob = record.blob || (await fetchReportBlob(record.id));
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = record.fileName || "relatorio-pentest.pdf";
@@ -116,9 +158,10 @@ export function downloadReportRecord(record) {
   URL.revokeObjectURL(url);
 }
 
-export function openReportRecord(record) {
-  if (!record?.blob) return;
-  const url = URL.createObjectURL(record.blob);
+export async function openReportRecord(record) {
+  if (!record?.id) return;
+  const blob = record.blob || (await fetchReportBlob(record.id));
+  const url = URL.createObjectURL(blob);
   window.open(url, "_blank", "noopener");
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

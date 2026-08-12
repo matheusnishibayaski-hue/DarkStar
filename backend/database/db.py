@@ -99,9 +99,11 @@ def session_scope() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
-    """Cria tabelas Intelligence (se Postgres) + dashboard."""
+    """Cria tabelas Intelligence (se Postgres) + dashboard + chat."""
     # Import models so metadata is populated
+    from backend.database import models_chat as _mc  # noqa: F401
     from backend.database import models_dashboard as _md  # noqa: F401
+    from backend.database import models_store as _ms  # noqa: F401
     from backend.database.models_intelligence import Base
 
     engine = get_engine()

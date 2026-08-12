@@ -354,7 +354,7 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 | `MASTER_KEY` | Libera perfil completo / offensive |
 | `AI_PROVIDER=ollama` | Começa já em modo local |
 | `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
-| `DATABASE_URL` | Postgres do dashboard; sem isso → SQLite local |
+| `DATABASE_URL` | Postgres (dashboard + **conversas**); sem isso → SQLite local |
 | `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` | Alertas em canal |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alertas Telegram |
 | `SMTP_*` / `EMAIL_*` | Alertas por e-mail |

@@ -5,11 +5,10 @@
 import { HELP_HTML } from "./constants.js";
 import { checkClientConfig } from "./api.js";
 import {
-  store,
   initSessions,
-  loadStore,
   createSession,
   ensureSession,
+  bootSessionsFromDb,
   renderSessions,
   updateSessionTitle,
 } from "./sessions.js";
@@ -101,8 +100,6 @@ const toastContainer = document.getElementById("toast-container");
 void btnToolbarMore; // stub legado (tour / HTML)
 
 const inputHistory = { list: [], idx: -1 };
-
-Object.assign(store, loadStore());
 
 function refreshStatusBar() {
   updateStatusBar({ loading: getLoading() });
@@ -276,6 +273,9 @@ initSessions({
     deleteSessionLogs(sessionId, logIds).catch(() => {});
     deleteIntelSession(sessionId).catch(() => {});
     purgeDashboardSession(sessionId).catch(() => {});
+    import("./reports-store.js")
+      .then((m) => m.purgeReportsForSession?.(sessionId))
+      .catch(() => {});
   },
 });
 
@@ -382,17 +382,10 @@ bindSoundButton(document.getElementById("btn-sound"));
 
 if (helpContent) helpContent.innerHTML = HELP_HTML;
 
-ensureSession();
 loadModels();
 checkClientConfig(toast);
-loadTools().then(() => renderToolList()).then(() => syncToolFromSession());
-renderSessions();
-renderChat();
-updateSessionTitle();
-rebuildInputHistoryRef();
 refreshHealth();
 setInterval(refreshHealth, 30000);
-maybeShowOnboarding();
 
 const statusClock = document.getElementById("status-clock");
 function tickClock() {
@@ -407,3 +400,23 @@ input?.addEventListener("focus", () => document.getElementById("cmd-cursor")?.cl
 input?.addEventListener("blur", () => document.getElementById("cmd-cursor")?.classList.remove("hidden"));
 
 initSidebarState();
+
+bootSessionsFromDb()
+  .then(() => {
+    ensureSession();
+    renderSessions();
+    renderChat();
+    updateSessionTitle();
+    rebuildInputHistoryRef();
+    return loadTools();
+  })
+  .then(() => renderToolList())
+  .then(() => syncToolFromSession())
+  .then(() => maybeShowOnboarding())
+  .catch((err) => {
+    console.error("boot_sessions_failed", err);
+    ensureSession();
+    renderSessions();
+    renderChat();
+    updateSessionTitle();
+  });

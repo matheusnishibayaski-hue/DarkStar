@@ -23,6 +23,7 @@ from backend.routes import (
     auth,
     autonomous,
     chat,
+    chat_sessions,
     clients,
     compliance,
     dashboard,
@@ -37,6 +38,7 @@ from backend.routes import (
     playbooks,
     portfolio,
     remediation,
+    reports,
     schedule_api,
     system,
 )
@@ -119,6 +121,8 @@ app.include_router(intelligence.router)
 app.include_router(compliance.router)
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(chat_sessions.router)
+app.include_router(reports.router)
 app.include_router(autonomous.router)
 app.include_router(github.router)
 app.include_router(notifications.router)
