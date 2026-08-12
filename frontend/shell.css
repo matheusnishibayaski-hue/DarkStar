@@ -437,7 +437,8 @@ html.mode-offensive .spine-meta {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  background: var(--bg, #0b0d10);
+  background: #000000;
+  color: #f2f2f2;
 }
 
 .workspace-view[hidden] {
@@ -454,7 +455,8 @@ html.mode-offensive .spine-meta {
   justify-content: space-between;
   gap: 1rem;
   padding: 0.65rem 1rem;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+  color: #f2f2f2;
 }
 
 .workspace-bar-left {
@@ -464,11 +466,16 @@ html.mode-offensive .spine-meta {
   min-width: 0;
 }
 
+.workspace-bar .term-bar-title,
+.workspace-bar .title-kicker {
+  color: #f2f2f2;
+}
+
 .workspace-session-hint {
   margin: 0;
   font-family: var(--mono);
   font-size: 0.65rem;
-  color: var(--text-3);
+  color: rgba(255, 255, 255, 0.55);
   letter-spacing: 0.06em;
 }
 
@@ -477,7 +484,7 @@ html.mode-offensive .spine-meta {
   flex-wrap: wrap;
   gap: 0.25rem;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .workspace-tab {
@@ -488,19 +495,19 @@ html.mode-offensive .spine-meta {
   padding: 0.35rem 0.65rem;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-3);
+  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
 }
 
 .workspace-tab:hover {
-  color: var(--text);
-  border-color: var(--line);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.35);
 }
 
 .workspace-tab.active {
-  color: var(--text);
-  border-color: var(--line-2);
-  background: rgba(255, 255, 255, 0.04);
+  color: #000000;
+  border-color: #ffffff;
+  background: #ffffff;
 }
 
 .workspace-panels {
@@ -508,6 +515,7 @@ html.mode-offensive .spine-meta {
   min-height: 0;
   overflow: auto;
   padding: 0.75rem 1rem 1.25rem;
+  color: #f2f2f2;
 }
 
 .workspace-panel {
@@ -531,6 +539,7 @@ html.mode-offensive .spine-meta {
 .workspace-panel-body {
   flex: 1;
   min-height: 0;
+  color: #f2f2f2;
 }
 
 .workspace-map-targets {
@@ -538,6 +547,276 @@ html.mode-offensive .spine-meta {
   padding-left: 1.1rem;
   font-family: var(--mono);
   font-size: 0.8rem;
+  color: #f2f2f2;
+}
+
+/* Contraste forçado: tools/logs/etc. no workspace (sem .panel.crt-panel) */
+.workspace-view .panel-search,
+.workspace-view .panel-field,
+.workspace-view .tools-search {
+  color: #ffffff !important;
+  background: #1a1a1a !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+  caret-color: #ffffff !important;
+}
+
+.workspace-view .panel-search::placeholder,
+.workspace-view .panel-field::placeholder,
+.workspace-view .tools-search::placeholder {
+  color: rgba(255, 255, 255, 0.45) !important;
+}
+
+.workspace-view .tools-hint,
+.workspace-view .panel-callout,
+.workspace-view .session-modal-empty,
+.workspace-view .session-modal-hint,
+.workspace-view .session-report-footer-hint,
+.workspace-view .files-simple-empty,
+.workspace-view .files-simple-hint,
+.workspace-view .dashboard-section-title,
+.workspace-view .panel-title-sub {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.workspace-view .tools-hint strong {
+  color: #ffffff !important;
+}
+
+.workspace-view .tool-cat-tab {
+  color: rgba(255, 255, 255, 0.7) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  background: transparent !important;
+}
+
+.workspace-view .tool-cat-tab:hover {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.workspace-view .tool-cat-tab.active {
+  color: #000000 !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+.workspace-view .tool-card {
+  background: #161616 !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.28) !important;
+}
+
+.workspace-view .tool-card:hover {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border-color: #ffffff !important;
+}
+
+.workspace-view .tool-card:hover .tool-item-name,
+.workspace-view .tool-card:hover .tool-item-cat,
+.workspace-view .tool-card:hover .tool-item-desc,
+.workspace-view .tool-card:hover .tool-use-btn {
+  color: #000000 !important;
+}
+
+.workspace-view .tool-card:hover .tool-item-example {
+  background: #f0f0f0 !important;
+  color: #111111 !important;
+}
+
+.workspace-view .tool-card.active {
+  background: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.65) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.35);
+}
+
+.workspace-view .tool-card.active .tool-item-name,
+.workspace-view .tool-card.active .tool-item-desc {
+  color: #ffffff !important;
+}
+
+.workspace-view .tool-item-name {
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.workspace-view .tool-item-cat {
+  color: rgba(255, 255, 255, 0.55) !important;
+}
+
+.workspace-view .tool-item-desc {
+  color: rgba(255, 255, 255, 0.72) !important;
+}
+
+.workspace-view .tool-item-example {
+  background: #0c0c0c !important;
+  color: #e8e8e8 !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.workspace-view .tool-use-btn {
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.workspace-view .tool-use-btn:hover {
+  color: #ffffff !important;
+}
+
+.workspace-view .portfolio-table {
+  color: #f2f2f2;
+}
+
+.workspace-view .portfolio-table th {
+  color: rgba(255, 255, 255, 0.65);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.workspace-view .portfolio-table td {
+  color: #f2f2f2;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.workspace-view .dashboard-metric {
+  background: #161616;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+}
+
+.workspace-view .dashboard-metric-label {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.workspace-view .dashboard-metric-value {
+  color: #ffffff;
+}
+
+.workspace-view .dashboard-period-btn,
+.workspace-view .term-btn,
+.workspace-view .files-refresh-btn,
+.workspace-view .files-simple-btn,
+.workspace-view .session-report-download-btn {
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.35) !important;
+  background: #1a1a1a !important;
+}
+
+.workspace-view .dashboard-period-btn.active,
+.workspace-view .dashboard-period-btn:hover,
+.workspace-view .term-btn:hover,
+.workspace-view .files-refresh-btn:hover {
+  color: #000000 !important;
+  background: #ffffff !important;
+  border-color: #ffffff !important;
+}
+
+.workspace-view .session-log-card,
+.workspace-view .files-simple-row {
+  background: #161616;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #f2f2f2;
+}
+
+.workspace-view .session-log-cmd,
+.workspace-view .session-log-output,
+.workspace-view .files-simple-name {
+  color: #ffffff;
+}
+
+.workspace-view .session-log-time,
+.workspace-view .files-simple-meta,
+.workspace-view .muted {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.workspace-view a.threatmap-link {
+  color: #9fd4ff;
+}
+
+/* Offensive: workspace claro */
+html.mode-offensive .workspace-view {
+  background: #ffffff;
+  color: #111111;
+}
+
+html.mode-offensive .workspace-bar,
+html.mode-offensive .workspace-tabs {
+  border-bottom-color: rgba(0, 0, 0, 0.2);
+}
+
+html.mode-offensive .workspace-bar .term-bar-title,
+html.mode-offensive .workspace-bar .title-kicker,
+html.mode-offensive .workspace-panels,
+html.mode-offensive .workspace-panel-body {
+  color: #111111;
+}
+
+html.mode-offensive .workspace-session-hint,
+html.mode-offensive .workspace-tab {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+html.mode-offensive .workspace-tab:hover {
+  color: #000000;
+  border-color: rgba(0, 0, 0, 0.35);
+}
+
+html.mode-offensive .workspace-tab.active {
+  color: #ffffff;
+  background: #000000;
+  border-color: #000000;
+}
+
+html.mode-offensive .workspace-view .panel-search,
+html.mode-offensive .workspace-view .tools-search {
+  color: #000000 !important;
+  background: #f2f2f2 !important;
+  border-color: rgba(0, 0, 0, 0.35) !important;
+  caret-color: #000000 !important;
+}
+
+html.mode-offensive .workspace-view .panel-search::placeholder,
+html.mode-offensive .workspace-view .tools-search::placeholder {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+
+html.mode-offensive .workspace-view .tools-hint,
+html.mode-offensive .workspace-view .panel-callout,
+html.mode-offensive .workspace-view .tool-item-name,
+html.mode-offensive .workspace-view .dashboard-section-title {
+  color: #111111 !important;
+}
+
+html.mode-offensive .workspace-view .tool-item-cat,
+html.mode-offensive .workspace-view .tool-item-desc {
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+
+html.mode-offensive .workspace-view .tool-card {
+  background: #f2f2f2 !important;
+  color: #000000 !important;
+  border-color: rgba(0, 0, 0, 0.3) !important;
+}
+
+html.mode-offensive .workspace-view .tool-card:hover {
+  background: #000000 !important;
+  color: #ffffff !important;
+}
+
+html.mode-offensive .workspace-view .tool-card:hover .tool-item-name,
+html.mode-offensive .workspace-view .tool-card:hover .tool-item-cat,
+html.mode-offensive .workspace-view .tool-card:hover .tool-item-desc {
+  color: #ffffff !important;
+}
+
+html.mode-offensive .workspace-view .tool-cat-tab.active {
+  color: #ffffff !important;
+  background: #000000 !important;
+  border-color: #000000 !important;
+}
+
+html.mode-offensive .workspace-view .tool-item-example {
+  background: #ffffff !important;
+  color: #111111 !important;
+  border-color: rgba(0, 0, 0, 0.2);
 }
 
 /* Remediation wizard overlay */
