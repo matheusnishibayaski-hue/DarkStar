@@ -632,6 +632,7 @@ def _run_autonomous_body(
             rounds=rounds_completed,
             status="completed",
             scan_type="autonomous",
+            chat_session_id=str(chat_session_id or ""),
         )
     except Exception:  # noqa: BLE001
         pass

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css?v=52" />
-  <link rel="stylesheet" href="/static/shell.css?v=15" />
+  <link rel="stylesheet" href="/static/shell.css?v=16" />
   <script>
     (function () {
       try {
@@ -55,32 +55,26 @@
 
         <nav class="sidebar-nav" aria-label="Ações">
           <p class="rail-label">SISTEMA</p>
-          <button type="button" class="nav-item" id="btn-tools" title="Alt+T">
-            <span>01 ferramentas</span>
+          <button type="button" class="nav-item" id="btn-workspace" title="Workspace da conversa">
+            <span>01 workspace</span>
             <span class="term-badge" id="tool-badge">auto</span>
           </button>
-          <button type="button" class="nav-item" id="btn-session-logs" title="Alt+L">02 logs</button>
-          <button type="button" class="nav-item" id="btn-session-report" title="Alt+R">03 relatório</button>
-          <button type="button" class="nav-item" id="btn-files" title="Alt+F">04 pdfs</button>
-          <button type="button" class="nav-item" id="btn-threats" title="Alt+C">05 mapa</button>
-          <button type="button" class="nav-item" id="btn-portfolio" title="Carteira de engajamentos">carteira</button>
-          <button type="button" class="nav-item" id="btn-dashboard" title="Dashboard de métricas">dashboard</button>
           <div class="nav-sep"></div>
           <button type="button" class="nav-item" id="btn-master-key" title="Master key">
-            <span data-key-label>06 master key</span>
+            <span data-key-label>02 master key</span>
           </button>
           <label class="nav-item nav-toggle" id="offensive-mode-control" for="offensive-mode-toggle">
-            <span>07 offensive</span>
+            <span>03 offensive</span>
             <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
             <span class="offensive-mode-switch" aria-hidden="true"></span>
           </label>
           <label class="nav-item nav-toggle" id="offline-mode-control" for="offline-mode-toggle" title="LLM local (Ollama)">
-            <span>08 offline</span>
+            <span>04 offline</span>
             <input type="checkbox" id="offline-mode-toggle" class="offensive-mode-input offline-mode-input" />
             <span class="offensive-mode-switch offline-mode-switch" aria-hidden="true"></span>
           </label>
-          <button type="button" class="nav-item" id="btn-sound">09 som</button>
-          <button type="button" class="nav-item" id="btn-help" title="F1">10 ajuda</button>
+          <button type="button" class="nav-item" id="btn-sound">05 som</button>
+          <button type="button" class="nav-item" id="btn-help" title="F1">06 ajuda</button>
         </nav>
       </div>
     </aside>
@@ -139,6 +133,118 @@
           </footer>
         </div>
       </div>
+
+      <section class="workspace-view crt" id="view-workspace" hidden aria-label="Workspace da conversa">
+        <header class="workspace-bar crt-titlebar">
+          <div class="workspace-bar-left">
+            <button type="button" class="term-btn" id="workspace-back" title="Voltar ao chat">← chat</button>
+            <div class="title-stack">
+              <span class="title-kicker">WORKSPACE</span>
+              <h1 class="term-bar-title" id="workspace-title">Conversação</h1>
+            </div>
+          </div>
+          <p class="workspace-session-hint" id="workspace-session-hint">escopo: conversa ativa</p>
+        </header>
+        <nav class="workspace-tabs" id="workspace-tabs" aria-label="Abas do workspace">
+          <button type="button" class="workspace-tab active" data-ws-tab="tools">ferramentas</button>
+          <button type="button" class="workspace-tab" data-ws-tab="logs">logs</button>
+          <button type="button" class="workspace-tab" data-ws-tab="report">relatório</button>
+          <button type="button" class="workspace-tab" data-ws-tab="pdfs">pdfs</button>
+          <button type="button" class="workspace-tab" data-ws-tab="mapa">mapa</button>
+          <button type="button" class="workspace-tab" data-ws-tab="carteira">carteira</button>
+          <button type="button" class="workspace-tab" data-ws-tab="dashboard">dashboard</button>
+        </nav>
+        <div class="workspace-panels">
+          <div class="workspace-panel active" data-ws-panel="tools" id="ws-panel-tools">
+            <div class="workspace-panel-toolbar">
+              <input type="text" class="panel-search tools-search" id="tool-search" placeholder="Buscar ferramenta…" spellcheck="false" />
+              <div class="tools-categories" id="tool-categories"></div>
+            </div>
+            <p class="tools-hint"><strong>auto</strong> = IA escolhe · <em>usar</em> = envia exemplo · preferência desta conversa</p>
+            <div class="workspace-panel-body tools-grid-wrap" id="tool-list"></div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="logs" id="ws-panel-logs" hidden>
+            <div class="workspace-panel-body session-modal-body" id="session-logs-body"></div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="report" id="ws-panel-report" hidden>
+            <p class="panel-callout" id="session-report-meta">triagem de achados desta conversa</p>
+            <div class="workspace-panel-body session-modal-body" id="session-report-body"></div>
+            <div class="session-report-footer">
+              <p class="session-report-footer-hint" id="session-report-footer-hint">
+                Classifique cada achado. O PDF inclui só o que você marcou como vulnerabilidade.
+              </p>
+              <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
+            </div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="pdfs" id="ws-panel-pdfs" hidden>
+            <div class="workspace-panel-toolbar files-simple-toolbar">
+              <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
+              <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
+              <span class="panel-title-sub" id="files-meta">pdfs desta conversa</span>
+            </div>
+            <div class="workspace-panel-body files-panel-body" id="files-list"></div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="mapa" id="ws-panel-mapa" hidden>
+            <div class="workspace-panel-toolbar">
+              <p class="panel-callout" id="workspace-map-meta">Alvos e achados desta conversa</p>
+              <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">cybermap (externo)</a>
+            </div>
+            <div class="workspace-panel-body" id="workspace-map-body"></div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="carteira" id="ws-panel-carteira" hidden>
+            <div class="workspace-panel-body" id="portfolio-body"></div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="dashboard" id="ws-panel-dashboard" hidden>
+            <div class="workspace-panel-toolbar">
+              <div class="dashboard-period" id="dashboard-period" role="group" aria-label="Período">
+                <button type="button" class="dashboard-period-btn" data-days="7">7d</button>
+                <button type="button" class="dashboard-period-btn active" data-days="30">30d</button>
+                <button type="button" class="dashboard-period-btn" data-days="90">90d</button>
+                <button type="button" class="dashboard-period-btn" data-days="365">1a</button>
+              </div>
+              <button type="button" class="term-btn" id="dashboard-refresh" title="Atualizar">↻</button>
+            </div>
+            <div class="workspace-panel-body dashboard-body" id="dashboard-body">
+              <div class="dashboard-metrics" id="dashboard-metrics"></div>
+              <div class="dashboard-charts">
+                <div class="dashboard-chart-box">
+                  <h3 class="dashboard-section-title">Tendência</h3>
+                  <canvas id="dashboard-trend-chart" height="160"></canvas>
+                </div>
+                <div class="dashboard-chart-box">
+                  <h3 class="dashboard-section-title">Severidade (soma do período)</h3>
+                  <canvas id="dashboard-severity-chart" height="160"></canvas>
+                </div>
+              </div>
+              <div class="dashboard-tables">
+                <div>
+                  <h3 class="dashboard-section-title">Top issues</h3>
+                  <div class="dashboard-table-wrap">
+                    <table class="portfolio-table" id="dashboard-top-issues">
+                      <thead><tr><th>Título</th><th>Sev</th><th>Alvo</th><th>N</th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <h3 class="dashboard-section-title">Scans recentes</h3>
+                  <div class="dashboard-table-wrap">
+                    <table class="portfolio-table" id="dashboard-recent-scans">
+                      <thead><tr><th>Alvo</th><th>Vulns</th><th>C</th><th>H</th><th>Quando</th></tr></thead>
+                      <tbody></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+              <div class="dashboard-export">
+                <button type="button" class="term-btn" data-export="json">Export JSON</button>
+                <button type="button" class="term-btn" data-export="csv">Export CSV</button>
+                <button type="button" class="term-btn" data-export="pdf">Export PDF</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -169,24 +275,6 @@
         <button type="button" class="guided-tour-next autopilot-start" id="guided-tour-next">próximo</button>
       </div>
       <button type="button" class="guided-tour-advanced" id="guided-tour-advanced" hidden>Atalhos avançados</button>
-    </div>
-  </div>
-
-  <div class="overlay overlay-tools-wrap" id="overlay-tools" hidden>
-    <div class="panel panel-tools crt-panel" role="dialog" aria-modal="true" aria-label="Ferramentas">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Ferramentas</span>
-          <span class="panel-title-sub">whitelist · busque ou fixe</span>
-        </div>
-        <button type="button" class="panel-close" data-close="overlay-tools" aria-label="Fechar">×</button>
-      </div>
-      <div class="panel-toolbar">
-        <input type="text" class="panel-search tools-search" id="tool-search" placeholder="Buscar ferramenta…" spellcheck="false" />
-        <div class="tools-categories" id="tool-categories"></div>
-      </div>
-      <p class="tools-hint"><strong>auto</strong> = IA escolhe · <em>usar</em> = envia exemplo</p>
-      <div class="panel-body tools-grid-wrap" id="tool-list"></div>
     </div>
   </div>
 
@@ -232,38 +320,6 @@
     </div>
   </div>
 
-  <div class="overlay overlay-session-logs" id="overlay-session-logs" hidden>
-    <div class="panel panel-session-modal crt-panel" role="dialog" aria-modal="true" aria-label="Logs da conversa">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Logs</span>
-          <span class="panel-title-sub">comandos desta conversa</span>
-        </div>
-        <button type="button" class="panel-close" data-close="overlay-session-logs" aria-label="Fechar">×</button>
-      </div>
-      <div class="panel-body session-modal-body" id="session-logs-body"></div>
-    </div>
-  </div>
-
-  <div class="overlay overlay-session-report" id="overlay-session-report" hidden>
-    <div class="panel panel-session-modal panel-session-report crt-panel" role="dialog" aria-modal="true" aria-label="Relatório">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Relatório</span>
-          <span class="panel-title-sub" id="session-report-meta">triagem de achados</span>
-        </div>
-        <button type="button" class="panel-close" data-close="overlay-session-report" aria-label="Fechar">×</button>
-      </div>
-      <div class="panel-body session-modal-body" id="session-report-body"></div>
-      <div class="session-report-footer">
-        <p class="session-report-footer-hint" id="session-report-footer-hint">
-          Classifique cada achado. O PDF inclui só o que você marcou como vulnerabilidade.
-        </p>
-        <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
-      </div>
-    </div>
-  </div>
-
   <div class="overlay" id="overlay-remediation" hidden>
     <div class="panel panel-wide panel-remediation crt-panel" role="dialog" aria-modal="true" aria-label="Remediação">
       <div class="panel-head">
@@ -306,128 +362,6 @@
           <div class="remediation-footer">
             <button type="button" class="term-btn" id="remediation-mark-resolved">marcar resolvido</button>
           </div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="overlay" id="overlay-files" hidden>
-    <div class="panel panel-files panel-files-simple crt-panel" role="dialog" aria-modal="true" aria-label="Relatórios">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">PDFs</span>
-          <span class="panel-title-sub" id="files-meta">baixados pelo chat</span>
-        </div>
-        <div class="panel-head-right files-head-actions">
-          <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
-          <button type="button" class="panel-close" data-close="overlay-files" aria-label="Fechar">×</button>
-        </div>
-      </div>
-      <div class="files-simple-toolbar">
-        <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
-      </div>
-      <div class="panel-body files-panel-body" id="files-list"></div>
-    </div>
-  </div>
-
-  <div class="overlay" id="overlay-portfolio" hidden>
-    <div class="panel panel-wide crt-panel" role="dialog" aria-modal="true" aria-label="Carteira">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Carteira</span>
-          <span class="panel-title-sub">engajamentos · risco · delta · agenda</span>
-        </div>
-        <button type="button" class="panel-close" id="portfolio-close" aria-label="Fechar">×</button>
-      </div>
-      <div class="panel-body" id="portfolio-body"></div>
-    </div>
-  </div>
-
-  <div class="overlay" id="overlay-dashboard" hidden>
-    <div class="panel panel-wide panel-dashboard crt-panel" role="dialog" aria-modal="true" aria-label="Dashboard">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Dashboard</span>
-          <span class="panel-title-sub">métricas · trends · histórico</span>
-        </div>
-        <div class="panel-head-right files-head-actions">
-          <div class="dashboard-period" id="dashboard-period" role="group" aria-label="Período">
-            <button type="button" class="dashboard-period-btn" data-days="7">7d</button>
-            <button type="button" class="dashboard-period-btn active" data-days="30">30d</button>
-            <button type="button" class="dashboard-period-btn" data-days="90">90d</button>
-            <button type="button" class="dashboard-period-btn" data-days="365">1a</button>
-          </div>
-          <button type="button" class="term-btn" id="dashboard-refresh" title="Atualizar">↻</button>
-          <button type="button" class="panel-close" id="dashboard-close" aria-label="Fechar">×</button>
-        </div>
-      </div>
-      <div class="panel-body dashboard-body" id="dashboard-body">
-        <div class="dashboard-metrics" id="dashboard-metrics"></div>
-        <div class="dashboard-charts">
-          <div class="dashboard-chart-box">
-            <h3 class="dashboard-section-title">Tendência</h3>
-            <canvas id="dashboard-trend-chart" height="160"></canvas>
-          </div>
-          <div class="dashboard-chart-box">
-            <h3 class="dashboard-section-title">Severidade (soma do período)</h3>
-            <canvas id="dashboard-severity-chart" height="160"></canvas>
-          </div>
-        </div>
-        <div class="dashboard-tables">
-          <div>
-            <h3 class="dashboard-section-title">Top issues</h3>
-            <div class="dashboard-table-wrap">
-              <table class="portfolio-table" id="dashboard-top-issues">
-                <thead><tr><th>Título</th><th>Sev</th><th>Alvo</th><th>N</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <h3 class="dashboard-section-title">Scans recentes</h3>
-            <div class="dashboard-table-wrap">
-              <table class="portfolio-table" id="dashboard-recent-scans">
-                <thead><tr><th>Alvo</th><th>Vulns</th><th>C</th><th>H</th><th>Quando</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-        <div class="dashboard-export">
-          <button type="button" class="term-btn" data-export="json">Export JSON</button>
-          <button type="button" class="term-btn" data-export="csv">Export CSV</button>
-          <button type="button" class="term-btn" data-export="pdf">Export PDF</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="overlay overlay-threats" id="overlay-threats" hidden>
-    <div class="panel panel-threats crt-panel" id="threat-panel" role="dialog" aria-modal="true" aria-label="Mapa de ameaças">
-      <div class="panel-head">
-        <div class="panel-head-text">
-          <span class="panel-title-main">Mapa</span>
-          <span class="panel-title-sub">ameaça em tempo real · Kaspersky</span>
-        </div>
-        <div class="panel-head-right files-head-actions">
-          <div class="threat-mode-toggle" role="group" aria-label="Layout">
-            <button type="button" class="threat-mode-btn active" id="threat-mode-live">legenda</button>
-            <button type="button" class="threat-mode-btn" id="threat-mode-globe">expandir</button>
-          </div>
-          <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">abrir site</a>
-          <button type="button" class="threat-open-full" id="threat-open-full" title="Abrir mapa completo">↗</button>
-          <button type="button" class="panel-close" data-close="overlay-threats" aria-label="Fechar">×</button>
-        </div>
-      </div>
-      <div class="threatmap-body">
-        <aside class="threatmap-sidebar">
-          <p class="threatmap-sidebar-head">tipos de detecção</p>
-          <div class="threat-legend" id="threat-legend"></div>
-          <p class="threatmap-note">Detecções desde 00:00 GMT · arraste o globo</p>
-        </aside>
-        <div class="threatmap-frame-wrap">
-          <p class="threatmap-loading" id="threat-loading" aria-hidden="true">carregando mapa…</p>
-          <iframe class="threatmap-frame" id="threat-frame" title="Mapa Kaspersky" width="640" height="640" loading="lazy" allow="fullscreen"></iframe>
         </div>
       </div>
     </div>
@@ -493,6 +427,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/main.js?v=54"></script>
+  <script type="module" src="/static/js/main.js?v=55"></script>
 </body>
 </html>

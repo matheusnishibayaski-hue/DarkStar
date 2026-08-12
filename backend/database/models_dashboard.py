@@ -34,6 +34,9 @@ class ScanHistory(Base):
     status: Mapped[str] = mapped_column(String(32), default="completed", nullable=False)
     error_message: Mapped[str] = mapped_column(Text, default="", nullable=False)
     scan_type: Mapped[str] = mapped_column(String(32), default="manual", nullable=False)
+    chat_session_id: Mapped[str] = mapped_column(
+        String(128), default="", nullable=False, index=True
+    )
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_utcnow, nullable=False, index=True
     )

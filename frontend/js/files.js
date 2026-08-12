@@ -1,4 +1,4 @@
-/** Modal Files — biblioteca de relatórios PDF baixados no chat. */
+/** Biblioteca de PDFs — filtrada pela conversa ativa (workspace). */
 
 import {
   listDownloadedReports,
@@ -9,7 +9,7 @@ import {
 } from "./reports-store.js";
 import { attachDeleteAction, formatBytes, formatDate } from "./row-actions.js";
 import { escapeHtml } from "./exec.js";
-import { openOverlay } from "./ui.js";
+import { getActiveSession } from "./sessions.js";
 
 let ctx = {};
 let reportsCache = [];
@@ -25,15 +25,17 @@ export function initFilesPanel(context) {
   });
   unsubReports?.();
   unsubReports = onReportsChanged(() => {
-    if (ctx.overlayFiles && !ctx.overlayFiles.hidden) loadReports(true);
+    if (!document.getElementById("ws-panel-pdfs")?.hidden) loadReports(true);
   });
 }
 
 function render() {
   const { filesListEl, filesMetaEl } = ctx;
   if (!filesListEl) return;
+  const session = getActiveSession();
+  const sid = session?.id || "";
 
-  let list = reportsCache;
+  let list = reportsCache.filter((r) => !sid || r.sessionId === sid);
   if (filter) {
     list = list.filter((r) => {
       const hay = `${r.title} ${r.fileName} ${r.sessionId}`.toLowerCase();
@@ -43,17 +45,16 @@ function render() {
 
   if (filesMetaEl) {
     filesMetaEl.textContent = list.length
-      ? `${list.length} relatório${list.length === 1 ? "" : "s"} baixado${list.length === 1 ? "" : "s"}`
-      : "nenhum relatório salvo";
+      ? `${list.length} PDF(s) desta conversa`
+      : "nenhum PDF nesta conversa";
   }
 
   if (!list.length) {
     filesListEl.innerHTML = `
       <div class="files-simple-empty">
-        <p>${filter ? "Nada corresponde à busca." : "Nenhum relatório ainda."}</p>
+        <p>${filter ? "Nada corresponde à busca." : "Nenhum relatório nesta conversa ainda."}</p>
         <p class="files-simple-hint">
-          Gere PDFs pelo ícone de <strong>relatório</strong> na barra do chat
-          (classifique achados e use <strong>Baixar PDF</strong>).
+          Gere PDFs na aba <strong>relatório</strong> (classifique achados e use <strong>Baixar PDF</strong>).
         </p>
       </div>`;
     return;
@@ -120,10 +121,8 @@ async function loadReports(force = false) {
 }
 
 export async function openFilesPanel(nameFilter = "") {
-  if (!ctx.overlayFiles) return;
   filter = (nameFilter || "").trim().toLowerCase();
   if (ctx.filesSearch) ctx.filesSearch.value = filter;
-  openOverlay(ctx.overlayFiles);
   await loadReports(true);
 }
 

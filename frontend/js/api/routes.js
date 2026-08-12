@@ -126,6 +126,12 @@ export function deleteIntelSession(sessionId) {
   });
 }
 
+export function purgeDashboardSession(sessionId) {
+  return apiFetch(`/api/dashboard/session/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE",
+  });
+}
+
 export function patchSessionFinding(sessionId, findingId, body) {
   return apiFetch(
     `/api/intel/sessions/${encodeURIComponent(sessionId)}/findings/${encodeURIComponent(findingId)}`,

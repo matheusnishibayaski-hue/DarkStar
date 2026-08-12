@@ -109,10 +109,35 @@ def init_db() -> None:
     logger.info("database_initialized sqlite_fallback=%s", using_sqlite_fallback())
 
 
+def _ensure_scan_history_columns() -> None:
+    """Migração leve: adiciona chat_session_id se a tabela já existia."""
+    from sqlalchemy import inspect, text
+
+    try:
+        engine = get_engine()
+        insp = inspect(engine)
+        if "scan_history" not in insp.get_table_names():
+            return
+        cols = {c["name"] for c in insp.get_columns("scan_history")}
+        if "chat_session_id" in cols:
+            return
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "ALTER TABLE scan_history ADD COLUMN chat_session_id "
+                    "VARCHAR(128) NOT NULL DEFAULT ''"
+                )
+            )
+        logger.info("scan_history_added_chat_session_id")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("scan_history_migrate_failed: %s", exc)
+
+
 def ensure_dashboard_db() -> None:
     """Garante tabelas do dashboard (idempotente; seguro no boot)."""
     try:
         init_db()
+        _ensure_scan_history_columns()
     except Exception as exc:  # noqa: BLE001
         logger.warning("dashboard_db_init_failed: %s", exc)
 
@@ -166,6 +191,7 @@ def save_scan_result(scan_result: dict[str, Any]) -> bool:
                     }
                 )
         scan_id = str(scan_result.get("scan_id") or uuid.uuid4().hex[:16])
+        chat_session_id = str(scan_result.get("chat_session_id") or "")[:128]
         with session_scope() as db:
             row = ScanHistory(
                 scan_id=scan_id,
@@ -182,6 +208,7 @@ def save_scan_result(scan_result: dict[str, Any]) -> bool:
                 status=str(scan_result.get("status") or "completed")[:32],
                 error_message=str(scan_result.get("error_message") or "")[:2000],
                 scan_type=str(scan_result.get("scan_type") or "manual")[:32],
+                chat_session_id=chat_session_id,
                 timestamp=_utcnow(),
             )
             db.add(row)
@@ -231,6 +258,7 @@ def record_scan_from_target(
     scan_type: str = "autonomous",
     error_message: str = "",
     include_candidates: bool = True,
+    chat_session_id: str = "",
 ) -> dict[str, Any] | None:
     """Monta report a partir do surface e grava no histórico."""
     try:
@@ -247,6 +275,7 @@ def record_scan_from_target(
         report["status"] = status
         report["error_message"] = error_message
         report["scan_id"] = uuid.uuid4().hex[:16]
+        report["chat_session_id"] = str(chat_session_id or "")[:128]
         ok = save_scan_result(report)
         return report if ok else None
     except Exception as exc:  # noqa: BLE001
@@ -254,18 +283,59 @@ def record_scan_from_target(
         return None
 
 
+def _session_targets(session_id: str) -> list[str]:
+    if not session_id:
+        return []
+    try:
+        from backend.executor.session_intel import load_session
+
+        data = load_session(session_id) or {}
+        return [str(t) for t in (data.get("targets") or []) if t]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def purge_scans_for_session(session_id: str) -> int:
+    """Remove scans do dashboard ligados a uma conversa apagada."""
+    from backend.database.models_dashboard import ScanHistory
+
+    sid = str(session_id or "").strip()
+    if not sid:
+        return 0
+    try:
+        ensure_dashboard_db()
+        with session_scope() as db:
+            n = (
+                db.query(ScanHistory)
+                .filter(ScanHistory.chat_session_id == sid)
+                .delete(synchronize_session=False)
+            )
+            return int(n or 0)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("purge_scans_for_session_failed: %s", exc)
+        return 0
+
+
 def get_scan_history(
     days: int = 30,
     target: str | None = None,
     limit: int = 100,
+    session_id: str | None = None,
 ) -> list[dict[str, Any]]:
     from backend.database.models_dashboard import ScanHistory
+
+    sid = str(session_id or "").strip()
+    if not sid:
+        return []
 
     try:
         ensure_dashboard_db()
         cutoff = _utcnow() - timedelta(days=max(1, days))
         with session_scope() as db:
-            q = db.query(ScanHistory).filter(ScanHistory.timestamp >= cutoff)
+            q = db.query(ScanHistory).filter(
+                ScanHistory.timestamp >= cutoff,
+                ScanHistory.chat_session_id == sid,
+            )
             if target:
                 q = q.filter(ScanHistory.target == target)
             rows = q.order_by(ScanHistory.timestamp.desc()).limit(max(1, min(limit, 1000))).all()
@@ -284,6 +354,7 @@ def get_scan_history(
                     "timestamp": s.timestamp.isoformat() if s.timestamp else None,
                     "status": s.status,
                     "scan_type": s.scan_type,
+                    "chat_session_id": s.chat_session_id,
                 }
                 for s in rows
             ]
@@ -292,43 +363,65 @@ def get_scan_history(
         return []
 
 
-def compute_metrics(days: int = 30) -> dict[str, Any]:
+def compute_metrics(days: int = 30, session_id: str | None = None) -> dict[str, Any]:
     from backend.database.models_dashboard import ScanHistory, VulnerabilityTracking
+
+    empty = {
+        "total_scans": 0,
+        "avg_critical": 0.0,
+        "avg_high": 0.0,
+        "total_vulnerabilities": 0,
+        "open_vulnerabilities": 0,
+        "period_days": days,
+        "session_id": session_id or "",
+    }
+    sid = str(session_id or "").strip()
+    if not sid:
+        return empty
 
     try:
         ensure_dashboard_db()
         cutoff = _utcnow() - timedelta(days=max(1, days))
+        targets = _session_targets(sid)
         with session_scope() as db:
-            total_scans = (
-                db.query(func.count(ScanHistory.id))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
-            )
-            avg_critical = (
-                db.query(func.avg(ScanHistory.critical))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
-            )
-            avg_high = (
-                db.query(func.avg(ScanHistory.high))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
-            )
+            base = [
+                ScanHistory.timestamp >= cutoff,
+                ScanHistory.chat_session_id == sid,
+            ]
+            total_scans = db.query(func.count(ScanHistory.id)).filter(*base).scalar() or 0
+            avg_critical = db.query(func.avg(ScanHistory.critical)).filter(*base).scalar() or 0
+            avg_high = db.query(func.avg(ScanHistory.high)).filter(*base).scalar() or 0
             total_vulns = (
-                db.query(func.sum(ScanHistory.vulnerability_count))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
+                db.query(func.sum(ScanHistory.vulnerability_count)).filter(*base).scalar() or 0
             )
-            open_vulns = (
-                db.query(func.count(VulnerabilityTracking.id))
-                .filter(VulnerabilityTracking.status == "open")
-                .scalar()
-                or 0
+            open_q = db.query(func.count(VulnerabilityTracking.id)).filter(
+                VulnerabilityTracking.status == "open"
             )
+            if targets:
+                open_q = open_q.filter(VulnerabilityTracking.target.in_(targets))
+            else:
+                # Sem alvos na sessão: conta só vulns de targets que aparecem nos scans da sessão
+                scan_targets = [
+                    t[0]
+                    for t in db.query(ScanHistory.target)
+                    .filter(ScanHistory.chat_session_id == sid)
+                    .distinct()
+                    .all()
+                    if t[0]
+                ]
+                if scan_targets:
+                    open_q = open_q.filter(VulnerabilityTracking.target.in_(scan_targets))
+                else:
+                    open_vulns = 0
+                    return {
+                        **empty,
+                        "total_scans": int(total_scans),
+                        "avg_critical": float(avg_critical),
+                        "avg_high": float(avg_high),
+                        "total_vulnerabilities": int(total_vulns),
+                        "open_vulnerabilities": 0,
+                    }
+            open_vulns = open_q.scalar() or 0
             return {
                 "total_scans": int(total_scans),
                 "avg_critical": float(avg_critical),
@@ -336,28 +429,41 @@ def compute_metrics(days: int = 30) -> dict[str, Any]:
                 "total_vulnerabilities": int(total_vulns),
                 "open_vulnerabilities": int(open_vulns),
                 "period_days": days,
+                "session_id": sid,
             }
     except Exception as exc:  # noqa: BLE001
         logger.warning("compute_metrics_failed: %s", exc)
-        return {
-            "total_scans": 0,
-            "avg_critical": 0.0,
-            "avg_high": 0.0,
-            "total_vulnerabilities": 0,
-            "open_vulnerabilities": 0,
-            "period_days": days,
-        }
+        return empty
 
 
-def get_top_issues(limit: int = 10) -> list[dict[str, Any]]:
-    from backend.database.models_dashboard import VulnerabilityTracking
+def get_top_issues(limit: int = 10, session_id: str | None = None) -> list[dict[str, Any]]:
+    from backend.database.models_dashboard import ScanHistory, VulnerabilityTracking
+
+    sid = str(session_id or "").strip()
+    if not sid:
+        return []
 
     try:
         ensure_dashboard_db()
+        targets = _session_targets(sid)
         with session_scope() as db:
+            if not targets:
+                targets = [
+                    t[0]
+                    for t in db.query(ScanHistory.target)
+                    .filter(ScanHistory.chat_session_id == sid)
+                    .distinct()
+                    .all()
+                    if t[0]
+                ]
+            if not targets:
+                return []
             rows = (
                 db.query(VulnerabilityTracking)
-                .filter(VulnerabilityTracking.status == "open")
+                .filter(
+                    VulnerabilityTracking.status == "open",
+                    VulnerabilityTracking.target.in_(targets),
+                )
                 .order_by(VulnerabilityTracking.seen_count.desc())
                 .limit(max(1, min(limit, 50)))
                 .all()
@@ -376,9 +482,13 @@ def get_top_issues(limit: int = 10) -> list[dict[str, Any]]:
         return []
 
 
-def vulnerability_trend(days: int = 30) -> list[dict[str, Any]]:
-    """Série diária a partir de ScanHistory; complementa com risk_history se vazio."""
+def vulnerability_trend(days: int = 30, session_id: str | None = None) -> list[dict[str, Any]]:
+    """Série diária a partir de ScanHistory da conversa."""
     from backend.database.models_dashboard import ScanHistory
+
+    sid = str(session_id or "").strip()
+    if not sid:
+        return []
 
     try:
         ensure_dashboard_db()
@@ -387,7 +497,10 @@ def vulnerability_trend(days: int = 30) -> list[dict[str, Any]]:
         with session_scope() as db:
             rows = (
                 db.query(ScanHistory)
-                .filter(ScanHistory.timestamp >= cutoff)
+                .filter(
+                    ScanHistory.timestamp >= cutoff,
+                    ScanHistory.chat_session_id == sid,
+                )
                 .order_by(ScanHistory.timestamp.asc())
                 .all()
             )
@@ -414,85 +527,50 @@ def vulnerability_trend(days: int = 30) -> list[dict[str, Any]]:
                 slot["low"] += int(s.low or 0)
                 slot["total"] += int(s.vulnerability_count or 0)
 
-        if not by_date:
-            # Complemento: agrega risk_history JSONL (critical/high counts)
-            try:
-                from backend.ai.risk_history import RISK_HISTORY_DIR, load_risk_history
-                from backend.executor.recon_db import normalize_target
-
-                if RISK_HISTORY_DIR.is_dir():
-                    for path in RISK_HISTORY_DIR.glob("*.jsonl"):
-                        target = normalize_target(path.stem)
-                        for entry in load_risk_history(target, limit=365):
-                            ts = str(entry.get("ts") or "")
-                            if not ts:
-                                continue
-                            try:
-                                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                            except ValueError:
-                                continue
-                            if dt < cutoff:
-                                continue
-                            day = dt.astimezone(timezone.utc).date().isoformat()
-                            slot = by_date.setdefault(
-                                day,
-                                {
-                                    "date": day,
-                                    "scans": 0,
-                                    "critical": 0,
-                                    "high": 0,
-                                    "medium": 0,
-                                    "low": 0,
-                                    "total": 0,
-                                },
-                            )
-                            slot["scans"] += 1
-                            slot["critical"] += int(entry.get("critical") or 0)
-                            slot["high"] += int(entry.get("high") or 0)
-                            slot["total"] += int(entry.get("count") or 0)
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("risk_history_trend_merge_skipped: %s", exc)
-
         return [by_date[k] for k in sorted(by_date.keys())]
     except Exception as exc:  # noqa: BLE001
         logger.warning("vulnerability_trend_failed: %s", exc)
         return []
 
 
-def summary_report(days: int = 30) -> dict[str, Any]:
+def summary_report(days: int = 30, session_id: str | None = None) -> dict[str, Any]:
     from backend.database.models_dashboard import ScanHistory
+
+    empty = {
+        "period_days": days,
+        "total_scans": 0,
+        "success_rate": "100.0%",
+        "total_critical": 0,
+        "unique_targets": 0,
+        "latest_scans": [],
+        "session_id": session_id or "",
+    }
+    sid = str(session_id or "").strip()
+    if not sid:
+        return empty
 
     try:
         ensure_dashboard_db()
         cutoff = _utcnow() - timedelta(days=max(1, days))
         with session_scope() as db:
-            total_scans = (
-                db.query(func.count(ScanHistory.id))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
-            )
+            base = [
+                ScanHistory.timestamp >= cutoff,
+                ScanHistory.chat_session_id == sid,
+            ]
+            total_scans = db.query(func.count(ScanHistory.id)).filter(*base).scalar() or 0
             failed = (
                 db.query(func.count(ScanHistory.id))
-                .filter(ScanHistory.timestamp >= cutoff, ScanHistory.status != "completed")
+                .filter(*base, ScanHistory.status != "completed")
                 .scalar()
                 or 0
             )
-            total_critical = (
-                db.query(func.sum(ScanHistory.critical))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
-            )
+            total_critical = db.query(func.sum(ScanHistory.critical)).filter(*base).scalar() or 0
             unique_targets = (
-                db.query(func.count(func.distinct(ScanHistory.target)))
-                .filter(ScanHistory.timestamp >= cutoff)
-                .scalar()
-                or 0
+                db.query(func.count(func.distinct(ScanHistory.target))).filter(*base).scalar() or 0
             )
             latest = (
                 db.query(ScanHistory)
-                .filter(ScanHistory.timestamp >= cutoff)
+                .filter(*base)
                 .order_by(ScanHistory.timestamp.desc())
                 .limit(5)
                 .all()
@@ -512,14 +590,8 @@ def summary_report(days: int = 30) -> dict[str, Any]:
                     }
                     for s in latest
                 ],
+                "session_id": sid,
             }
     except Exception as exc:  # noqa: BLE001
         logger.warning("summary_report_failed: %s", exc)
-        return {
-            "period_days": days,
-            "total_scans": 0,
-            "success_rate": "100.0%",
-            "total_critical": 0,
-            "unique_targets": 0,
-            "latest_scans": [],
-        }
+        return empty

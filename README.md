@@ -204,7 +204,7 @@ Você manda. O sistema trabalha.
 - Triar achados e baixar PDF executivo + técnico (white-label da consultoria)  
 - Isolar workspaces por cliente (sidebar → CLIENTE), carteira, agenda recorrente e delta mensal  
 - Automatizar por **CLI** e **GitHub Actions** (só quando você disparar)  
-- Ver **dashboard** de métricas e histórico de scans  
+- Abrir o **workspace** da conversa (ferramentas, logs, relatório, pdfs, mapa, carteira, dashboard) — tudo filtrado pelo chat ativo  
 - Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
 - Abrir **wizard de remediação IA** na triagem (plano step-by-step + tracker)  
 - Trocar de modelo de IA (ChatGPT, Claude, Gemini, Grok, DeepSeek…)  
@@ -256,12 +256,12 @@ python -m backend.cli autonomous \
 
 Detalhes: [`docs/GITHUB-INTEGRATION.md`](docs/GITHUB-INTEGRATION.md)
 
-### 3. Dashboard (métricas no shell)
+### 3. Workspace da conversa (página, sem modal)
 
-Sidebar → **dashboard**: tendência de severidade, top issues, histórico de scans e export (JSON/CSV/PDF).  
-Os scans do Piloto, da CLI e da agenda gravam histórico (Postgres via `DATABASE_URL` ou SQLite local).
+Sidebar → **workspace**: página interna com abas **ferramentas · logs · relatório · pdfs · mapa · carteira · dashboard**.  
+Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a ele. Carteira e dashboard não são mais visão global MSSP.
 
-Detalhes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md)
+Detalhes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md) · [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
 ### 4. Notificações multicanal
 
@@ -337,7 +337,7 @@ A partir daí: Argus + Kali **só no seu PC**.
    *“faz um scan leve de portas em scanme.nmap.org”*  
 4. Ou clique **PILOTO** e deixe a missão rodar  
 5. Revise em **relatório** / **triagem**, baixe o PDF  
-6. (Opcional) Abra **dashboard** na sidebar · botão **fix** na triagem para o wizard de remediação  
+6. (Opcional) Sidebar → **workspace** (dashboard/carteira/logs da conversa) · botão **fix** na triagem  
 7. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
 
 Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.

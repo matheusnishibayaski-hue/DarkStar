@@ -408,5 +408,5 @@ export async function openToolsPanel() {
   activeToolCategory = "all";
   renderToolCategoryTabs();
   renderToolList();
-  ctx.openOverlay?.(ctx.overlayTools);
+  /* painel vive no workspace (sem overlay) */
 }

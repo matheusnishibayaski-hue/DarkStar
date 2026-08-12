@@ -431,6 +431,115 @@ html.mode-offensive .spine-meta {
   gap: 0.5rem;
 }
 
+/* Workspace page (per conversation, not modal) */
+.workspace-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg, #0b0d10);
+}
+
+.workspace-view[hidden] {
+  display: none !important;
+}
+
+#terminal[hidden] {
+  display: none !important;
+}
+
+.workspace-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.workspace-session-hint {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-3);
+  letter-spacing: 0.06em;
+}
+
+.workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.workspace-tab {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: lowercase;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+}
+
+.workspace-tab:hover {
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.workspace-tab.active {
+  color: var(--text);
+  border-color: var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.workspace-panels {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem 1rem 1.25rem;
+}
+
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-height: 0;
+}
+
+.workspace-panel[hidden] {
+  display: none !important;
+}
+
+.workspace-panel-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.workspace-panel-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.workspace-map-targets {
+  margin: 0 0 1rem;
+  padding-left: 1.1rem;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+}
+
 /* Remediation wizard overlay */
 .panel-remediation {
   max-width: min(920px, 96vw);

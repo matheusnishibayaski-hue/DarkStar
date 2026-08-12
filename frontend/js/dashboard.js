@@ -1,9 +1,10 @@
 /**
- * Painel Dashboard — métricas, Chart.js, histórico e export.
+ * Dashboard — métricas da conversa ativa (session_id obrigatório).
  */
 
 import { apiFetch } from "./api.js";
-import { openOverlay, closeOverlay, toast } from "./ui.js";
+import { toast } from "./ui.js";
+import { getActiveSession } from "./sessions.js";
 
 let currentDays = 30;
 let trendChart = null;
@@ -17,15 +18,32 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+function sessionQuery() {
+  const session = getActiveSession();
+  if (!session?.id) return null;
+  return `session_id=${encodeURIComponent(session.id)}`;
+}
+
+export async function refreshDashboard() {
+  return loadDashboard();
+}
+
 async function loadDashboard() {
   const metricsEl = document.getElementById("dashboard-metrics");
+  const q = sessionQuery();
+  if (!q) {
+    if (metricsEl) {
+      metricsEl.innerHTML = "<p class='panel-callout'>Nenhuma conversa ativa.</p>";
+    }
+    return;
+  }
   if (metricsEl) metricsEl.innerHTML = "<p class='panel-callout'>carregando…</p>";
   try {
     const [metricsRes, trendRes, topRes, histRes] = await Promise.all([
-      apiFetch(`/api/dashboard/metrics?days=${currentDays}`),
-      apiFetch(`/api/dashboard/vulnerability-trend?days=${currentDays}`),
-      apiFetch("/api/dashboard/top-issues?limit=10"),
-      apiFetch(`/api/dashboard/scan-history?days=${currentDays}&limit=20`),
+      apiFetch(`/api/dashboard/metrics?days=${currentDays}&${q}`),
+      apiFetch(`/api/dashboard/vulnerability-trend?days=${currentDays}&${q}`),
+      apiFetch(`/api/dashboard/top-issues?limit=10&${q}`),
+      apiFetch(`/api/dashboard/scan-history?days=${currentDays}&limit=20&${q}`),
     ]);
     const metrics = await metricsRes.json();
     const trend = await trendRes.json();
@@ -84,30 +102,29 @@ function renderTrend(rows) {
         {
           label: "Critical",
           data: rows.map((r) => r.critical || 0),
-          borderColor: "#f85149",
-          tension: 0.3,
+          borderColor: "#e07a6a",
+          tension: 0.2,
         },
         {
           label: "High",
           data: rows.map((r) => r.high || 0),
-          borderColor: "#d29922",
-          tension: 0.3,
+          borderColor: "#d4a84a",
+          tension: 0.2,
         },
         {
-          label: "Medium",
-          data: rows.map((r) => r.medium || 0),
-          borderColor: "#58a6ff",
-          tension: 0.3,
+          label: "Total",
+          data: rows.map((r) => r.total || 0),
+          borderColor: "#6ec6a8",
+          tension: 0.2,
         },
       ],
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false,
       plugins: { legend: { labels: { color: colors.text } } },
       scales: {
         x: { ticks: { color: colors.muted }, grid: { color: colors.grid } },
-        y: { ticks: { color: colors.muted }, grid: { color: colors.grid }, beginAtZero: true },
+        y: { ticks: { color: colors.muted }, grid: { color: colors.grid } },
       },
     },
   });
@@ -117,13 +134,16 @@ function renderSeverity(rows) {
   const canvas = document.getElementById("dashboard-severity-chart");
   if (!canvas || typeof Chart === "undefined") return;
   const colors = chartColors();
-  const sum = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const r of rows) {
-    sum.critical += r.critical || 0;
-    sum.high += r.high || 0;
-    sum.medium += r.medium || 0;
-    sum.low += r.low || 0;
-  }
+  const sum = rows.reduce(
+    (acc, r) => {
+      acc.critical += r.critical || 0;
+      acc.high += r.high || 0;
+      acc.medium += r.medium || 0;
+      acc.low += r.low || 0;
+      return acc;
+    },
+    { critical: 0, high: 0, medium: 0, low: 0 }
+  );
   if (severityChart) severityChart.destroy();
   severityChart = new Chart(canvas.getContext("2d"), {
     type: "doughnut",
@@ -132,51 +152,48 @@ function renderSeverity(rows) {
       datasets: [
         {
           data: [sum.critical, sum.high, sum.medium, sum.low],
-          backgroundColor: ["#f85149", "#d29922", "#58a6ff", "#3fb950"],
+          backgroundColor: ["#e07a6a", "#d4a84a", "#6ec6a8", "#8b949e"],
         },
       ],
     },
     options: {
       responsive: true,
-      maintainAspectRatio: false,
       plugins: { legend: { labels: { color: colors.text } } },
     },
   });
 }
 
-function renderTopIssues(issues) {
-  const tb = document.querySelector("#dashboard-top-issues tbody");
-  if (!tb) return;
-  if (!issues.length) {
-    tb.innerHTML = "<tr><td colspan='4'>Nenhum issue</td></tr>";
+function renderTopIssues(rows) {
+  const tbody = document.querySelector("#dashboard-top-issues tbody");
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4">Nenhum issue nesta conversa</td></tr>`;
     return;
   }
-  tb.innerHTML = issues
+  tbody.innerHTML = rows
     .map(
-      (i) =>
-        `<tr><td>${escapeHtml(i.title || "")}</td>` +
-        `<td>${escapeHtml(i.severity || "")}</td>` +
-        `<td>${escapeHtml(i.target || "")}</td>` +
-        `<td>${escapeHtml(String(i.count ?? 0))}</td></tr>`
+      (r) =>
+        `<tr><td>${escapeHtml(r.title || "")}</td><td>${escapeHtml(r.severity || "")}</td>` +
+        `<td>${escapeHtml(r.target || "")}</td><td>${escapeHtml(String(r.count ?? ""))}</td></tr>`
     )
     .join("");
 }
 
-function renderRecent(scans) {
-  const tb = document.querySelector("#dashboard-recent-scans tbody");
-  if (!tb) return;
-  if (!scans.length) {
-    tb.innerHTML = "<tr><td colspan='5'>Nenhum scan</td></tr>";
+function renderRecent(rows) {
+  const tbody = document.querySelector("#dashboard-recent-scans tbody");
+  if (!tbody) return;
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="5">Nenhum scan nesta conversa</td></tr>`;
     return;
   }
-  tb.innerHTML = scans
-    .map((s) => {
-      const when = String(s.timestamp || "").slice(0, 16).replace("T", " ");
+  tbody.innerHTML = rows
+    .map((r) => {
+      const when = String(r.timestamp || "").slice(0, 19).replace("T", " ");
       return (
-        `<tr><td><code>${escapeHtml(s.target || "")}</code></td>` +
-        `<td>${escapeHtml(String(s.vulnerability_count ?? 0))}</td>` +
-        `<td>${escapeHtml(String(s.critical ?? 0))}</td>` +
-        `<td>${escapeHtml(String(s.high ?? 0))}</td>` +
+        `<tr><td>${escapeHtml(r.target || "")}</td>` +
+        `<td>${escapeHtml(String(r.vulnerability_count ?? 0))}</td>` +
+        `<td>${escapeHtml(String(r.critical ?? 0))}</td>` +
+        `<td>${escapeHtml(String(r.high ?? 0))}</td>` +
         `<td>${escapeHtml(when)}</td></tr>`
       );
     })
@@ -184,8 +201,15 @@ function renderRecent(scans) {
 }
 
 async function exportReport(format) {
+  const q = sessionQuery();
+  if (!q) {
+    toast?.("Nenhuma conversa ativa", "error");
+    return;
+  }
   try {
-    const res = await apiFetch(`/api/dashboard/export?format=${format}&days=${currentDays}`);
+    const res = await apiFetch(
+      `/api/dashboard/export?format=${format}&days=${currentDays}&${q}`
+    );
     if (format === "json") {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || "export failed");
@@ -215,14 +239,7 @@ function downloadBlob(blob, filename) {
 }
 
 export function initDashboard() {
-  const btn = document.getElementById("btn-dashboard");
-  const closeBtn = document.getElementById("dashboard-close");
   const refresh = document.getElementById("dashboard-refresh");
-  btn?.addEventListener("click", () => {
-    openOverlay(document.getElementById("overlay-dashboard"));
-    loadDashboard();
-  });
-  closeBtn?.addEventListener("click", () => closeOverlay(document.getElementById("overlay-dashboard")));
   refresh?.addEventListener("click", () => loadDashboard());
   document.querySelectorAll(".dashboard-period-btn").forEach((b) => {
     b.addEventListener("click", () => {

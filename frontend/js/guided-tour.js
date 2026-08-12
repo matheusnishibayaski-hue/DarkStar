@@ -82,9 +82,9 @@ function buildSteps() {
       placement: "right",
     },
     {
-      selector: "#btn-tools",
-      title: "Ferramentas",
-      text: "Whitelist de programas. Auto = a IA escolhe.",
+      selector: "#btn-workspace",
+      title: "Workspace",
+      text: "Página da conversa: ferramentas, logs, relatório, pdfs, mapa, carteira e dashboard — só deste chat.",
       placement: "right",
     },
     {

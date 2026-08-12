@@ -1,14 +1,16 @@
-"""Dashboard carteira de clientes / engajamentos (uso interno — sem portal)."""
+"""Carteira de engajamentos — filtrada pela conversa ativa."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from backend.ai.delta import compute_delta
 from backend.ai.risk_history import load_risk_history
 from backend.ai.risk_score import risk_score_for_target
 from backend.clients.runtime import get_active_client_id
 from backend.clients.store import list_clients
+from backend.executor.recon_db import normalize_target
+from backend.executor.session_intel import load_session
 from backend.executor.surface import list_surface_summaries, load_surface
 from backend.schedule.store import list_jobs
 
@@ -16,8 +18,25 @@ router = APIRouter(prefix="/api", tags=["portfolio"])
 
 
 @router.get("/portfolio")
-def api_portfolio(client_id: str | None = Query(default=None, max_length=64)):
-    """Carteira: clientes, alvos, risco, delta, próximo agendamento."""
+def api_portfolio(
+    session_id: str = Query(..., min_length=1, max_length=128),
+    client_id: str | None = Query(default=None, max_length=64),
+):
+    """Carteira: só engajamentos cujos alvos pertencem à conversa."""
+    sid = (session_id or "").strip()
+    if not sid:
+        raise HTTPException(
+            status_code=400,
+            detail="session_id required (portfolio is scoped per conversation)",
+        )
+
+    session_data = load_session(sid) or {}
+    session_targets = {
+        normalize_target(t)
+        for t in (session_data.get("targets") or [])
+        if normalize_target(t)
+    }
+
     cid = (client_id or "").strip() or None
     clients = list_clients()
     if cid:
@@ -29,8 +48,28 @@ def api_portfolio(client_id: str | None = Query(default=None, max_length=64)):
         jobs_by_target.setdefault(str(j.get("target")), []).append(j)
 
     rows = []
+    if not session_targets:
+        return {
+            "active_client_id": get_active_client_id(),
+            "filter_client_id": cid,
+            "session_id": sid,
+            "clients": [
+                {
+                    "client_id": c.get("client_id"),
+                    "display_name": c.get("display_name"),
+                    "targets_count": c.get("targets_count"),
+                }
+                for c in clients
+            ],
+            "engagements": [],
+            "schedules_count": 0,
+        }
+
     for summary in list_surface_summaries(client_id=cid):
         target = str(summary.get("target") or "")
+        host = normalize_target(target)
+        if host not in session_targets:
+            continue
         surface = load_surface(target) or {}
         try:
             risk = risk_score_for_target(target)
@@ -71,6 +110,7 @@ def api_portfolio(client_id: str | None = Query(default=None, max_length=64)):
     return {
         "active_client_id": get_active_client_id(),
         "filter_client_id": cid,
+        "session_id": sid,
         "clients": [
             {
                 "client_id": c.get("client_id"),
@@ -80,5 +120,7 @@ def api_portfolio(client_id: str | None = Query(default=None, max_length=64)):
             for c in clients
         ],
         "engagements": rows,
-        "schedules_count": len(jobs),
+        "schedules_count": len(
+            [j for j in jobs if normalize_target(str(j.get("target") or "")) in session_targets]
+        ),
     }

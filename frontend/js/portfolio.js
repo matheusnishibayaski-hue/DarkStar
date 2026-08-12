@@ -1,9 +1,10 @@
 /**
- * Painel carteira de engajamentos (uso interno — sem portal do cliente).
+ * Carteira de engajamentos — só alvos da conversa ativa.
  */
 
 import { apiFetch } from "./api.js";
-import { openOverlay, closeOverlay, toast } from "./ui.js";
+import { toast } from "./ui.js";
+import { getActiveSession } from "./sessions.js";
 
 function escapeHtml(s) {
   return String(s)
@@ -13,17 +14,25 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
-async function loadPortfolio() {
+export async function refreshPortfolio() {
   const body = document.getElementById("portfolio-body");
   if (!body) return;
+  const session = getActiveSession();
+  if (!session) {
+    body.innerHTML = "<p class='panel-callout'>Nenhuma conversa ativa.</p>";
+    return;
+  }
   body.innerHTML = "<p class='panel-callout'>carregando…</p>";
   try {
-    const res = await apiFetch("/api/portfolio");
+    const res = await apiFetch(
+      `/api/portfolio?session_id=${encodeURIComponent(session.id)}`
+    );
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "falha");
     const rows = data.engagements || [];
     if (!rows.length) {
-      body.innerHTML = "<p class='panel-callout'>Nenhum engajamento ainda.</p>";
+      body.innerHTML =
+        "<p class='panel-callout'>Nenhum engajamento nesta conversa ainda. Rode scans nos alvos do chat.</p>";
       return;
     }
     const table = document.createElement("table");
@@ -51,7 +60,7 @@ async function loadPortfolio() {
     body.appendChild(table);
     const meta = document.createElement("p");
     meta.className = "panel-callout";
-    meta.textContent = `${rows.length} engajamento(s) · ${data.schedules_count || 0} agenda(s) · cliente ativo: ${data.active_client_id || "default"}`;
+    meta.textContent = `${rows.length} engajamento(s) desta conversa · ${data.schedules_count || 0} agenda(s)`;
     body.appendChild(meta);
   } catch (err) {
     body.innerHTML = `<p class="panel-callout">${escapeHtml(err.message || "erro")}</p>`;
@@ -59,19 +68,11 @@ async function loadPortfolio() {
   }
 }
 
+/** @deprecated use openWorkspace('carteira') */
 export function openPortfolioPanel() {
-  const overlay = document.getElementById("overlay-portfolio");
-  openOverlay(overlay);
-  loadPortfolio();
+  return refreshPortfolio();
 }
 
 export function initPortfolio() {
-  const btn = document.getElementById("btn-portfolio");
-  const closeBtn = document.getElementById("portfolio-close");
-  if (btn) btn.addEventListener("click", () => openPortfolioPanel());
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      closeOverlay(document.getElementById("overlay-portfolio"));
-    });
-  }
+  /* botão vive no workspace */
 }

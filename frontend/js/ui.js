@@ -151,18 +151,12 @@ export function closeOverlay(overlay) {
 
 export function closeAllOverlays(closeToolsPanelMenus) {
   for (const ov of [
-    ctx.overlayTools,
     ctx.overlayAutopilot,
     ctx.overlayHelp,
-    ctx.overlayFiles,
-    ctx.overlayThreats,
-    ctx.overlaySessionLogs,
-    ctx.overlaySessionReport,
     document.getElementById("overlay-master-key"),
     document.getElementById("overlay-login"),
-    document.getElementById("overlay-portfolio"),
-    document.getElementById("overlay-dashboard"),
     document.getElementById("overlay-remediation"),
+    document.getElementById("overlay-onboarding"),
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");

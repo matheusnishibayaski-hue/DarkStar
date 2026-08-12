@@ -46,7 +46,7 @@ export const HELP_HTML = `
   <h3>Atalhos principais</h3>
   <p class="help-note" style="margin-bottom:0.5rem">Use <kbd>Alt</kbd> + tecla — evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega, etc.)</p>
   <ul class="help-list">
-    <li><kbd>Alt</kbd>+<kbd>T</kbd> — ferramentas</li>
+    <li><kbd>Alt</kbd>+<kbd>T</kbd> — workspace · ferramentas</li>
     <li><kbd>Alt</kbd>+<kbd>P</kbd> — piloto automático</li>
     <li><kbd>Alt</kbd>+<kbd>F</kbd> — relatórios PDF baixados</li>
     <li><kbd>Alt</kbd>+<kbd>L</kbd> — logs da conversa</li>
@@ -60,7 +60,7 @@ export const HELP_HTML = `
 <section class="help-section">
   <h3>Alternativas</h3>
   <ul class="help-list">
-    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> — ferramentas</li>
+    <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd> — workspace · ferramentas</li>
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> — Auto-Pilot</li>
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> — relatório (export)</li>
     <li><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>N</kbd> — novo chat</li>

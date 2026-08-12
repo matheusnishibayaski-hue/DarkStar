@@ -20,7 +20,6 @@ import {
   toggleModelMenu,
   loadModels,
   renderToolList,
-  openToolsPanel,
   loadTools,
 } from "./tools-panel.js";
 import {
@@ -45,15 +44,15 @@ import {
   onChatScroll,
 } from "./chat-view.js";
 import { initChat, sendMessage, rebuildInputHistoryRef } from "./chat.js";
-import { initSessionLogsModal, openSessionLogsModal } from "./session-logs-modal.js";
-import { initSessionReportModal, openReportFromShortcut } from "./session-report-modal.js";
+import { initSessionLogsModal } from "./session-logs-modal.js";
+import { initSessionReportModal } from "./session-report-modal.js";
 import { initAutopilot, onPilotOffensiveModeChanged } from "./autopilot.js";
 import { initOffensiveMode, onOffensiveModeChange } from "./offensive-mode.js";
 import { initOfflineMode, onOfflineModeChange } from "./offline-mode.js";
 import { initMissionControl, cancelActiveMission } from "./mission.js";
 import { initShortcuts, handleGlobalKeydown } from "./shortcuts.js";
-import { initFilesPanel, openFilesPanel } from "./files.js";
-import { initThreatIntel, openThreatsPanel } from "./threatmap.js";
+import { initFilesPanel } from "./files.js";
+import { initThreatIntel } from "./threatmap.js";
 import { initAudio, bindSoundButton } from "./audio.js";
 import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 import { initGuidedTour, startGuidedTour, stopGuidedTour, isGuidedTourActive } from "./guided-tour.js";
@@ -63,18 +62,20 @@ import { initClientWorkspace } from "./client-workspace.js";
 import { initPortfolio } from "./portfolio.js";
 import { initDashboard } from "./dashboard.js";
 import { initRemediationWizard } from "./remediation-wizard.js";
+import {
+  initWorkspace,
+  openWorkspace,
+  closeWorkspace,
+  refreshWorkspaceIfOpen,
+} from "./workspace.js";
+import { purgeDashboardSession } from "./api/routes.js";
 
 const chatEl = document.getElementById("chat");
 const form = document.getElementById("form");
 const input = document.getElementById("input");
 const btnMenu = document.getElementById("btn-menu");
-const btnTools = document.getElementById("btn-tools");
 const btnAutopilot = document.getElementById("btn-autopilot");
 const btnCancelMission = document.getElementById("btn-cancel-mission");
-const btnSessionLogs = document.getElementById("btn-session-logs");
-const btnSessionReport = document.getElementById("btn-session-report");
-const btnFiles = document.getElementById("btn-files");
-const btnThreats = document.getElementById("btn-threats");
 const btnHelp = document.getElementById("btn-help");
 const btnNew = document.getElementById("btn-new");
 const btnScrollBottom = document.getElementById("btn-scroll-bottom");
@@ -90,11 +91,8 @@ const sidebarClose = document.getElementById("sidebar-close");
 const sidebarCollapse = document.getElementById("sidebar-collapse");
 const sidebarNew = document.getElementById("sidebar-new");
 const sidebarHelp = document.getElementById("sidebar-help");
-const overlayTools = document.getElementById("overlay-tools");
 const overlayAutopilot = document.getElementById("overlay-autopilot");
 const overlayHelp = document.getElementById("overlay-help");
-const overlayFiles = document.getElementById("overlay-files");
-const overlayThreats = document.getElementById("overlay-threats");
 const helpContent = document.getElementById("help-content");
 const autopilotTarget = document.getElementById("autopilot-target");
 const autopilotStart = document.getElementById("autopilot-start");
@@ -121,6 +119,7 @@ function newChat() {
   renderChat();
   updateSessionTitle();
   closeAllOverlays();
+  closeWorkspace();
   rebuildInputHistoryRef();
   if (input) input.value = "";
   input?.focus();
@@ -154,15 +153,16 @@ initShortcuts({
       return;
     }
     closeAllOverlays();
+    closeWorkspace();
     dismissSidebarDrawer();
   },
-  openTools: () => openToolsPanel(),
+  openTools: () => openWorkspace("tools"),
   openPilot: () => openOverlay(overlayAutopilot),
   openHelp: () => startGuidedTour(),
-  openThreats: () => openThreatsPanel(),
-  openFiles: () => openFilesPanel(),
-  downloadReport: () => openReportFromShortcut(),
-  openSessionLogs: () => openSessionLogsModal(),
+  openThreats: () => openWorkspace("mapa"),
+  openFiles: () => openWorkspace("pdfs"),
+  downloadReport: () => openWorkspace("report"),
+  openSessionLogs: () => openWorkspace("logs"),
   newChat: () => newChat(),
   focusInput: () => input?.focus(),
   toggleSidebar: () => toggleSidebar(),
@@ -175,13 +175,8 @@ initUi({
   sidebarBackdrop,
   input,
   toolSearch,
-  overlayTools,
   overlayAutopilot,
   overlayHelp,
-  overlayFiles,
-  overlayThreats,
-  overlaySessionLogs: document.getElementById("overlay-session-logs"),
-  overlaySessionReport: document.getElementById("overlay-session-report"),
   autopilotTarget,
   statusBarText,
   healthData: null,
@@ -202,17 +197,13 @@ initChat({
 });
 
 initSessionLogsModal({
-  overlaySessionLogs: document.getElementById("overlay-session-logs"),
   logsModalBody: document.getElementById("session-logs-body"),
-  btnSessionLogs,
   toast,
 });
 
 initSessionReportModal({
-  overlaySessionReport: document.getElementById("overlay-session-report"),
   reportModalBody: document.getElementById("session-report-body"),
   reportModalMeta: document.getElementById("session-report-meta"),
-  btnSessionReport,
   toast,
 });
 
@@ -242,6 +233,7 @@ initClientWorkspace();
 initPortfolio();
 initDashboard();
 initRemediationWizard();
+initWorkspace();
 onOfflineModeChange(() => {
   refreshStatusBar();
 });
@@ -255,7 +247,6 @@ initMasterKey({
 initMissionControl(btnCancelMission);
 
 initFilesPanel({
-  overlayFiles,
   filesListEl: document.getElementById("files-list"),
   filesMetaEl: document.getElementById("files-meta"),
   filesRefreshBtn: document.getElementById("files-refresh"),
@@ -263,16 +254,7 @@ initFilesPanel({
   toast,
 });
 
-initThreatIntel({
-  overlayThreats,
-  threatPanel: document.getElementById("threat-panel"),
-  threatLegendEl: document.getElementById("threat-legend"),
-  threatFrame: document.getElementById("threat-frame"),
-  threatLoadingEl: document.getElementById("threat-loading"),
-  threatModeLive: document.getElementById("threat-mode-live"),
-  threatModeGlobe: document.getElementById("threat-mode-globe"),
-  threatOpenFull: document.getElementById("threat-open-full"),
-});
+initThreatIntel({});
 
 initSessions({
   sessionsEl,
@@ -280,17 +262,20 @@ initSessions({
   afterSwitchSession: () => {
     renderChat();
     syncToolFromSession();
+    refreshWorkspaceIfOpen();
     dismissSidebarDrawer();
     input?.focus();
   },
   afterDeleteSession: () => {
     renderChat();
     syncToolFromSession();
+    refreshWorkspaceIfOpen();
     toast("conversa excluída");
   },
   beforeDeleteSession: (sessionId, logIds) => {
     deleteSessionLogs(sessionId, logIds).catch(() => {});
     deleteIntelSession(sessionId).catch(() => {});
+    purgeDashboardSession(sessionId).catch(() => {});
   },
 });
 
@@ -302,7 +287,6 @@ initToolsPanel({
   modelTrigger,
   modelMenu,
   modelLabel: document.getElementById("model-label"),
-  overlayTools,
   input,
   toast,
   updateStatusBar: refreshStatusBar,
@@ -324,11 +308,10 @@ try {
   initGuidedTour({
     overlayHelp,
     overlayAutopilot,
-    overlayTools,
     input,
-    openToolsPanel,
-    openFilesPanel,
-    openThreatsPanel,
+    openToolsPanel: () => openWorkspace("tools"),
+    openFilesPanel: () => openWorkspace("pdfs"),
+    openThreatsPanel: () => openWorkspace("mapa"),
     closeAllOverlays,
   });
 } catch (err) {
@@ -352,7 +335,6 @@ sidebarNew?.addEventListener("click", newChat);
 sidebarHelp?.addEventListener("click", () => startGuidedTour());
 btnNew?.addEventListener("click", newChat);
 
-btnTools?.addEventListener("click", () => openToolsPanel());
 modelTrigger?.addEventListener("click", (e) => {
   e.stopPropagation();
   toggleModelMenu();
@@ -364,8 +346,6 @@ document.addEventListener("click", (e) => {
 });
 
 btnAutopilot?.addEventListener("click", () => openOverlay(overlayAutopilot));
-btnFiles?.addEventListener("click", () => openFilesPanel());
-btnThreats?.addEventListener("click", () => openThreatsPanel());
 btnCancelMission?.addEventListener("click", () => cancelActiveMission(toast));
 btnHelp?.addEventListener("click", () => startGuidedTour());
 btnScrollBottom?.addEventListener("click", () => scrollChatToBottom());
@@ -381,13 +361,8 @@ document.querySelectorAll(".panel-close").forEach((btn) => {
 });
 
 for (const [overlay, id] of [
-  [overlayTools, "overlay-tools"],
   [overlayAutopilot, "overlay-autopilot"],
   [overlayHelp, "overlay-help"],
-  [overlayFiles, "overlay-files"],
-  [overlayThreats, "overlay-threats"],
-  [document.getElementById("overlay-session-logs"), "overlay-session-logs"],
-  [document.getElementById("overlay-session-report"), "overlay-session-report"],
 ]) {
   overlay?.addEventListener("click", (e) => {
     if (e.target === overlay) closeOverlay(document.getElementById(id));

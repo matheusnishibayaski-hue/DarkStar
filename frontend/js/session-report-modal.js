@@ -1,6 +1,5 @@
-/** Modal de relatório: triagem de achados + download manual de PDF. */
+/** Relatório da conversa: triagem de achados + download PDF (workspace). */
 
-import { openOverlay, closeOverlay } from "./ui.js";
 import { escapeHtml } from "./exec.js";
 import { getIntelSession, patchSessionFinding, syncIntelSessionExecutions } from "./api/routes.js";
 import { getActiveSession, collectSessionExecutions } from "./sessions.js";
@@ -46,14 +45,10 @@ function countByStatus(list) {
 
 export function initSessionReportModal(context) {
   ctx = context;
-  ctx.btnSessionReport?.addEventListener("click", () => openSessionReportModal());
-  ctx.overlaySessionReport
-    ?.querySelector('[data-close="overlay-session-report"]')
-    ?.addEventListener("click", () => closeSessionReportModal());
-
-  ctx.reportModalBody?.addEventListener("click", (e) => {
+  const body = ctx.reportModalBody || document.getElementById("session-report-body");
+  body?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-status]");
-    if (!btn || !ctx.reportModalBody?.contains(btn)) return;
+    if (!btn || !body?.contains(btn)) return;
     setStatus(btn.getAttribute("data-id"), btn.getAttribute("data-target"), btn.getAttribute("data-status"));
   });
 
@@ -61,23 +56,26 @@ export function initSessionReportModal(context) {
 }
 
 export function openSessionReportModal() {
-  if (!ctx.overlaySessionReport) return;
+  const body = ctx.reportModalBody || document.getElementById("session-report-body");
   const session = getActiveSession();
   if (!session) {
+    if (body) body.innerHTML = `<p class="session-modal-empty">Nenhuma conversa ativa.</p>`;
     ctx.toast?.("Nenhuma conversa ativa", "warn");
     return;
   }
   if (!collectSessionExecutions(session).length) {
+    if (body) {
+      body.innerHTML = `<p class="session-modal-empty">Execute ferramentas no chat antes do relatório.</p>`;
+    }
     ctx.toast?.("Execute ferramentas no chat antes do relatório", "warn");
     return;
   }
   sessionId = session.id;
-  openOverlay(ctx.overlaySessionReport);
   loadFindings();
 }
 
 export function closeSessionReportModal() {
-  if (ctx.overlaySessionReport) closeOverlay(ctx.overlaySessionReport);
+  /* painel no workspace */
 }
 
 async function handleDownloadPdf() {
