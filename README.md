@@ -219,7 +219,7 @@ Você manda. O sistema trabalha.
 - Gerar saída **JSON** ou **SARIF** na CLI para CI  
 - Abrir o **workspace** da conversa (ferramentas, logs, relatórios, mapa, dashboard) — tudo filtrado pelo chat ativo  
 - Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
-- Persistir conversas, PDFs, intel e agenda no **SQLite local** ou Postgres (`DATABASE_URL`)  
+- Persistir conversas, PDFs, agenda e intel da **sessão** no **SQLite local** ou Postgres (`DATABASE_URL`); o hub de padrões fica em JSON até `INTELLIGENCE_STORAGE=postgres`  
 - Trocar de modelo de IA no compositor (nuvem) ou ligar **04 offline** com Ollama  
 - Desbloquear perfil avançado com master key + modo **03 offensive**  
 - Integrar com Cursor/Claude via MCP (para quem quer ir além)
@@ -352,7 +352,9 @@ Feito para quem atende **vários alvos no mesmo PC**, sem portal do cliente e se
 ### 7. Persistência (não perde o lab no F5)
 
 Sem `DATABASE_URL` → **SQLite** em `backend/data/dashboard.db`.  
-Com Postgres → a mesma URL serve dashboard, conversas, intel, clientes, agenda e PDFs.
+Com Postgres → a mesma URL serve dashboard, conversas, clientes, agenda, PDFs e a **sessão de intel** da conversa.
+
+O **hub de padrões** (próximas checagens entre alvos) fica em JSON (`INTELLIGENCE_DIR`) por padrão. Só vai para Postgres com `INTELLIGENCE_STORAGE=postgres` **e** `DATABASE_URL`.
 
 Fica no banco: chats, relatórios baixados, sessão de intel da conversa, jobs da agenda, histórico de scans e padrões de falso positivo aprendidos na triagem.  
 Apagar um chat remove o que era daquela conversa.
@@ -452,7 +454,8 @@ Ctrl+Shift+T / P / E / N são alternativas. **Enter** envia; **↑** / **↓** n
 | `MASTER_KEY` | Libera perfil completo / offensive |
 | `AI_PROVIDER=ollama` | Começa já em modo local |
 | `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
-| `DATABASE_URL` | Postgres (dashboard, conversas, intel, agenda, PDFs); sem isso → SQLite local |
+| `DATABASE_URL` | Postgres (dashboard, conversas, clientes, agenda, PDFs, intel da sessão); sem isso → SQLite local |
+| `INTELLIGENCE_STORAGE` | Hub de padrões: `json` (padrão) ou `postgres` (exige `DATABASE_URL`) |
 | `CONSULTING_NAME` / `CONSULTING_LOGO_PATH` | White-label da capa do PDF comercial por alvo |
 | `OPERATOR_ROLE` | `admin` (padrão) · `analyst` · `viewer` (só leitura) |
 | `SCHEDULE_ENABLED` | Agenda de reteste em background |
@@ -485,6 +488,7 @@ coverage report
 ```
 
 Lint (o mesmo do GitHub): `ruff check backend tests` e `ruff format --check backend tests`.  
+O workflow também roda **Bandit**, **Semgrep** (OWASP + secrets) e valida os Compose em `docker/`.  
 E2E opcional: `npm ci` + `npx playwright test -c e2e/playwright.config.js` com a API no ar.
 
 ---
