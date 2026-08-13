@@ -24,9 +24,10 @@ function inferSurfaceTarget(session, history, toolExecutions) {
 export async function downloadSessionPdf(session, { silent = false } = {}) {
   if (!session) throw new Error("Nenhuma conversa ativa.");
   const toolExecutions = collectSessionExecutions(session);
-  if (!toolExecutions.length) throw new Error("Nenhuma ferramenta executada nesta conversa.");
-
   const history = collectSessionHistory(session);
+  if (!toolExecutions.length && !history.some((m) => m.role === "user")) {
+    throw new Error("Nada para relatar nesta conversa ainda.");
+  }
   const surfaceTarget = inferSurfaceTarget(session, history, toolExecutions);
   const res = await apiFetch("/api/generate-report", {
     method: "POST",

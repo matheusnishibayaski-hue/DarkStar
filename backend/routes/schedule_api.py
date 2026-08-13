@@ -23,9 +23,12 @@ class ScheduleCreateRequest(BaseModel):
     client_id: str = Field(default="default", max_length=64)
     job_type: str = Field(default="monitor", max_length=32)
     interval: str = Field(default="monthly", max_length=32)
+    interval_days: int | None = Field(default=None, ge=1, le=365)
     enabled: bool = True
     scan_profile: str = Field(default="basic", max_length=32)
     risk_profile: str = Field(default="passive", max_length=32)
+    custom_tools: list[str] = Field(default_factory=list)
+    chat_session_id: str = Field(default="", max_length=128)
 
 
 class SchedulePatchRequest(BaseModel):
@@ -54,9 +57,12 @@ def api_schedules_create(req: ScheduleCreateRequest):
         client_id=req.client_id,
         job_type=req.job_type,
         interval=req.interval,
+        interval_days=req.interval_days,
         enabled=req.enabled,
         scan_profile=req.scan_profile,
         risk_profile=req.risk_profile,
+        custom_tools=req.custom_tools,
+        chat_session_id=req.chat_session_id,
     )
     return job
 

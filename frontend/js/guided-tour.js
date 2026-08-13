@@ -67,7 +67,7 @@ function buildSteps() {
     {
       selector: "#sidebar",
       title: "Barra lateral",
-      text: "Conversas, ferramentas, logs, relatório, PDFs, mapa, master key e ajuda — tudo aqui.",
+      text: "Conversas, workspace (ferramentas, logs, relatórios, mapa), master key e ajuda — tudo aqui.",
       placement: "right",
       before: async () => {
         resetPanels();
@@ -84,7 +84,7 @@ function buildSteps() {
     {
       selector: "#btn-workspace",
       title: "Workspace",
-      text: "Página da conversa: ferramentas, logs, relatório, pdfs, mapa, carteira e dashboard — só deste chat.",
+      text: "Página da conversa: ferramentas, logs, relatórios (prévia, carteira e PDF), mapa e dashboard — só deste chat.",
       placement: "right",
     },
     {
@@ -96,7 +96,7 @@ function buildSteps() {
     {
       selector: "#btn-session-report",
       title: "Relatório",
-      text: "Triagem de achados e PDF.",
+      text: "Pré-visualização ao vivo do PDF, carteira dos alvos e download.",
       placement: "right",
     },
     {

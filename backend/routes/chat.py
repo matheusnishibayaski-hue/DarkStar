@@ -65,6 +65,25 @@ def api_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@router.post("/generate-report/preview")
+def api_generate_report_preview(req: ReportRequest):
+    """HTML da pré-visualização ao vivo (mesmo conteúdo-base do PDF)."""
+    try:
+        from backend.ai.live_report import generate_live_report_html
+
+        history = [{"role": m.role, "content": m.content} for m in req.history]
+        executions = [e.model_dump() for e in req.tool_executions]
+        html_doc = generate_live_report_html(
+            history=history,
+            tool_executions=executions,
+            session_id=(req.chat_session_id or "").strip(),
+            title=req.title or "Relatório de Pentest",
+        )
+        return Response(content=html_doc, media_type="text/html; charset=utf-8")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+
 @router.post("/generate-report")
 def api_generate_report(req: ReportRequest):
     try:
@@ -78,6 +97,7 @@ def api_generate_report(req: ReportRequest):
                 session_id=session_id,
                 title=req.title,
                 tool_executions=executions or None,
+                history=history,
             )
         else:
             if not target:

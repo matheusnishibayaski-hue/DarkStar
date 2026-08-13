@@ -45,6 +45,7 @@ import {
 import { initChat, sendMessage, rebuildInputHistoryRef } from "./chat.js";
 import { initSessionLogsModal } from "./session-logs-modal.js";
 import { initSessionReportModal } from "./session-report-modal.js";
+import { initTriageGate } from "./triage-gate.js";
 import { initAutopilot, onPilotOffensiveModeChanged } from "./autopilot.js";
 import { initOffensiveMode, onOffensiveModeChange } from "./offensive-mode.js";
 import { initOfflineMode, onOfflineModeChange } from "./offline-mode.js";
@@ -157,7 +158,7 @@ initShortcuts({
   openPilot: () => openOverlay(overlayAutopilot),
   openHelp: () => startGuidedTour(),
   openThreats: () => openWorkspace("mapa"),
-  openFiles: () => openWorkspace("pdfs"),
+  openFiles: () => openWorkspace("report"),
   downloadReport: () => openWorkspace("report"),
   openSessionLogs: () => openWorkspace("logs"),
   newChat: () => newChat(),
@@ -199,10 +200,10 @@ initSessionLogsModal({
 });
 
 initSessionReportModal({
-  reportModalBody: document.getElementById("session-report-body"),
   reportModalMeta: document.getElementById("session-report-meta"),
   toast,
 });
+initTriageGate({ toast });
 
 initAutopilot({
   chatEl,
@@ -310,7 +311,7 @@ try {
     overlayAutopilot,
     input,
     openToolsPanel: () => openWorkspace("tools"),
-    openFilesPanel: () => openWorkspace("pdfs"),
+    openFilesPanel: () => openWorkspace("report"),
     openThreatsPanel: () => openWorkspace("mapa"),
     closeAllOverlays,
   });

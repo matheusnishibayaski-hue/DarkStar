@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=52" />
-  <link rel="stylesheet" href="/static/shell.css?v=18" />
+  <link rel="stylesheet" href="/static/styles.css?v=53" />
+  <link rel="stylesheet" href="/static/shell.css?v=26" />
   <script>
     (function () {
       try {
@@ -150,10 +150,8 @@
         <nav class="workspace-tabs" id="workspace-tabs" aria-label="Abas do workspace">
           <button type="button" class="workspace-tab active" data-ws-tab="tools">ferramentas</button>
           <button type="button" class="workspace-tab" data-ws-tab="logs">logs</button>
-          <button type="button" class="workspace-tab" data-ws-tab="report">relatório</button>
-          <button type="button" class="workspace-tab" data-ws-tab="pdfs">pdfs</button>
+          <button type="button" class="workspace-tab" data-ws-tab="report">relatórios</button>
           <button type="button" class="workspace-tab" data-ws-tab="mapa">mapa</button>
-          <button type="button" class="workspace-tab" data-ws-tab="carteira">carteira</button>
           <button type="button" class="workspace-tab" data-ws-tab="dashboard">dashboard</button>
         </nav>
         <div class="workspace-panels">
@@ -169,22 +167,32 @@
             <div class="workspace-panel-body session-modal-body" id="session-logs-body"></div>
           </div>
           <div class="workspace-panel" data-ws-panel="report" id="ws-panel-report" hidden>
-            <p class="panel-callout" id="session-report-meta">triagem de achados desta conversa</p>
-            <div class="workspace-panel-body session-modal-body" id="session-report-body"></div>
-            <div class="session-report-footer">
+            <div class="report-live-toolbar">
+              <p class="panel-callout" id="session-report-meta">pré-visualização ao vivo</p>
               <p class="session-report-footer-hint" id="session-report-footer-hint">
-                Classifique cada achado. O PDF inclui só o que você marcou como vulnerabilidade.
+                A prévia acompanha o que o chat descobrir.
               </p>
               <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
             </div>
-          </div>
-          <div class="workspace-panel" data-ws-panel="pdfs" id="ws-panel-pdfs" hidden>
-            <div class="workspace-panel-toolbar files-simple-toolbar">
-              <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
-              <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
-              <span class="panel-title-sub" id="files-meta">pdfs desta conversa</span>
+            <div class="report-live-preview-wrap">
+              <iframe id="session-report-preview" class="report-live-preview" title="Pré-visualização do relatório"></iframe>
             </div>
-            <div class="workspace-panel-body files-panel-body" id="files-list"></div>
+            <section class="report-carteira" aria-label="Carteira desta conversa">
+              <div class="workspace-panel-toolbar">
+                <span class="report-saved-label">Carteira · alvos desta conversa</span>
+                <span class="panel-title-sub" id="portfolio-meta"></span>
+              </div>
+              <div id="portfolio-body" class="portfolio-body"></div>
+            </section>
+            <div class="report-saved-pdfs">
+              <div class="workspace-panel-toolbar files-simple-toolbar">
+                <span class="report-saved-label">PDFs salvos desta conversa</span>
+                <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
+                <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
+                <span class="panel-title-sub" id="files-meta"></span>
+              </div>
+              <div class="workspace-panel-body files-panel-body" id="files-list"></div>
+            </div>
           </div>
           <div class="workspace-panel" data-ws-panel="mapa" id="ws-panel-mapa" hidden>
             <div class="workspace-panel-toolbar">
@@ -192,9 +200,6 @@
               <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">cybermap (externo)</a>
             </div>
             <div class="workspace-panel-body" id="workspace-map-body"></div>
-          </div>
-          <div class="workspace-panel" data-ws-panel="carteira" id="ws-panel-carteira" hidden>
-            <div class="workspace-panel-body" id="portfolio-body"></div>
           </div>
           <div class="workspace-panel" data-ws-panel="dashboard" id="ws-panel-dashboard" hidden>
             <div class="workspace-panel-toolbar">
@@ -301,6 +306,17 @@
             <p class="pilot-advanced-desc">Marque as ferramentas (pelo menos uma).</p>
             <input type="search" id="pilot-tool-search" class="panel-field" placeholder="Filtrar…" spellcheck="false" autocomplete="off" />
             <div class="pilot-tool-grid" id="pilot-tool-grid"></div>
+          </div>
+        </div>
+        <div class="form-field pilot-repeat-field">
+          <label class="pilot-repeat-check">
+            <input type="checkbox" id="autopilot-repeat" />
+            <span>Repetir este teste automaticamente</span>
+          </label>
+          <div class="pilot-repeat-days" id="autopilot-repeat-days-wrap" hidden>
+            <label class="autopilot-label" for="autopilot-repeat-days">A cada N dias</label>
+            <input type="number" id="autopilot-repeat-days" class="panel-field autopilot-input" min="1" max="365" value="30" />
+            <p class="pilot-advanced-desc">A primeira rodada é agora. As seguintes usam o mesmo alvo e tipo de scan.</p>
           </div>
         </div>
         <button type="button" class="autopilot-start" id="autopilot-start">Iniciar</button>
@@ -426,6 +442,26 @@
     </div>
   </div>
 
+  <div class="overlay overlay-triage-gate" id="overlay-triage-gate" hidden>
+    <div class="panel panel-wide panel-triage-gate crt-panel" id="triage-gate-card" role="dialog" aria-modal="true" aria-labelledby="triage-gate-title">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="triage-gate-title">Antes do PDF: o que isto significa?</span>
+          <span class="panel-title-sub">uma pergunta de cada vez, em português claro · <span id="triage-gate-progress">0 / 0</span></span>
+        </div>
+        <button type="button" class="panel-close" id="triage-gate-cancel" aria-label="Cancelar">×</button>
+      </div>
+      <div class="panel-body triage-gate-body-wrap">
+        <div class="triage-gate-summary" id="triage-gate-summary" hidden></div>
+        <div class="triage-gate-progressbar" aria-hidden="true"><i id="triage-gate-bar"></i></div>
+        <div id="triage-gate-body" class="triage-gate-card-body"></div>
+      </div>
+      <div class="triage-gate-foot">
+        <button type="button" class="onboarding-skip" id="triage-gate-skip-all">Pular o resto e gerar o PDF mesmo assim</button>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay overlay-master-key" id="overlay-master-key" hidden>
     <div class="panel panel-narrow panel-master-key crt-panel" role="dialog" aria-modal="true" aria-labelledby="master-key-title" aria-label="Master key">
       <div class="panel-head panel-head-accent">
@@ -450,6 +486,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/main.js?v=63"></script>
+  <script type="module" src="/static/js/main.js?v=72"></script>
 </body>
 </html>

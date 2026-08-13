@@ -1,6 +1,7 @@
 import { STORAGE_KEY, ARGUS_WELCOME_MESSAGE } from "./constants.js";
 import { apiFetch } from "./api.js";
 import { escapeHtml } from "./exec.js";
+import { getActiveClientId } from "./client-workspace.js";
 
 /** @type {{ sessionsEl: HTMLElement, sessionTitleEl: HTMLElement, onChanged?: () => void }} */
 let ctx = {};
@@ -12,26 +13,48 @@ const MIGRATED_KEY = "darkstar-sessions-migrated-db";
 let saveTimer = null;
 let bootPromise = null;
 
+export function currentClientId() {
+  try {
+    return getActiveClientId() || localStorage.getItem("darkstar.active_client_id") || "default";
+  } catch {
+    return "default";
+  }
+}
+
 export function initSessions(context) {
   ctx = context;
+  window.addEventListener("darkstar:client-changed", (e) => {
+    const cid = e.detail?.clientId || currentClientId();
+    reloadSessionsForClient(cid).catch((err) => console.warn("chat_reload_client_failed", err));
+  });
 }
 
 function uid() {
   return crypto.randomUUID?.() || `s-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function readActiveId() {
+function readActiveId(clientId = currentClientId()) {
   try {
-    return localStorage.getItem(ACTIVE_KEY) || null;
+    const keyed = localStorage.getItem(`${ACTIVE_KEY}:${clientId || "default"}`);
+    if (keyed) return keyed;
+    if ((clientId || "default") === "default") {
+      return localStorage.getItem(ACTIVE_KEY) || null;
+    }
   } catch {
-    return null;
+    /* ignore */
   }
+  return null;
 }
 
-function writeActiveId(id) {
+function writeActiveId(id, clientId = currentClientId()) {
   try {
-    if (id) localStorage.setItem(ACTIVE_KEY, id);
-    else localStorage.removeItem(ACTIVE_KEY);
+    const key = `${ACTIVE_KEY}:${clientId || "default"}`;
+    if (id) localStorage.setItem(key, id);
+    else localStorage.removeItem(key);
+    if ((clientId || "default") === "default") {
+      if (id) localStorage.setItem(ACTIVE_KEY, id);
+      else localStorage.removeItem(ACTIVE_KEY);
+    }
   } catch {
     /* ignore */
   }
@@ -61,7 +84,7 @@ function sessionPayload(session) {
     messages: session.messages || [],
     createdAt: session.createdAt || Date.now(),
     updatedAt: session.updatedAt || Date.now(),
-    client_id: session.client_id || "",
+    client_id: session.client_id || currentClientId() || "default",
   };
 }
 
@@ -87,8 +110,9 @@ async function apiDelete(sessionId) {
   }
 }
 
-async function apiList() {
-  const res = await apiFetch("/api/chat-sessions");
+async function apiList(clientId = currentClientId()) {
+  const cid = clientId || "default";
+  const res = await apiFetch(`/api/chat-sessions?client_id=${encodeURIComponent(cid)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "falha ao listar conversas");
@@ -143,6 +167,7 @@ export function createSession() {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     preferredTool: "auto",
+    client_id: currentClientId() || "default",
     messages: [
       {
         role: "assistant",
@@ -161,6 +186,38 @@ export function createSession() {
 
 export function ensureSession() {
   if (!getActiveSession()) createSession();
+}
+
+function mapSessionRow(s) {
+  return {
+    id: s.id,
+    title: s.title || "novo chat",
+    preferredTool: s.preferredTool || "auto",
+    messages: Array.isArray(s.messages) ? s.messages : [],
+    createdAt: s.createdAt || Date.now(),
+    updatedAt: s.updatedAt || Date.now(),
+    client_id: s.client_id || "default",
+  };
+}
+
+export function applyLoadedSessions(sessions, clientId = currentClientId()) {
+  store.sessions = (sessions || []).map(mapSessionRow);
+  const savedActive = readActiveId(clientId);
+  if (savedActive && store.sessions.some((s) => s.id === savedActive)) {
+    store.activeId = savedActive;
+  } else {
+    store.activeId = store.sessions[0]?.id || null;
+  }
+  writeActiveId(store.activeId, clientId);
+  if (!store.activeId) createSession();
+}
+
+export async function reloadSessionsForClient(clientId = currentClientId()) {
+  const sessions = await apiList(clientId);
+  applyLoadedSessions(sessions, clientId);
+  renderSessions();
+  updateSessionTitle();
+  ctx.afterSwitchSession?.(store.activeId);
 }
 
 /**
@@ -194,7 +251,7 @@ export async function bootSessionsFromDb() {
         messages: Array.isArray(s.messages) ? s.messages : [],
         createdAt: s.createdAt || Date.now(),
         updatedAt: s.updatedAt || Date.now(),
-        client_id: s.client_id || "",
+        client_id: s.client_id || "default",
       }));
 
       const savedActive = readActiveId();

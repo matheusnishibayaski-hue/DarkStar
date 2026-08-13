@@ -357,6 +357,65 @@ def aggregate_session_findings(session_id: str, *, sync: bool = True) -> list[di
     return out
 
 
+def ingest_extracted_findings(
+    session_id: str,
+    extra_executions: list[dict[str, Any]] | None = None,
+    *,
+    skip_disk_logs: bool = False,
+) -> int:
+    """Cria candidatos a partir das saídas das execuções (logs + histórico do chat)."""
+    execs: list[dict[str, Any]] = []
+    if not skip_disk_logs:
+        execs = list(collect_session_tool_executions(session_id) or [])
+    if extra_executions:
+        for ex in extra_executions:
+            if isinstance(ex, dict):
+                execs.append(ex)
+    if not execs:
+        return 0
+    from backend.ai.report import _extract_vulnerabilities
+
+    vulns = _extract_vulnerabilities(execs)
+    if not vulns:
+        return 0
+    data = load_session(session_id) or {
+        "session_id": session_id,
+        "label": "",
+        "targets": [],
+        "session_findings": [],
+        "created_at": _now(),
+    }
+    session_findings: list[dict[str, Any]] = list(data.get("session_findings") or [])
+    by_id = {str(f.get("id")): f for f in session_findings if f.get("id")}
+    added = 0
+    for i, v in enumerate(vulns):
+        fid = f"extract-{i}-{abs(hash(str(v.get('detail') or i))) % 10_000_000}"
+        if fid in by_id:
+            continue
+        sev = str(v.get("severity") or "info").lower()
+        row = {
+            "id": fid,
+            "title": str(v.get("detail") or "Achado")[:200],
+            "severity": sev,
+            "status": "candidate",
+            "evidence": str(v.get("detail") or "")[:2000],
+            "tool": "",
+            "command": str(v.get("source") or "")[:500],
+            "host": "",
+            "surface_target": "_session",
+            "chat_session_id": session_id,
+            "source": "execution_extract",
+        }
+        session_findings.append(row)
+        by_id[fid] = row
+        added += 1
+    if not added:
+        return 0
+    data["session_findings"] = session_findings[-200:]
+    save_session(session_id, data)
+    return added
+
+
 def session_summary(session_id: str) -> dict[str, Any]:
     meta = load_session(session_id)
     findings = aggregate_session_findings(session_id)
@@ -405,20 +464,25 @@ def patch_session_finding(
     *,
     evidence: str = "",
 ) -> dict[str, Any] | None:
-    if finding_id.startswith("exec-"):
-        data = load_session(session_id)
-        updated: dict[str, Any] | None = None
-        for f in data.get("session_findings") or []:
-            if str(f.get("id")) != finding_id:
-                continue
-            f["status"] = status
-            if evidence:
-                f["evidence"] = evidence[:2000]
-            updated = dict(f)
-            break
-        if not updated:
-            return None
+    data = load_session(session_id) or {}
+    updated: dict[str, Any] | None = None
+    for f in data.get("session_findings") or []:
+        if str(f.get("id")) != finding_id:
+            continue
+        f["status"] = status
+        if evidence:
+            f["evidence"] = evidence[:2000]
+        updated = dict(f)
+        break
+    if updated:
         save_session(session_id, data)
+        if status == "false_positive":
+            try:
+                from backend.ai.fp_learn import remember_false_positive
+
+                remember_false_positive(updated, target=surface_target or "")
+            except Exception:  # noqa: BLE001
+                pass
         return {
             **updated,
             "surface_target": updated.get("surface_target") or surface_target or "_session",
@@ -427,6 +491,13 @@ def patch_session_finding(
     finding = mark_finding_status(surface_target, finding_id, status, evidence=evidence)
     if not finding:
         return None
+    if status == "false_positive":
+        try:
+            from backend.ai.fp_learn import remember_false_positive
+
+            remember_false_positive(finding, target=surface_target or "")
+        except Exception:  # noqa: BLE001
+            pass
     touch_session(session_id, surface_target)
     return {**finding, "surface_target": surface_target}
 

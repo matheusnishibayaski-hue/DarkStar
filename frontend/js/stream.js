@@ -100,9 +100,10 @@ export function createToolStreamHandlers({ chatEl, showTyping, hideTyping, scrol
       attachLogStream(data.execution_id, scrollChatToBottom);
       showTyping(`executando: ${(data.command || "").split(" ")[0] || "tool"}`);
     },
-    tool_done() {
+    tool_done(data) {
       hideTyping();
       showTyping("analisando resultado…");
+      window.dispatchEvent(new CustomEvent("darkstar:tool-done", { detail: data || {} }));
     },
     round_start(data) {
       showTyping(`rodada ${data.round}/${data.max_rounds} · ${data.tools_executed} cmd(s)`);

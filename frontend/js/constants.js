@@ -48,10 +48,9 @@ export const HELP_HTML = `
   <ul class="help-list">
     <li><kbd>Alt</kbd>+<kbd>T</kbd> — workspace · ferramentas</li>
     <li><kbd>Alt</kbd>+<kbd>P</kbd> — piloto automático</li>
-    <li><kbd>Alt</kbd>+<kbd>F</kbd> — relatórios PDF baixados</li>
+    <li><kbd>Alt</kbd>+<kbd>F</kbd> ou <kbd>Alt</kbd>+<kbd>R</kbd> — relatórios (prévia, carteira e PDF)</li>
     <li><kbd>Alt</kbd>+<kbd>L</kbd> — logs da conversa</li>
     <li><kbd>Alt</kbd>+<kbd>C</kbd> — mapa mundial de ameaças</li>
-    <li><kbd>Alt</kbd>+<kbd>R</kbd> — relatório (modal)</li>
     <li><kbd>Alt</kbd>+<kbd>N</kbd> — novo chat</li>
     <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — tour guiado (ajuda interativa)</li>
     <li><kbd>Alt</kbd>+<kbd>K</kbd> ou <kbd>Ctrl</kbd>+<kbd>K</kbd> — focar prompt</li>
@@ -90,7 +89,7 @@ export const HELP_HTML = `
     <li><strong>offensive</strong> — requer master key (perfil full)</li>
     <li><strong>offline</strong> — Argus via Ollama local (sem OpenRouter)</li>
     <li>Ícones no prompt — <strong>logs</strong> e <strong>relatório/triagem</strong></li>
-    <li><strong>relatórios</strong> · <strong>mapa</strong> · <strong>cancel</strong></li>
+    <li><strong>relatórios</strong> (prévia + carteira + PDF) · <strong>mapa</strong> · <strong>cancel</strong></li>
   </ul>
 </section>
 <p class="help-note">Use apenas em alvos autorizados.</p>

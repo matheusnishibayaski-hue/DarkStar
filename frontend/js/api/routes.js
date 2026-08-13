@@ -112,6 +112,15 @@ export function syncIntelSessionExecutions(sessionId, executions) {
   });
 }
 
+export function fetchIntelTriageQueue(sessionId, executions = [], signal) {
+  return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}/triage-queue`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ executions }),
+    signal,
+  });
+}
+
 export function patchIntelSession(sessionId, body) {
   return apiFetch(`/api/intel/sessions/${encodeURIComponent(sessionId)}`, {
     method: "PATCH",

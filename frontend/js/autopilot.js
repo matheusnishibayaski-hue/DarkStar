@@ -33,7 +33,7 @@ import {
   hideTyping,
   scrollChatToBottom,
 } from "./chat-view.js";
-import { toast, showToastError, setLoading, getLoading, closeOverlay } from "./ui.js";
+import { getActiveClientId } from "./client-workspace.js";
 
 let ctx = {};
 /** @type {"basic"|"intermediate"|"full"|"custom"} */
@@ -157,6 +157,11 @@ export function initAutopilot(context) {
       startAutopilot();
     }
   });
+  const repeatCb = document.getElementById("autopilot-repeat");
+  const daysWrap = document.getElementById("autopilot-repeat-days-wrap");
+  repeatCb?.addEventListener("change", () => {
+    if (daysWrap) daysWrap.hidden = !repeatCb.checked;
+  });
 }
 
 async function initScanProfileUi() {
@@ -222,6 +227,30 @@ function getCustomToolsList() {
   return [...customToolSelection];
 }
 
+async function scheduleRepeat({ target, scanProfile, customTools, intervalDays, sessionId }) {
+  const res = await apiFetch("/api/schedules", {
+    method: "POST",
+    body: JSON.stringify({
+      target,
+      client_id: getActiveClientId() || "default",
+      job_type: "repeat",
+      interval: "custom",
+      interval_days: intervalDays,
+      scan_profile: scanProfile,
+      custom_tools: customTools || [],
+      chat_session_id: sessionId || "",
+      risk_profile: isOffensiveModeEnabled() ? "full" : "safe-active",
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || "falha ao agendar");
+  const next = String(data.next_run_at || "").replace("T", " ").slice(0, 16);
+  toast(
+    `Repetição a cada ${intervalDays} dia(s)` + (next ? ` · próximo: ${next}` : ""),
+    "success"
+  );
+}
+
 function scanProfileLabel(id) {
   return scanProfileMeta.find((p) => p.id === id)?.label || id;
 }
@@ -256,6 +285,12 @@ export async function startAutopilot() {
 
   ensureSession();
   const session = getActiveSession();
+  const repeatOn = Boolean(document.getElementById("autopilot-repeat")?.checked);
+  let intervalDays = 30;
+  if (repeatOn) {
+    const raw = Number(document.getElementById("autopilot-repeat-days")?.value || 30);
+    intervalDays = Math.max(1, Math.min(365, Number.isFinite(raw) ? Math.round(raw) : 30));
+  }
   closeOverlay(ctx.overlayAutopilot);
 
   const offensive = isOffensiveModeEnabled();
@@ -276,6 +311,18 @@ export async function startAutopilot() {
   updateSessionTitle();
   renderChat();
   showAutopilotProgress("Piloto em execução — planejando e testando (pode levar vários minutos)");
+
+  if (repeatOn) {
+    scheduleRepeat({
+      target,
+      scanProfile,
+      customTools,
+      intervalDays,
+      sessionId: session.id,
+    }).catch((err) => {
+      toast(err.message || "Não foi possível agendar a repetição", "warn");
+    });
+  }
 
   try {
     let finalData = null;
@@ -353,6 +400,7 @@ export async function startAutopilot() {
     session.updatedAt = Date.now();
     saveStore();
     renderSessions();
+    window.dispatchEvent(new CustomEvent("darkstar:session-updated"));
 
     appendAssistantLine(data.message);
     for (const exec of data.tool_executions || []) {

@@ -10,8 +10,9 @@ from backend.executor.recon_db import normalize_target
 from backend.executor.surface import load_surface
 
 DISCLAIMER_PT = (
-    "Mapeamento indicativo de controles — NÃO constitui auditoria, "
-    "certificação nem opinião de conformidade (LGPD/GDPR/PCI/SOC2/HIPAA)."
+    "Mapeamento indicativo de controles ISO/IEC 27001:2022 Annex A e SOC 2 TSC — "
+    "NÃO constitui auditoria, certificação nem opinião de conformidade "
+    "(ISO 27001 / SOC 2 / LGPD / GDPR / PCI / HIPAA)."
 )
 DISCLAIMER_EN = (
     "Indicative control mapping only — NOT an audit, certification, "

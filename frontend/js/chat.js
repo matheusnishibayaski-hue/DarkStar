@@ -156,6 +156,7 @@ export async function sendMessage(text) {
     session.updatedAt = Date.now();
     saveStore();
     renderSessions();
+    window.dispatchEvent(new CustomEvent("darkstar:session-updated"));
 
     appendAssistantLine(finalData.message);
     for (const exec of finalData.tool_executions || []) {

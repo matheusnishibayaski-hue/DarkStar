@@ -11,7 +11,7 @@ class TestCompliance(unittest.TestCase):
         from backend.compliance.frameworks import list_frameworks
 
         ids = {f["id"] for f in list_frameworks()}
-        self.assertTrue({"LGPD", "GDPR", "PCI-DSS", "SOC2", "HIPAA"} <= ids)
+        self.assertTrue({"LGPD", "GDPR", "PCI-DSS", "SOC2", "HIPAA", "ISO27001"} <= ids)
 
     def test_mapping_and_score(self):
         from backend.compliance.mapper import map_findings_to_controls

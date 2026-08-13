@@ -34,15 +34,31 @@ def _row_to_dict(row) -> dict[str, Any]:
     }
 
 
-def list_chat_sessions(*, include_messages: bool = True) -> list[dict[str, Any]]:
+def _row_client_id(row) -> str:
+    return (getattr(row, "client_id", None) or "").strip() or "default"
+
+
+def list_chat_sessions(
+    *, include_messages: bool = True, client_id: str | None = None
+) -> list[dict[str, Any]]:
     from backend.database.models_chat import ChatSession
 
+    want = (client_id or "").strip()
     ensure_dashboard_db()
     with session_scope() as db:
         rows = db.query(ChatSession).order_by(ChatSession.updated_at_ms.desc()).all()
         out = []
         for row in rows:
+            cid = _row_client_id(row)
+            if want:
+                if want == "default":
+                    if cid not in {"", "default"}:
+                        continue
+                elif cid != want:
+                    continue
             item = _row_to_dict(row)
+            if not item.get("client_id"):
+                item["client_id"] = "default"
             if not include_messages:
                 item["messages"] = []
                 item["message_count"] = len(json.loads(row.messages_json or "[]") or [])
@@ -81,7 +97,7 @@ def upsert_chat_session(payload: dict[str, Any]) -> dict[str, Any]:
     preferred = str(payload.get("preferredTool") or payload.get("preferred_tool") or "auto")[:64]
     created = int(payload.get("createdAt") or payload.get("created_at_ms") or _now_ms())
     updated = int(payload.get("updatedAt") or payload.get("updated_at_ms") or _now_ms())
-    client_id = str(payload.get("client_id") or "")[:64]
+    client_id = str(payload.get("client_id") or "")[:64] or "default"
     messages_json = json.dumps(messages, ensure_ascii=False)
 
     ensure_dashboard_db()

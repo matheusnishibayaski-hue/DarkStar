@@ -11,6 +11,7 @@ from backend.executor.session_intel import (
     backfill_session_findings_from_client,
     collect_session_tool_executions,
     delete_session_intel,
+    ingest_extracted_findings,
     list_session_summaries,
     load_session,
     patch_session_finding,
@@ -33,7 +34,43 @@ class SessionFindingPatch(BaseModel):
 
 
 class SessionExecutionsSync(BaseModel):
-    executions: list[dict] = Field(default_factory=list, max_length=100)
+    executions: list[dict] = Field(default_factory=list, max_length=40)
+
+
+def _triage_response(session_id: str, executions: list[dict] | None = None) -> dict:
+    """Fila de triagem sem reindexar logs nem gerar compliance (isso atrasava o modal)."""
+    from backend.ai.fp_explain import (
+        build_triage_queue,
+        residual_risk_score,
+        severity_counts,
+    )
+
+    if executions:
+        backfill_session_findings_from_client(session_id, executions)
+        try:
+            ingest_extracted_findings(
+                session_id, extra_executions=executions, skip_disk_logs=True
+            )
+        except Exception:  # noqa: BLE001
+            pass
+        findings = aggregate_session_findings(session_id, sync=False)
+    else:
+        findings = aggregate_session_findings(session_id, sync=False)
+        try:
+            ingest_extracted_findings(session_id)
+            findings = aggregate_session_findings(session_id, sync=False)
+        except Exception:  # noqa: BLE001
+            pass
+    queue = build_triage_queue(findings)
+    return {
+        "session_id": session_id,
+        "queue": queue,
+        "queue_count": len(queue),
+        "findings_total": len(findings),
+        "risk": residual_risk_score(findings),
+        "severity": severity_counts(findings),
+        "compliance": None,
+    }
 
 
 def _validate_session_id(session_id: str) -> str:
@@ -82,8 +119,18 @@ def api_intel_sync_executions(session_id: str, body: SessionExecutionsSync):
     session_id = _validate_session_id(session_id)
     sync_session_intel_from_logs(session_id)
     stats = backfill_session_findings_from_client(session_id, body.executions)
+    extracted = 0
+    try:
+        extracted = ingest_extracted_findings(session_id, extra_executions=body.executions)
+    except Exception:  # noqa: BLE001
+        extracted = 0
     findings = aggregate_session_findings(session_id, sync=False)
-    return {"session_id": session_id, **stats, "findings_count": len(findings)}
+    return {
+        "session_id": session_id,
+        **stats,
+        "extracted": extracted,
+        "findings_count": len(findings),
+    }
 
 
 @router.post("/sessions/{session_id}/findings/{finding_id}")
@@ -113,6 +160,20 @@ def api_intel_session_finding_patch(
     return finding
 
 
+@router.get("/sessions/{session_id}/triage-queue")
+def api_intel_triage_queue(session_id: str):
+    """Fila de validação humana: pendentes + possíveis FPs, com explicação simples."""
+    session_id = _validate_session_id(session_id)
+    return _triage_response(session_id)
+
+
+@router.post("/sessions/{session_id}/triage-queue")
+def api_intel_triage_queue_post(session_id: str, body: SessionExecutionsSync):
+    """Mesma fila, já ingestando as execuções do chat (uma ida só)."""
+    session_id = _validate_session_id(session_id)
+    return _triage_response(session_id, body.executions)
+
+
 @router.get("/sessions/{session_id}/report")
 def api_intel_session_report(
     session_id: str,
@@ -132,7 +193,11 @@ def api_intel_session_report(
 
     display = str(meta.get("label") or "").strip() or "Conversa"
     title = f"Relatório — {display}"
-    raw = generate_report_pdf(session_id=session_id, title=title)
+    raw = generate_report_pdf(
+        session_id=session_id,
+        title=title,
+        tool_executions=execs or None,
+    )
     fname = f"relatorio-{session_id[:8]}.pdf"
     return Response(
         content=raw,

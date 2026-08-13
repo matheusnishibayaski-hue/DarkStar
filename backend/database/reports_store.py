@@ -60,7 +60,14 @@ def list_reports(*, session_id: str | None = None) -> list[dict[str, Any]]:
 
     ensure_dashboard_db()
     with session_scope() as db:
-        q = db.query(StoredReport)
+        q = db.query(
+            StoredReport.id,
+            StoredReport.session_id,
+            StoredReport.title,
+            StoredReport.file_name,
+            StoredReport.created_at_ms,
+            StoredReport.size,
+        )
         if session_id:
             q = q.filter(StoredReport.session_id == session_id)
         rows = q.order_by(StoredReport.created_at_ms.desc()).limit(500).all()
@@ -88,6 +95,13 @@ def get_report(report_id: str) -> dict[str, Any] | None:
         row = db.query(StoredReport).filter(StoredReport.id == rid).first()
         if not row:
             return None
+        raw = row.content
+        if raw is None:
+            blob = b""
+        elif isinstance(raw, (bytes, bytearray)):
+            blob = bytes(raw)
+        else:
+            blob = bytes(raw)
         return {
             "id": row.id,
             "sessionId": row.session_id,
@@ -95,7 +109,7 @@ def get_report(report_id: str) -> dict[str, Any] | None:
             "fileName": row.file_name,
             "createdAt": row.created_at_ms,
             "size": row.size,
-            "content": row.content,
+            "content": blob,
         }
 
 

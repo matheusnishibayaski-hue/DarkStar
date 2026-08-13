@@ -65,6 +65,26 @@ class TestScheduleStore(unittest.TestCase):
                 self.assertEqual(advanced["last_status"], "ok")
                 self.assertTrue(schedule_store.delete_job(job["id"]))
 
+    def test_custom_interval_days_repeat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(schedule_store, "SCHEDULE_DIR", root):
+                job = schedule_store.create_job(
+                    target="repeat.test",
+                    job_type="repeat",
+                    interval_days=15,
+                    scan_profile="basic",
+                    chat_session_id="sess-abc12345",
+                )
+                self.assertEqual(job["job_type"], "repeat")
+                self.assertEqual(job["interval"], "custom")
+                self.assertEqual(job["interval_days"], 15)
+                nxt = schedule_store._parse_iso(job["next_run_at"])
+                delta = (nxt - schedule_store._now()).total_seconds()
+                self.assertGreater(delta, 14 * 86400 - 60)
+                self.assertLess(delta, 16 * 86400)
+                self.assertEqual(job["chat_session_id"], "sess-abc12345")
+
 
 class TestScannerImport(unittest.TestCase):
     def test_nessus_csv(self):

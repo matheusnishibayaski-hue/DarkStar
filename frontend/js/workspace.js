@@ -1,13 +1,12 @@
 /**
- * Página Workspace — ferramentas/logs/relatório/pdfs/mapa/carteira/dashboard
- * escopados à conversa ativa (sem modal).
+ * Página Workspace — ferramentas/logs/relatórios/mapa/dashboard
+ * escopados à conversa ativa (sem modal). Carteira vive em Relatórios.
  */
 
 import { getActiveSession, sessionTitle } from "./sessions.js";
 import { openToolsPanel, syncToolFromSession } from "./tools-panel.js";
 import { openSessionLogsModal } from "./session-logs-modal.js";
 import { openSessionReportModal } from "./session-report-modal.js";
-import { openFilesPanel } from "./files.js";
 import { refreshPortfolio } from "./portfolio.js";
 import { refreshDashboard } from "./dashboard.js";
 import { refreshSessionMap } from "./threatmap.js";
@@ -16,7 +15,8 @@ import { dismissSidebarDrawer } from "./ui.js";
 let open = false;
 let activeTab = "tools";
 
-const TABS = ["tools", "logs", "report", "pdfs", "mapa", "carteira", "dashboard"];
+const TABS = ["tools", "logs", "report", "mapa", "dashboard"];
+const TAB_ALIAS = { carteira: "report" };
 
 export function isWorkspaceOpen() {
   return open;
@@ -44,7 +44,8 @@ export function openWorkspace(tab = "tools") {
   view.hidden = false;
   if (terminal) terminal.hidden = true;
   syncHeader();
-  selectTab(TABS.includes(tab) ? tab : "tools");
+  const resolved = TAB_ALIAS[tab] || tab;
+  selectTab(TABS.includes(resolved) ? resolved : "tools");
 }
 
 export function closeWorkspace() {
@@ -74,6 +75,7 @@ function syncHeader() {
 }
 
 function selectTab(tab, force = false) {
+  tab = TAB_ALIAS[tab] || tab;
   if (!TABS.includes(tab)) return;
   if (!force && tab === activeTab && open) {
     loadTab(tab);
@@ -102,15 +104,10 @@ async function loadTab(tab) {
       break;
     case "report":
       openSessionReportModal();
-      break;
-    case "pdfs":
-      await openFilesPanel();
+      await refreshPortfolio();
       break;
     case "mapa":
       await refreshSessionMap();
-      break;
-    case "carteira":
-      await refreshPortfolio();
       break;
     case "dashboard":
       await refreshDashboard();

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import logging
+import re
+from urllib.parse import quote
+
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 
@@ -13,6 +17,9 @@ from backend.database.reports_store import (
     list_reports,
     save_report,
 )
+
+logger = logging.getLogger(__name__)
+_ASCII_NAME = re.compile(r"[^A-Za-z0-9._-]+")
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
@@ -70,18 +77,38 @@ def api_get_report_meta(report_id: str):
     }
 
 
+def _disposition(file_name: str, *, inline: bool = True) -> str:
+    raw = (file_name or "relatorio.pdf").replace('"', "").replace("\n", " ").strip() or "relatorio.pdf"
+    ascii_name = _ASCII_NAME.sub("-", raw).strip(".-") or "relatorio.pdf"
+    if not ascii_name.lower().endswith(".pdf"):
+        ascii_name += ".pdf"
+    kind = "inline" if inline else "attachment"
+    encoded = quote(raw, safe="")
+    return f'{kind}; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded}'
+
+
 @router.get("/{report_id}")
 def api_get_report(report_id: str):
-    row = get_report(report_id)
+    try:
+        row = get_report(report_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("report_get_failed id=%s", report_id)
+        raise HTTPException(status_code=500, detail=f"report load failed: {exc}") from exc
     if not row:
         raise HTTPException(status_code=404, detail="report not found")
+    content = row.get("content")
+    if content is None:
+        raise HTTPException(status_code=404, detail="report empty")
+    if not isinstance(content, (bytes, bytearray)):
+        content = bytes(content)
+    if not content:
+        raise HTTPException(status_code=404, detail="report empty")
     return Response(
-        content=row["content"],
+        content=bytes(content),
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{row["fileName"]}"',
-            "X-Report-Id": row["id"],
-            "X-Report-Title": row["title"][:200],
+            "Content-Disposition": _disposition(str(row.get("fileName") or "")),
+            "X-Report-Id": str(row.get("id") or "")[:64],
         },
     )
 

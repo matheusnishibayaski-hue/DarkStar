@@ -259,6 +259,9 @@ def _record_execution(
                 "exit_code": execution.exit_code,
                 "log_file_id": execution.log_file_id,
                 "tool": execution.tool,
+                "stdout": (execution.stdout or "")[:2000],
+                "stderr": (execution.stderr or "")[:800],
+                "reason": execution.reason or "",
             },
         )
 

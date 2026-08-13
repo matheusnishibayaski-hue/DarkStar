@@ -14,7 +14,7 @@ from backend.executor.recon_db import normalize_target
 
 logger = logging.getLogger(__name__)
 
-JOB_TYPES = frozenset({"monitor", "full", "remind"})
+JOB_TYPES = frozenset({"monitor", "full", "remind", "repeat"})
 INTERVALS = {
     "daily": 1,
     "weekly": 7,
@@ -194,20 +194,34 @@ def create_job(
     enabled: bool = True,
     scan_profile: str = "basic",
     risk_profile: str = "passive",
+    interval_days: int | None = None,
+    custom_tools: list[str] | None = None,
+    chat_session_id: str = "",
 ) -> dict[str, Any]:
     jt = job_type if job_type in JOB_TYPES else "monitor"
-    days = INTERVALS.get(interval, 30)
+    if interval_days is not None:
+        try:
+            days = max(1, min(365, int(interval_days)))
+        except (TypeError, ValueError):
+            days = 30
+        interval_label = "custom"
+    else:
+        days = INTERVALS.get(interval, 30)
+        interval_label = interval if interval in INTERVALS else "monthly"
     now = _now()
+    tools = [str(t).strip() for t in (custom_tools or []) if str(t).strip()]
     job = {
         "id": uuid.uuid4().hex[:12],
         "target": normalize_target(target),
         "client_id": client_id or "default",
         "job_type": jt,
-        "interval": interval if interval in INTERVALS else "monthly",
+        "interval": interval_label,
         "interval_days": days,
         "enabled": bool(enabled),
         "scan_profile": scan_profile or "basic",
         "risk_profile": risk_profile or "passive",
+        "custom_tools": tools[:80],
+        "chat_session_id": str(chat_session_id or "")[:128],
         "created_at": _iso(now),
         "updated_at": _iso(now),
         "last_run_at": None,
@@ -253,6 +267,8 @@ def due_jobs(now: datetime | None = None) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for job in list_jobs():
         if not job.get("enabled"):
+            continue
+        if str(job.get("last_status") or "") == "running":
             continue
         nxt = _parse_iso(job.get("next_run_at"))
         if nxt and nxt <= now:

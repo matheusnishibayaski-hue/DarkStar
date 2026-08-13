@@ -132,7 +132,7 @@ export function openOverlay(overlay) {
   dismissSidebarDrawer();
   if (!overlay) return;
   overlay.hidden = false;
-  requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
+  overlay.classList.add("overlay-visible");
   document.body.classList.add("has-overlay");
   playSound("panel");
   if (overlay === ctx.overlayTools) ctx.toolSearch?.focus();
@@ -157,6 +157,7 @@ export function closeAllOverlays(closeToolsPanelMenus) {
     document.getElementById("overlay-login"),
     document.getElementById("overlay-remediation"),
     document.getElementById("overlay-onboarding"),
+    document.getElementById("overlay-triage-gate"),
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");

@@ -72,7 +72,8 @@ Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso po
 
 - candidato a vulnerabilidade passa por **verificação**
 - o que for fraco ou duvidoso **não entra** no resumo executivo automaticamente
-- você revisa, classifica e só então entrega
+- **Baixar PDF** abre a **triagem**: um achado por vez, em português, com gráficos
+- o PDF e a prévia trazem cobertura **indicativa ISO 27001 / SOC 2** (não é certificação)
 
 **Menos vergonha na frente do cliente. Mais confiança no PDF.**
 
@@ -84,6 +85,8 @@ Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso po
 | **IA “achou” vulnerabilidade só no texto** | Sem evidência / PoC, não passa no filtro (gate). |
 | **Cliente pergunta “tem prova?”** | Você tem log, comando e classificação — não só opinião. |
 | **Retrabalho humilhante** | Menos “desculpa, era falso positivo” depois de enviar o relatório. |
+| **IA marcou “vuln” e era porta/info/WAF** | A triagem puxa de novo o que parece falso positivo (score ≥ 55), mesmo já “confirmado”. |
+| **Cliente pede ISO / SOC 2** | O PDF tem tabela por controle + disclaimer: *indicativo do engajamento, não substitui auditoria*. |
 
 Pense num detector de metal no aeroporto: **apita fácil**, mas alguém ainda confere a mala antes de acusar.
 
@@ -153,8 +156,10 @@ Irresponsável? Não.
 - chat natural em português
 - painel de ferramentas
 - logs por conversa
-- triagem e biblioteca de PDFs
-- mapa de ameaças
+- **relatórios**: prévia HTML ao vivo + carteira dos alvos + PDFs salvos
+- triagem na hora do download (pendentes + suspeitos de FP)
+- workspace por **cliente** (sidebar → CLIENTE) e agenda de reteste
+- mapa de ameaças e dashboard da conversa
 - tour guiado (**F1**) se você for novo
 - atalhos de teclado para fluir rápido
 
@@ -166,8 +171,10 @@ Abre, pede, executa, revisa, entrega.
 |----------------|----------------|
 | **Chegou agora e não conhece a tela** | Aperta **F1** — tour guiado. |
 | **Quer repetir o mesmo tipo de scan** | Fixa a tool no painel ou roda o Piloto. |
-| **Precisa provar o que rolou ontem** | Abre logs / PDF salvos — não caça print no Discord. |
-| **Entrega amanhã** | Tria achados hoje à noite, baixa o PDF de manhã. |
+| **Precisa provar o que rolou ontem** | Abre **relatórios** — prévia, PDFs salvos e carteira dos alvos. |
+| **Entrega amanhã** | Clica **Baixar PDF**, valida o que ainda está pendente, gera o arquivo. |
+| **Dois clientes no mesmo PC** | Sidebar → **CLIENTE**: troca o workspace; o PDF sai com a marca da consultoria. |
+| **Reteste periódico** | No Piloto, marque **repetir** e informe os dias. A missão de agora roda na hora; a seguinte entra sozinha. |
 | **Quer fluir sem mouse** | Atalhos: Piloto, tools, relatório, novo chat. |
 
 Menos “ferramenta de demo”.  
@@ -183,9 +190,9 @@ Argus decide o que fazer
         ↓
 Kali executa de verdade
         ↓
-Evidência + triagem
+Evidência + triagem (modal no download)
         ↓
-PDF / dashboard / alertas / remediação / (opcional) GitHub
+PDF (ISO 27001 / SOC 2 indicativo) · dashboard · alertas · remediação · (opcional) GitHub
 ```
 
 **DarkStar** = a cabine  
@@ -201,12 +208,17 @@ Você manda. O sistema trabalha.
 - Pedir scans e enumerações em linguagem natural  
 - Rodar missão automática com o Piloto  
 - Ver logs ao vivo e histórico completo  
-- Triar achados e baixar PDF executivo + técnico (white-label da consultoria)  
-- Isolar workspaces por cliente (sidebar → CLIENTE), carteira, agenda recorrente e delta mensal  
-- Automatizar por **CLI** e **GitHub Actions** (só quando você disparar)  
-- Abrir o **workspace** da conversa (ferramentas, logs, relatório, pdfs, mapa, carteira, dashboard) — tudo filtrado pelo chat ativo  
+- Triar achados **antes** do PDF (é vulnerabilidade / FP / incerto / pular restantes)  
+- Baixar PDF executivo + técnico (white-label) com anexo de triagem e seção **ISO 27001 / SOC 2**  
+- Ver a **prévia ao vivo** do relatório na mesma aba dos PDFs  
+- Isolar workspaces por **cliente** (sidebar → CLIENTE: criar, trocar, excluir)  
+- Agendar **monitor** periódico (API: diário/semanal/mensal), ver **delta** vs baseline e importar Nessus CSV / Nuclei JSONL  
+- Automatizar por **CLI** (`autonomous`, `chat`, `health`, `list-tools`) e **GitHub Actions** (só quando você disparar)  
+- Gerar saída **JSON** ou **SARIF** na CLI para CI  
+- Abrir o **workspace** da conversa (ferramentas, logs, relatórios, mapa, dashboard) — tudo filtrado pelo chat ativo  
 - Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
-- Abrir **wizard de remediação IA** na triagem (plano step-by-step + tracker)  
+- Abrir **wizard de remediação IA** (plano step-by-step + tracker)  
+- Persistir conversas, PDFs, intel e agenda no **SQLite local** ou Postgres (`DATABASE_URL`)  
 - Trocar de modelo de IA (ChatGPT, Claude, Gemini, Grok, DeepSeek…)  
 - Ligar modo offline com Ollama  
 - Desbloquear perfil avançado com master key  
@@ -220,6 +232,16 @@ Se você é consultor solo, lab de estudo ou time pequeno: isso aqui foi feito p
 
 Além do chat e do Piloto no navegador, o DarkStar cobre o ciclo **depois** da execução — sem virar SaaS e sem vazar alvo por engano.
 
+As **5 etapas** da camada de consultoria/automação:
+
+1. **CLI** — pipeline e lab sem UI  
+2. **GitHub** — comentário em PR / issue / commit status, só quando você pedir  
+3. **Dashboard** — métricas e histórico da conversa  
+4. **Alertas** — Slack, Discord, Telegram, e-mail, Jira  
+5. **Remediação** — wizard IA com tracker  
+
+No mesmo pacote: workspaces por cliente, agenda, delta, PDF white-label, import de scanner, papéis locais e persistência no banco.
+
 ### 1. CLI (pipelines e lab sem UI)
 
 Comandos: `autonomous`, `chat`, `health`, `list-tools`.
@@ -232,19 +254,20 @@ python -m backend.cli health
 python -m backend.cli list-tools
 ```
 
+Saídas: **json** (findings + risco) ou **sarif** (SARIF 2.1.0 mínimo — host/URL, não file:line).  
 Exit codes pensados para CI: `0` ok · `1` high · `2` critical · `100` erro · `102` fora de escopo.
 
 Detalhes: [`docs/CLI.md`](docs/CLI.md)
 
 ### 2. GitHub (entrega no PR / issue — sob demanda)
 
-Com `GITHUB_TOKEN` no `.env`, a CLI ou a API podem **comentar no PR**, abrir issue ou atualizar commit status.  
+Com `GITHUB_TOKEN` no `.env`, a CLI ou a API podem **comentar no PR**, abrir issue ou atualizar commit status (`DarkStar Security`).  
 **Não é automático** no chat/Piloto: só roda se você passar `--github-repo` + `--pr`, chamar a API ou disparar o workflow.
 
 Templates Actions (somente `workflow_dispatch` — sem push/PR automático; alvo via input ou secret `DARKSTAR_TARGET`):
 
-- [`.github/workflows/darkstar-pentest.yml`](.github/workflows/darkstar-pentest.yml)
-- [`.github/workflows/darkstar-scheduled.yml`](.github/workflows/darkstar-scheduled.yml)
+- [`.github/workflows/darkstar-pentest.yml`](.github/workflows/darkstar-pentest.yml) — scan manual; comenta no PR se informar o número  
+- [`.github/workflows/darkstar-scheduled.yml`](.github/workflows/darkstar-scheduled.yml) — reteste; abre issue se houver critical  
 
 ```bash
 python -m backend.cli autonomous \
@@ -258,8 +281,23 @@ Detalhes: [`docs/GITHUB-INTEGRATION.md`](docs/GITHUB-INTEGRATION.md)
 
 ### 3. Workspace da conversa (página, sem modal)
 
-Sidebar → **workspace**: página interna com abas **ferramentas · logs · relatório · pdfs · mapa · carteira · dashboard**.  
-Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a ele. Carteira e dashboard não são mais visão global MSSP.
+Sidebar → **workspace**: **ferramentas · logs · relatórios · mapa · dashboard**.  
+Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a ele. Dashboard não é visão global MSSP.
+
+**Aba relatórios** (entrega do engajamento, num só lugar):
+
+1. **Prévia HTML ao vivo** — acompanha testes e achados do chat (KPIs: testes, achados, confirmados, FPs, risco residual).  
+2. **Baixar PDF** — se ainda houver o que validar, abre o **modal de triagem** (um achado por vez, linguagem simples, gráficos de severidade / risco / ISO·SOC 2).  
+   - Fila: pendentes (`candidate` / `inconclusive`) **e** confirmados com heurística de falso positivo ≥ 55 (segunda olhada).  
+   - **É vulnerabilidade** · **É falso positivo** · **Não tenho certeza** · **Pular restantes e gerar PDF** · Cancelar (não baixa).  
+   - Fila vazia → PDF imediato. “Não tenho certeza” vai para o **anexo**, fora do risco residual.  
+   - Marcar FP ensina o padrão para o próximo scan (`fp_learn`).  
+3. **Carteira** — cards dos alvos desta conversa: risco, confirmados/pendentes/FPs, delta (“novos / corrigidos / ainda abertos”) e próximo scan.  
+4. **PDFs salvos** desta conversa.
+
+O PDF é **executivo + técnico**, com capa/rodapé white-label (`CONSULTING_NAME`, logo, cor), sumário executivo (LLM com fallback), anexo de triagem e conformidade **indicativa** ISO/IEC 27001 e SOC 2 (mapeamento por palavras-chave). **Não substitui** certificação ISO 27001 nem atestado SOC 2.
+
+Aba **dashboard**: tendência de severidade, top issues, histórico de scans e export JSON/CSV/PDF — só desta conversa.
 
 Detalhes: [`docs/DASHBOARD.md`](docs/DASHBOARD.md) · [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
@@ -272,16 +310,41 @@ Quando o delta/risco sobe (e canais estiverem configurados), o sistema pode avis
 - E-mail (SMTP)  
 - Jira (issue)
 
-Também há API `/api/notifications/*` para teste e envio manual.
+Regra: **critical/high** disparam os canais ativos; médio/baixo só se você pedir na API (evita spam).  
+A CLI `autonomous` também notifica se houver critical. API `/api/notifications/*` para teste e envio manual.
 
 Detalhes: [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md)
 
 ### 5. Remediação inteligente (wizard)
 
-Na **triagem**, botão **fix** por finding → overlay com plano gerado por IA (seed no mapa estático do relatório).  
+Botão **fix** no achado → overlay com plano gerado por IA (se a LLM falhar, usa o mapa estático do relatório).  
 Passos, before/after opcional, comando de verificação **só como texto** (não executa no host), progresso e “marcar resolvido” em `backend/data/remediation_track.json`.
 
 Detalhes: [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
+
+### 6. Consultoria local (cliente, agenda, delta)
+
+Feito para quem atende **vários alvos no mesmo PC**, sem portal do cliente e sem multi-tenant na nuvem.
+
+- **CLIENTE** na sidebar — criar (modal + slug), trocar e excluir workspace. Cada um pode ter marca própria no PDF. **Conversas, relatórios e intel ficam separados por cliente.**  
+- **Backup/restore** do cliente (`tar.gz` via API).  
+- **Agenda** (`SCHEDULE_ENABLED`, ligada por padrão):  
+  - **Piloto** — checkbox “Repetir este teste automaticamente” + intervalo em **dias**. A primeira rodada é agora; as seguintes executam o **mesmo** alvo e tipo de scan (`job_type: repeat`).  
+  - API `POST /api/schedules` também aceita `monitor` (nmap leve), `remind` (webhook) e `full` (só avisa para você iniciar o Piloto).  
+  - A carteira em Relatórios mostra o próximo horário. 
+- **Delta** — compara o baseline com o estado atual: novos, corrigidos, ainda abertos, portas que abriram.  
+- **Import** — Nessus CSV ou Nuclei JSONL para o Attack Surface (`POST /api/engagements/{alvo}/import`).  
+- **Papel local** (`OPERATOR_ROLE`): `admin` / `analyst` / `viewer` (viewer só lê).  
+- **Retenção** (`RETENTION_DAYS`) — limpa artefatos velhos.  
+- CVEs enriquecidos com **CISA KEV** e **FIRST EPSS** quando o threat intel está ligado.
+
+### 7. Persistência (não perde o lab no F5)
+
+Sem `DATABASE_URL` → **SQLite** em `backend/data/dashboard.db`.  
+Com Postgres → a mesma URL serve dashboard, conversas, intel, clientes, agenda e PDFs.
+
+Fica no banco: chats, relatórios baixados, sessão de intel da conversa, jobs da agenda, histórico de scans.  
+Apagar um chat remove o que era daquela conversa.
 
 ---
 
@@ -336,9 +399,10 @@ A partir daí: Argus + Kali **só no seu PC**.
 3. Digite algo como:  
    *“faz um scan leve de portas em scanme.nmap.org”*  
 4. Ou clique **PILOTO** e deixe a missão rodar  
-5. Revise em **relatório** / **triagem**, baixe o PDF  
-6. (Opcional) Sidebar → **workspace** (dashboard/carteira/logs da conversa) · botão **fix** na triagem  
-7. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
+5. Workspace → **relatórios**: veja a prévia, a carteira dos alvos e clique **Baixar PDF** (a triagem abre se ainda houver o que validar)  
+6. (Opcional) Aba **dashboard** / **logs** · botão **fix** na remediação  
+7. (Opcional) Sidebar → **CLIENTE** para um workspace com a marca da consultoria  
+8. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
 
 Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 
@@ -354,7 +418,13 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 | `MASTER_KEY` | Libera perfil completo / offensive |
 | `AI_PROVIDER=ollama` | Começa já em modo local |
 | `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
-| `DATABASE_URL` | Postgres (dashboard + **conversas**); sem isso → SQLite local |
+| `DATABASE_URL` | Postgres (dashboard, conversas, intel, agenda, PDFs); sem isso → SQLite local |
+| `CONSULTING_NAME` / `CONSULTING_LOGO_PATH` | White-label da capa/rodapé do PDF |
+| `OPERATOR_ROLE` | `admin` (padrão) · `analyst` · `viewer` (só leitura) |
+| `SCHEDULE_ENABLED` | Agenda de reteste em background |
+| `RETENTION_DAYS` | Limpa artefatos antigos (0 = não limpa) |
+| `COMPLIANCE_ENABLED` | Mapper indicativo ISO 27001 / SOC 2 |
+| `THREAT_INTEL_ENABLED` | Enriquece CVE com CISA KEV + EPSS |
 | `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` | Alertas em canal |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alertas Telegram |
 | `SMTP_*` / `EMAIL_*` | Alertas por e-mail |
@@ -373,11 +443,13 @@ Lista completa comentada: [`.env.example`](.env.example)
 | Kali off | Docker Desktop aberto + `start.bat repair` |
 | IA muda | Chave OpenRouter / saldo, ou Ollama no offline |
 | Comando bloqueado | Fora do escopo ou perfil restrito |
-| Tela antiga | `Ctrl+F5` |
+| Tela antiga | `Ctrl+F5` (cache do frontend) |
 | `No module named 'github'` / CLI estranha | Use o venv: `.\venv\Scripts\Activate.ps1` (Windows) |
 | GitHub responde 501 | `GITHUB_TOKEN` vazio ou inválido |
-| Dashboard vazio | Rode pelo menos um Piloto/CLI/agenda; depois atualize o painel |
+| Dashboard / carteira vazios | Rode um scan **nesta** conversa; carteira lê alvos e achados do chat |
 | Alertas não chegam | Configure o canal no `.env` e teste `/api/notifications/test/{channel}` |
+| API recusa POST | `OPERATOR_ROLE=viewer` só lê; use `analyst` ou `admin` |
+| PDF sem a sua marca | Preencha `CONSULTING_*` ou o workspace do cliente |
 
 ---
 

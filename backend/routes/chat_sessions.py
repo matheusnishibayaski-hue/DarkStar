@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.database.chat_store import (
@@ -43,8 +43,14 @@ class MigrateBody(BaseModel):
 
 @router.get("")
 @router.get("/")
-def api_list_sessions():
-    return {"sessions": list_chat_sessions(include_messages=True)}
+def api_list_sessions(
+    client_id: str | None = Query(default=None, max_length=64),
+):
+    return {
+        "sessions": list_chat_sessions(
+            include_messages=True, client_id=(client_id or "").strip() or None
+        )
+    }
 
 
 @router.post("/migrate")

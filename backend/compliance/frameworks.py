@@ -78,26 +78,92 @@ FRAMEWORKS: dict[str, dict[str, Any]] = {
         ],
     },
     "SOC2": {
-        "name": "SOC 2 (indicative CC)",
+        "name": "SOC 2 Trust Services Criteria (indicative)",
         "region": "global",
         "controls": [
             {
                 "id": "CC6.1",
-                "name": "Logical access",
-                "keywords": ["auth", "admin", "access", "idor", "permission"],
+                "name": "Logical and physical access controls",
+                "keywords": ["auth", "admin", "access", "idor", "permission", "default"],
                 "critical": True,
             },
             {
-                "id": "CC7.1",
-                "name": "System vulnerabilities",
-                "keywords": ["cve", "rce", "exposure", "outdated"],
+                "id": "CC6.6",
+                "name": "Encryption of data in transit / at rest",
+                "keywords": ["ssl", "tls", "hsts", "cleartext", "weak", "certificate"],
                 "critical": True,
             },
             {
                 "id": "CC6.7",
-                "name": "Transmission confidentiality",
-                "keywords": ["ssl", "tls", "hsts", "cleartext"],
+                "name": "Transmission confidentiality and integrity",
+                "keywords": ["ssl", "tls", "hsts", "cleartext", "mitm"],
                 "critical": False,
+            },
+            {
+                "id": "CC7.1",
+                "name": "Detection of security events / vulnerabilities",
+                "keywords": ["cve", "rce", "exposure", "outdated", "nuclei"],
+                "critical": True,
+            },
+            {
+                "id": "CC7.2",
+                "name": "Monitor and evaluate anomalies",
+                "keywords": ["waf", "exposure", "debug", "error", "stack"],
+                "critical": False,
+            },
+            {
+                "id": "CC8.1",
+                "name": "Change management / secure deployment",
+                "keywords": ["debug", "swagger", "git", "backup", "dev", "staging"],
+                "critical": False,
+            },
+        ],
+    },
+    "ISO27001": {
+        "name": "ISO/IEC 27001:2022 Annex A (indicative)",
+        "region": "global",
+        "controls": [
+            {
+                "id": "A.5.15",
+                "name": "Access control",
+                "keywords": ["auth", "admin", "access", "idor", "permission", "default"],
+                "critical": True,
+            },
+            {
+                "id": "A.8.2",
+                "name": "Privileged access rights",
+                "keywords": ["admin", "root", "privileged", "sudo", "default"],
+                "critical": True,
+            },
+            {
+                "id": "A.8.8",
+                "name": "Management of technical vulnerabilities",
+                "keywords": ["cve", "rce", "outdated", "nuclei", "patch", "exposure"],
+                "critical": True,
+            },
+            {
+                "id": "A.8.9",
+                "name": "Configuration management",
+                "keywords": ["header", "hsts", "csp", "misconfig", "default", "debug"],
+                "critical": False,
+            },
+            {
+                "id": "A.8.20",
+                "name": "Networks security",
+                "keywords": ["port", "tcp", "smb", "rdp", "ftp", "telnet", "exposure"],
+                "critical": True,
+            },
+            {
+                "id": "A.8.24",
+                "name": "Use of cryptography",
+                "keywords": ["ssl", "tls", "hsts", "weak", "certificate", "cipher"],
+                "critical": True,
+            },
+            {
+                "id": "A.8.25",
+                "name": "Secure development life cycle",
+                "keywords": ["sql", "xss", "csrf", "injection", "ssti", "lfi"],
+                "critical": True,
             },
         ],
     },
@@ -145,6 +211,9 @@ def get_framework(framework_id: str) -> dict[str, Any] | None:
     key = raw.upper().replace("_", "-")
     if key in {"SOC-2", "SOC2"}:
         return FRAMEWORKS.get("SOC2")
+    compact = key.replace("/", "").replace(" ", "")
+    if compact in {"ISO27001", "ISO-27001", "ISOIEC27001", "ISO270012022"}:
+        return FRAMEWORKS.get("ISO27001")
     if key in {"PCI", "PCIDSS", "PCI-DSS"}:
         return FRAMEWORKS.get("PCI-DSS")
     if key in FRAMEWORKS:

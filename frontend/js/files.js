@@ -25,7 +25,7 @@ export function initFilesPanel(context) {
   });
   unsubReports?.();
   unsubReports = onReportsChanged(() => {
-    if (!document.getElementById("ws-panel-pdfs")?.hidden) loadReports(true);
+    if (!document.getElementById("ws-panel-report")?.hidden) loadReports(true);
   });
 }
 
@@ -54,7 +54,7 @@ function render() {
       <div class="files-simple-empty">
         <p>${filter ? "Nada corresponde à busca." : "Nenhum relatório nesta conversa ainda."}</p>
         <p class="files-simple-hint">
-          Gere PDFs na aba <strong>relatório</strong> (classifique achados e use <strong>Baixar PDF</strong>).
+          A prévia acima vira PDF pelo botão <strong>Baixar PDF</strong>.
         </p>
       </div>`;
     return;

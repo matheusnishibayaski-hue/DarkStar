@@ -5,27 +5,14 @@
 
 import { apiFetch } from "./api.js";
 import { STORAGE_KEY } from "./constants.js";
-import { store, createSession } from "./sessions.js";
+import {
+  store,
+  createSession,
+  applyLoadedSessions,
+  currentClientId,
+} from "./sessions.js";
 
-const ACTIVE_KEY = "darkstar-active-session";
 const MIGRATED_KEY = "darkstar-sessions-migrated-db";
-
-function readActiveId() {
-  try {
-    return localStorage.getItem(ACTIVE_KEY) || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeActiveId(id) {
-  try {
-    if (id) localStorage.setItem(ACTIVE_KEY, id);
-    else localStorage.removeItem(ACTIVE_KEY);
-  } catch {
-    /* ignore */
-  }
-}
 
 function loadLegacyLocalStore() {
   try {
@@ -43,8 +30,19 @@ function loadLegacyLocalStore() {
   return { sessions: [], activeId: null };
 }
 
-async function apiList() {
+async function apiListAll() {
   const res = await apiFetch("/api/chat-sessions");
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "falha ao listar conversas");
+  }
+  const data = await res.json();
+  return data.sessions || [];
+}
+
+async function apiListForClient(clientId) {
+  const cid = clientId || "default";
+  const res = await apiFetch(`/api/chat-sessions?client_id=${encodeURIComponent(cid)}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || "falha ao listar conversas");
@@ -69,15 +67,14 @@ export async function bootSessionsFromDb() {
   if (bootPromise) return bootPromise;
   bootPromise = (async () => {
     try {
-      let sessions = await apiList();
+      const cid = currentClientId();
+      let all = await apiListAll();
       const migrated = localStorage.getItem(MIGRATED_KEY) === "1";
-      if (!sessions.length && !migrated) {
+      if (!all.length && !migrated) {
         const legacy = loadLegacyLocalStore();
         if (legacy.sessions?.length) {
           await apiMigrate(legacy.sessions);
           localStorage.setItem(MIGRATED_KEY, "1");
-          sessions = await apiList();
-          if (legacy.activeId) writeActiveId(legacy.activeId);
         } else {
           localStorage.setItem(MIGRATED_KEY, "1");
         }
@@ -85,27 +82,8 @@ export async function bootSessionsFromDb() {
         localStorage.setItem(MIGRATED_KEY, "1");
       }
 
-      store.sessions = sessions.map((s) => ({
-        id: s.id,
-        title: s.title || "novo chat",
-        preferredTool: s.preferredTool || "auto",
-        messages: Array.isArray(s.messages) ? s.messages : [],
-        createdAt: s.createdAt || Date.now(),
-        updatedAt: s.updatedAt || Date.now(),
-        client_id: s.client_id || "",
-      }));
-
-      const savedActive = readActiveId();
-      if (savedActive && store.sessions.some((s) => s.id === savedActive)) {
-        store.activeId = savedActive;
-      } else {
-        store.activeId = store.sessions[0]?.id || null;
-      }
-      writeActiveId(store.activeId);
-
-      if (!store.activeId) {
-        createSession();
-      }
+      const sessions = await apiListForClient(cid);
+      applyLoadedSessions(sessions, cid);
     } catch (err) {
       console.warn("chat_boot_db_failed_fallback_local", err);
       const legacy = loadLegacyLocalStore();

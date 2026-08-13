@@ -7,7 +7,7 @@ import threading
 from typing import Any
 
 from backend.config import SCHEDULE_ENABLED, SCHEDULE_TICK_SEC
-from backend.schedule.store import advance_job, due_jobs
+from backend.schedule.store import advance_job, due_jobs, save_job
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,11 @@ def execute_job(job: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
             )
             result["ok"] = True
             result["action"] = "remind"
+        elif job_type == "repeat":
+            result["ok"] = True
+            result["action"] = "repeat_started"
+            _start_repeat_mission(dict(job))
+            return result
         elif job_type == "full":
             # Não dispara Piloto automático em background (evitar corridas).
             # Notifica + marca due; operador/API pode chamar Piloto.
@@ -66,7 +71,7 @@ def execute_job(job: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
             target, delta=delta, risk=risk, previous_score=prev
         )
         result["alerts"] = alerts
-        if target and job_type in {"monitor", "full"}:
+        if target and job_type in {"monitor", "full", "repeat"}:
             try:
                 from backend.database.db import record_scan_from_target
 
@@ -119,6 +124,62 @@ def run_light_monitor(target: str) -> dict[str, Any]:
         "exit_code": exit_code,
         "stdout_preview": stdout[:400],
     }
+
+
+_REPEAT_OBJECTIVES = {
+    "basic": "Reteste agendado (básico): mesmas ferramentas do perfil no alvo autorizado.",
+    "intermediate": "Reteste agendado (intermediário): recon e checks do perfil; priorizar achados confirmáveis.",
+    "full": "Reteste agendado (completo): percorrer o catálogo do perfil no alvo autorizado.",
+    "custom": "Reteste agendado (personalizado): executar as ferramentas selecionadas e consolidar evidências.",
+}
+
+
+def _start_repeat_mission(job: dict[str, Any]) -> None:
+    """Marca running e dispara run_autonomous em thread (não bloqueia o ticker)."""
+    job["last_status"] = "running"
+    job["last_error"] = ""
+    try:
+        save_job(job)
+    except Exception:  # noqa: BLE001
+        logger.exception("schedule_repeat_mark_running_failed")
+
+    def _run() -> None:
+        target = str(job.get("target") or "")
+        profile = str(job.get("scan_profile") or "basic")
+        tools = [str(t) for t in (job.get("custom_tools") or []) if t]
+        sid = str(job.get("chat_session_id") or "") or None
+        try:
+            from backend.ai.autopilot import run_autonomous
+
+            run_autonomous(
+                target=target,
+                objective=_REPEAT_OBJECTIVES.get(profile, _REPEAT_OBJECTIVES["basic"]),
+                scan_profile=profile,
+                custom_tools=tools or None,
+                risk_profile=str(job.get("risk_profile") or "safe-active"),
+                chat_session_id=sid,
+            )
+            try:
+                from backend.database.db import record_scan_from_target
+
+                record_scan_from_target(
+                    target,
+                    risk_profile=str(job.get("risk_profile") or ""),
+                    scan_profile=profile,
+                    scan_type="schedule:repeat",
+                    status="completed",
+                    chat_session_id=sid or "",
+                )
+            except Exception:  # noqa: BLE001
+                pass
+            advance_job(job, status="ok")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("schedule_repeat_failed id=%s", job.get("id"))
+            advance_job(job, status="error", error=str(exc)[:500])
+
+    threading.Thread(
+        target=_run, name=f"darkstar-repeat-{job.get('id')}", daemon=True
+    ).start()
 
 
 def _tick() -> None:

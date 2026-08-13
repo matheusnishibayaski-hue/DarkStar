@@ -114,7 +114,13 @@ class TestRemediation(unittest.TestCase):
         self.assertEqual(rem["key"], "header_hsts")
         self.assertIn("Strict-Transport", rem["action"])
 
-    def test_list_for_confirmed(self):
+    def test_xss_remediation_has_steps(self):
+        rem = remediation_for(
+            {"title": "[high] Reflected XSS in search", "severity": "info", "status": "confirmed"}
+        )
+        self.assertEqual(rem["key"], "xss")
+        self.assertGreaterEqual(len(rem["steps"]), 4)
+        self.assertTrue(rem["verify"])
         rows = remediations_for_findings(
             [
                 {"id": "1", "title": "Missing HSTS", "severity": "medium"},
