@@ -390,7 +390,9 @@ def _run_autonomous_body(
     objective_met = False
     stopped_reason = "max_rounds"
     rounds_completed = 0
-    remaining_tools = max_tool_budget(scan_prof, len(scan_tools)) if scan_tools else MAX_AUTONOMOUS_TOOLS
+    remaining_tools = (
+        max_tool_budget(scan_prof, len(scan_tools)) if scan_tools else MAX_AUTONOMOUS_TOOLS
+    )
     max_rounds = MAX_AUTONOMOUS_ROUNDS
     if scan_prof == "full":
         max_rounds = max(MAX_AUTONOMOUS_ROUNDS, 50 if len(scan_tools) > 100 else 40)

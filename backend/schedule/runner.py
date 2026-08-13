@@ -67,9 +67,7 @@ def execute_job(job: dict[str, Any], *, force: bool = False) -> dict[str, Any]:
         if risk:
             record_risk_snapshot(target, risk, source=f"schedule:{job_type}")
         delta = compute_delta(target) if target else {}
-        alerts = maybe_alert_delta(
-            target, delta=delta, risk=risk, previous_score=prev
-        )
+        alerts = maybe_alert_delta(target, delta=delta, risk=risk, previous_score=prev)
         result["alerts"] = alerts
         if target and job_type in {"monitor", "full", "repeat"}:
             try:
@@ -177,9 +175,7 @@ def _start_repeat_mission(job: dict[str, Any]) -> None:
             logger.exception("schedule_repeat_failed id=%s", job.get("id"))
             advance_job(job, status="error", error=str(exc)[:500])
 
-    threading.Thread(
-        target=_run, name=f"darkstar-repeat-{job.get('id')}", daemon=True
-    ).start()
+    threading.Thread(target=_run, name=f"darkstar-repeat-{job.get('id')}", daemon=True).start()
 
 
 def _tick() -> None:

@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
-
 from backend.executor.result import ExecutionResult
 from backend.security.missions import get_mission_registry
+from fastapi.testclient import TestClient
+
 from tests.auth_patch import patch_chat_api_token
 
 
@@ -52,13 +52,13 @@ class TestKaliCoverage(unittest.TestCase):
             log_file_id="w",
             tool="wlan-scan",
         )
-        with patch.object(k, "execute_host_wifi", return_value=fake), patch.object(
-            k, "save_execution_log"
-        ), patch.object(k, "record_tool_execution"):
+        with (
+            patch.object(k, "execute_host_wifi", return_value=fake),
+            patch.object(k, "save_execution_log"),
+            patch.object(k, "record_tool_execution"),
+        ):
             events = list(
-                k.execute_kali_command_stream(
-                    ["wlan-scan"], "reason", execution_id="wifi1"
-                )
+                k.execute_kali_command_stream(["wlan-scan"], "reason", execution_id="wifi1")
             )
         done = [e for e in events if e.get("type") == "done"]
         self.assertEqual(len(done), 1)
@@ -67,41 +67,41 @@ class TestKaliCoverage(unittest.TestCase):
     def test_docker_success_timeout_notfound_exception(self):
         from backend.executor import kali as k
 
-        with patch.object(k, "_run_docker_streaming", return_value=(0, "ok", "")), patch.object(
-            k, "save_execution_log"
-        ), patch.object(k, "record_tool_execution"):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d1")
-            )
+        with (
+            patch.object(k, "_run_docker_streaming", return_value=(0, "ok", "")),
+            patch.object(k, "save_execution_log"),
+            patch.object(k, "record_tool_execution"),
+        ):
+            events = list(k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d1"))
         self.assertTrue(any(e.get("type") == "done" and e["result"].success for e in events))
 
-        with patch.object(
-            k, "_run_docker_streaming", side_effect=subprocess_timeout()
-        ), patch.object(k, "save_execution_log"), patch.object(k, "record_tool_execution"):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d2")
-            )
-        self.assertTrue(any("Timeout" in (e.get("result").stderr if e.get("type") == "done" else "") for e in events))
-
-        with patch.object(
-            k, "_run_docker_streaming", side_effect=FileNotFoundError
-        ), patch.object(k, "record_tool_execution"):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d3")
-            )
+        with (
+            patch.object(k, "_run_docker_streaming", side_effect=subprocess_timeout()),
+            patch.object(k, "save_execution_log"),
+            patch.object(k, "record_tool_execution"),
+        ):
+            events = list(k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d2"))
         self.assertTrue(
             any(
-                e.get("type") == "done" and "Docker" in e["result"].stderr
+                "Timeout" in (e.get("result").stderr if e.get("type") == "done" else "")
                 for e in events
             )
         )
 
-        with patch.object(
-            k, "_run_docker_streaming", side_effect=RuntimeError("boom")
-        ), patch.object(k, "record_tool_execution"):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d4")
-            )
+        with (
+            patch.object(k, "_run_docker_streaming", side_effect=FileNotFoundError),
+            patch.object(k, "record_tool_execution"),
+        ):
+            events = list(k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d3"))
+        self.assertTrue(
+            any(e.get("type") == "done" and "Docker" in e["result"].stderr for e in events)
+        )
+
+        with (
+            patch.object(k, "_run_docker_streaming", side_effect=RuntimeError("boom")),
+            patch.object(k, "record_tool_execution"),
+        ):
+            events = list(k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d4"))
         self.assertTrue(
             any(e.get("type") == "done" and e["result"].stderr == "boom" for e in events)
         )
@@ -109,15 +109,13 @@ class TestKaliCoverage(unittest.TestCase):
     def test_interrupted_and_execute_in_kali(self):
         from backend.executor import kali as k
 
-        with patch.object(
-            k, "_run_docker_streaming", side_effect=InterruptedError("cancelado")
-        ), patch.object(k, "save_execution_log"), patch.object(k, "record_tool_execution"):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d5")
-            )
-        self.assertTrue(
-            any(e.get("type") == "done" and not e["result"].success for e in events)
-        )
+        with (
+            patch.object(k, "_run_docker_streaming", side_effect=InterruptedError("cancelado")),
+            patch.object(k, "save_execution_log"),
+            patch.object(k, "record_tool_execution"),
+        ):
+            events = list(k.execute_kali_command_stream(["nmap", "-V"], "v", execution_id="d5"))
+        self.assertTrue(any(e.get("type") == "done" and not e["result"].success for e in events))
 
         with patch.object(
             k,
@@ -207,9 +205,7 @@ class TestReconDbCoverage(unittest.TestCase):
                     encoding="utf-8",
                 )
                 self.assertEqual(rd.get_recon_data("old.target"), {})
-                # invalid json
-                bad = rd._path_for("bad.json.target")
-                # path uses normalize — write invalid
+                rd._path_for("bad.json.target")
                 (Path(tmp) / "badjson.json").write_text("{", encoding="utf-8")
                 self.assertEqual(rd.get_recon_data("badjson"), {})
 
@@ -310,9 +306,7 @@ class TestRoutesCoverage(unittest.TestCase):
 
         client = TestClient(app)
         with patch("backend.routes.chat.chat") as chat_mock:
-            chat_mock.return_value = MagicMock(
-                message="hi", tool_executions=[]
-            )
+            chat_mock.return_value = MagicMock(message="hi", tool_executions=[])
             res = client.post("/api/chat", json={"message": "oi", "history": []})
             self.assertEqual(res.status_code, 200)
 
@@ -450,7 +444,7 @@ class TestAuditAndMissionsExtra(unittest.TestCase):
 
         reg = get_mission_registry()
         mid = "cov-m1"
-        ctrl = reg.register(mid)
+        reg.register(mid)
         proc = MagicMock()
         reg.register_process(mid, "e1", proc)
         reg.unregister_process(mid, "e1")
@@ -459,7 +453,7 @@ class TestAuditAndMissionsExtra(unittest.TestCase):
         reg.cancel(mid)
         proc.kill.assert_not_called()  # already unregistered
         # kill path
-        ctrl2 = reg.register("cov-m2")
+        reg.register("cov-m2")
         proc2 = MagicMock()
         reg.register_process("cov-m2", "e2", proc2)
         reg.cancel("cov-m2")
@@ -520,25 +514,34 @@ class TestPlaybooksLoader(unittest.TestCase):
                 "  - tool: nmap\n    args: ['{target}']\n",
                 encoding="utf-8",
             )
-            with patch.object(ld, "PLAYBOOKS_DIR", p), patch.object(
-                ld,
-                "execute_kali_command",
-                return_value=ExecutionResult("nmap t", "r", "v", "", 0, True),
-            ), patch(
-                "backend.playbooks.loader.validate_autonomous_target",
-                return_value=(True, ""),
-            ), patch(
-                "backend.playbooks.loader.validate_command_scope",
-                return_value=(True, ""),
+            with (
+                patch.object(ld, "PLAYBOOKS_DIR", p),
+                patch.object(
+                    ld,
+                    "execute_kali_command",
+                    return_value=ExecutionResult("nmap t", "r", "v", "", 0, True),
+                ),
+                patch(
+                    "backend.playbooks.loader.validate_autonomous_target",
+                    return_value=(True, ""),
+                ),
+                patch(
+                    "backend.playbooks.loader.validate_command_scope",
+                    return_value=(True, ""),
+                ),
             ):
                 result = ld.run_playbook("ok", "scanme.nmap.org")
                 self.assertEqual(result["steps_run"], 1)
-            with patch.object(ld, "PLAYBOOKS_DIR", p), patch(
-                "backend.playbooks.loader.validate_autonomous_target",
-                return_value=(True, ""),
-            ), patch(
-                "backend.playbooks.loader.validate_command_scope",
-                return_value=(False, "scope"),
+            with (
+                patch.object(ld, "PLAYBOOKS_DIR", p),
+                patch(
+                    "backend.playbooks.loader.validate_autonomous_target",
+                    return_value=(True, ""),
+                ),
+                patch(
+                    "backend.playbooks.loader.validate_command_scope",
+                    return_value=(False, "scope"),
+                ),
             ):
                 result = ld.run_playbook("ok", "scanme.nmap.org")
                 self.assertTrue(result["results"][0]["blocked"])
@@ -546,9 +549,12 @@ class TestPlaybooksLoader(unittest.TestCase):
                 with patch.object(ld, "PLAYBOOKS_DIR", p):
                     ld.run_playbook("nope", "t")
             with self.assertRaises(PermissionError):
-                with patch.object(ld, "PLAYBOOKS_DIR", p), patch(
-                    "backend.playbooks.loader.validate_autonomous_target",
-                    return_value=(False, "no"),
+                with (
+                    patch.object(ld, "PLAYBOOKS_DIR", p),
+                    patch(
+                        "backend.playbooks.loader.validate_autonomous_target",
+                        return_value=(False, "no"),
+                    ),
                 ):
                     ld.run_playbook("ok", "t")
             self.assertEqual(ld._normalize_target_for_path("https://A.com/x"), "a.com")

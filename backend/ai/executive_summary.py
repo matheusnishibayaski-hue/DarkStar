@@ -5,7 +5,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeout
 from typing import Any
 
 from backend.ai.report import _structured_executive
@@ -180,9 +181,7 @@ def generate_executive_summary(
     if cached and cached_fp == fp and not regenerate:
         return {"text": cached, "source": "cache", "fingerprint": fp}
 
-    fallback = fallback_executive_text(
-        executive, risk, client, norm, scope, delta=delta
-    )
+    fallback = fallback_executive_text(executive, risk, client, norm, scope, delta=delta)
 
     if not use_llm:
         surface["executive_summary"] = fallback

@@ -294,11 +294,11 @@ Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a 
 2. **Baixar PDF** — se ainda houver o que validar, abre o **modal de triagem** (um achado por vez, sem jargão).  
    - Fila: pendentes (`candidate` / `inconclusive`) **e** confirmados com heurística de falso positivo ≥ 55 (segunda olhada).  
    - **Opinião da Argus (automática)** — veredito, chance de alarme falso (%) e motivos a favor/contra. Sai na hora; a decisão continua sendo sua.  
-   - **Segunda opinião (IA)** — pede no card visível (~8s), não atrasa a abertura da fila e **não marca** o achado sozinha. Se a IA falhar/offline, a heurística permanece.  
+   - **Segunda opinião (IA)** — pede no card visível (~8s), não atrasa a abertura da fila e **não marca** o achado sozinha. Os dois blocos usam a mesma escala: chance de alarme falso (0–100). Logs de teste (`OK — nmap`, etc.) ficam com FP alto mesmo se a IA chutar “problema real”. Se a IA falhar/offline, a heurística permanece.  
    - **É um problema real** · **É alarme falso** · **Ainda não sei** · **Pular o resto e gerar o PDF mesmo assim** · Cancelar (não baixa).  
    - No fim da fila o “pular” some: só **Gerar o PDF agora**.  
    - Fila vazia → PDF imediato. “Ainda não sei” vai para o **anexo**, fora do risco residual.  
-   - Marcar alarme falso ensina o padrão para o próximo scan (`fp_learn`).  
+   - Marcar alarme falso grava o padrão na **SQLite/Postgres** (`fp_suppress_patterns`) para o próximo scan.  
 3. **Carteira** — cards dos alvos desta conversa: risco, confirmados/pendentes/FPs, delta (“novos / corrigidos / ainda abertos”) e próximo scan.  
 4. **PDFs salvos** desta conversa.
 
@@ -354,7 +354,7 @@ Feito para quem atende **vários alvos no mesmo PC**, sem portal do cliente e se
 Sem `DATABASE_URL` → **SQLite** em `backend/data/dashboard.db`.  
 Com Postgres → a mesma URL serve dashboard, conversas, intel, clientes, agenda e PDFs.
 
-Fica no banco: chats, relatórios baixados, sessão de intel da conversa, jobs da agenda, histórico de scans.  
+Fica no banco: chats, relatórios baixados, sessão de intel da conversa, jobs da agenda, histórico de scans e padrões de falso positivo aprendidos na triagem.  
 Apagar um chat remove o que era daquela conversa.
 
 ---

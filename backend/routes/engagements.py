@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
-from backend.ai.phases import PHASES, PHASE_LABELS, normalize_risk_profile
+from backend.ai.phases import PHASE_LABELS, PHASES, normalize_risk_profile
 from backend.config import REPORT_BRAND_NAME, RISK_PROFILE, VERIFY_MAX_FINDINGS
 from backend.executor.recon_db import normalize_target
 from backend.executor.surface import (
@@ -335,9 +335,7 @@ def api_engagement_report(
             history, [], title=title, surface_target=target, snapshot_baseline=False
         )
         return HTMLResponse(content=body)
-    md = generate_report(
-        history, [], title=title, surface_target=target, snapshot_baseline=False
-    )
+    md = generate_report(history, [], title=title, surface_target=target, snapshot_baseline=False)
     return PlainTextResponse(content=md, media_type="text/markdown; charset=utf-8")
 
 
@@ -389,9 +387,7 @@ def api_finding_status(target: str, finding_id: str, req: FindingStatusRequest):
         "discarded",
     }:
         raise HTTPException(status_code=400, detail="status inválido")
-    finding = mark_finding_status(
-        target, finding_id, req.status, evidence=req.evidence
-    )
+    finding = mark_finding_status(target, finding_id, req.status, evidence=req.evidence)
     if not finding:
         raise HTTPException(status_code=404, detail="Finding ou alvo não encontrado.")
     return finding
@@ -404,19 +400,17 @@ def api_engagement_verify(
     auto_baseline: bool | None = Query(default=None),
 ):
     """Roda o pipeline de PoC + re-verificação e fecha findings para relatório."""
+    from backend.ai.delta import compute_delta
     from backend.ai.risk_history import previous_score, record_risk_snapshot
     from backend.ai.risk_score import risk_score_for_target
     from backend.ai.verify import run_verification_pipeline
     from backend.alerts.webhook import maybe_alert_delta
-    from backend.ai.delta import compute_delta
     from backend.config import AUTO_BASELINE_AFTER_VERIFY
 
     _ensure_scope(target)
     if not load_surface(target):
         raise HTTPException(status_code=404, detail="Engajamento não encontrado.")
-    result = run_verification_pipeline(
-        target, max_findings=max_findings or VERIFY_MAX_FINDINGS
-    )
+    result = run_verification_pipeline(target, max_findings=max_findings or VERIFY_MAX_FINDINGS)
     data = load_surface(target)
     risk = risk_score_for_target(target)
     prev = previous_score(target)
@@ -425,9 +419,7 @@ def api_engagement_verify(
     delta = compute_delta(target)
     alerts = maybe_alert_delta(target, delta=delta, risk=risk, previous_score=prev)
 
-    do_baseline = (
-        AUTO_BASELINE_AFTER_VERIFY if auto_baseline is None else auto_baseline
-    )
+    do_baseline = AUTO_BASELINE_AFTER_VERIFY if auto_baseline is None else auto_baseline
     baseline_info = None
     if do_baseline:
         from backend.ai.delta import snapshot_surface_baseline

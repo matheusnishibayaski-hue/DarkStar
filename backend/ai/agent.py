@@ -131,9 +131,7 @@ def _persist_recon(
         for t in extract_targets(result.command, result.stdout, result.stderr)
         if is_recon_target(t)
     ]
-    session_norm = [
-        normalize_target(t) for t in session_targets if is_recon_target(t)
-    ]
+    session_norm = [normalize_target(t) for t in session_targets if is_recon_target(t)]
     targets: list[str] = []
     for t in command_targets + session_norm:
         if t and t not in targets:
@@ -240,7 +238,11 @@ def _record_execution(
     incr("tool_executions_total")
     with timed("tool_execution", tool=(command.split() or [""])[0]):
         result = execute_in_kali(
-            command, reason, execution_id=execution_id, mission_id=mission_id, chat_session_id=chat_session_id
+            command,
+            reason,
+            execution_id=execution_id,
+            mission_id=mission_id,
+            chat_session_id=chat_session_id,
         )
     summarized, truncated = summarize_output(result.stdout, result.stderr)
     result.truncated_for_llm = truncated
@@ -447,7 +449,9 @@ def _run_openrouter_body(
             tools=None,
             tool_choice=None,
         )
-        final_text = final_completion.message.content or "Limite de iterações de ferramentas atingido."
+        final_text = (
+            final_completion.message.content or "Limite de iterações de ferramentas atingido."
+        )
     except Exception as e:
         final_text = f"Limite de iterações atingido. Erro na finalização: {e}"
 

@@ -63,7 +63,9 @@ def bump_patterns(
             "title_sample": str(finding.get("title") or "")[:200],
         }
         entry["frequency"] = int(entry.get("frequency") or 0) + 1
-        entry["severity_hint"] = str(finding.get("severity") or entry.get("severity_hint") or "unknown")
+        entry["severity_hint"] = str(
+            finding.get("severity") or entry.get("severity_hint") or "unknown"
+        )
         bucket[full] = entry
     return patterns
 

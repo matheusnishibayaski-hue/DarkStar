@@ -7,8 +7,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from backend.ai.phases import (
     advance_surface_phase,
     evaluate_phase_advance,
@@ -22,13 +20,17 @@ from backend.executor.surface import (
     get_or_create_surface,
     update_surface_from_execution,
 )
+from fastapi.testclient import TestClient
+
 from tests.auth_patch import patch_chat_api_token
 
 
 class TestPhases(unittest.TestCase):
     def test_risk_profile_and_blocks(self):
         self.assertEqual(normalize_risk_profile("nope"), "safe-active")
-        ok, msg = is_tool_allowed("sqlmap -u http://x", phase="vuln_scan", risk_profile="safe-active")
+        ok, msg = is_tool_allowed(
+            "sqlmap -u http://x", phase="vuln_scan", risk_profile="safe-active"
+        )
         self.assertFalse(ok)
         self.assertIn("bloqueada", msg.lower())
         ok, _ = is_tool_allowed("nmap -sV t.com", phase="enumerate", risk_profile="safe-active")
@@ -71,8 +73,13 @@ class TestPhases(unittest.TestCase):
             round_idx=0,
             max_rounds=10,
             tools_executed=0,
-            surface_summary_data={"hosts_count": 1, "ports_count": 0, "urls_count": 0,
-                                  "findings_candidates": 0, "findings_confirmed": 0},
+            surface_summary_data={
+                "hosts_count": 1,
+                "ports_count": 0,
+                "urls_count": 0,
+                "findings_candidates": 0,
+                "findings_confirmed": 0,
+            },
         )
         self.assertIn("FASE ATUAL", text)
         self.assertIn("recon", text)

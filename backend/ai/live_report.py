@@ -70,8 +70,14 @@ def _charts_html(model: dict[str, Any]) -> str:
     n_disc = len(model.get("discarded") or [])
     status_max = max(n_conf, n_fp, n_pend, n_disc, 1)
     sev_html = "".join(_hbar(a, b, sev_max, c) for a, b, c in sev_rows)
-    kind_html = "".join(_hbar(k, int(v), kind_max, "#1e90ff") for k, v in list(kinds.items())[:8]) or "<p class='note'>Sem tipos ainda.</p>"
-    tool_html = "".join(_hbar(k, int(v), tool_max, "#111827") for k, v in list(tools.items())[:8]) or "<p class='note'>Nenhuma ferramenta registrada.</p>"
+    kind_html = (
+        "".join(_hbar(k, int(v), kind_max, "#1e90ff") for k, v in list(kinds.items())[:8])
+        or "<p class='note'>Sem tipos ainda.</p>"
+    )
+    tool_html = (
+        "".join(_hbar(k, int(v), tool_max, "#111827") for k, v in list(tools.items())[:8])
+        or "<p class='note'>Nenhuma ferramenta registrada.</p>"
+    )
     return f"""
   <div class="charts">
     <div class="chart-box">
@@ -291,7 +297,9 @@ def _render_iso_soc2(
             f"<p class='note'>{fw.get('gaps', 0)} gap(s) / {fw.get('controls_total', 0)} controles</p>"
             f"<div class='barwrap'><div class='bar {bar_cls}' style='width:{max(0, min(100, cov))}%'></div></div>"
         )
-        rows = ["<table class='comp'><tr><th>Controle</th><th>Crítico</th><th>Gap</th><th>Achados</th></tr>"]
+        rows = [
+            "<table class='comp'><tr><th>Controle</th><th>Crítico</th><th>Gap</th><th>Achados</th></tr>"
+        ]
         for c in (fw.get("controls") or [])[:24]:
             rows.append(
                 "<tr>"
@@ -323,13 +331,16 @@ def _render_tests(executions: list[dict[str, Any]]) -> str:
             if log
             else ""
         )
+        fail_html = f"<p class='fail-why'>{_esc(fail)}</p>" if fail else ""
+        reason_html = f"<p class='note'>{_esc(reason)}</p>" if reason and reason != fail else ""
+        bullets_html = f"<ul>{bullets}</ul>" if bullets else ""
         parts.append(
             f"<div class='test'><h3>{i}. {_esc(d['tool'])} · "
             f"<span class='{cls}'>{_esc(d['status_label'])}</span></h3>"
             f"<p>{_esc(d.get('headline') or '')}</p>"
-            f"{f'<p class=\"fail-why\">{_esc(fail)}</p>' if fail else ''}"
-            f"{f'<p class=\"note\">{_esc(reason)}</p>' if reason and reason != fail else ''}"
-            f"{f'<ul>{bullets}</ul>' if bullets else ''}"
+            f"{fail_html}"
+            f"{reason_html}"
+            f"{bullets_html}"
             f"<div class='cmd'>{_esc(d.get('command') or '—')}</div>"
             f"{log_block}</div>"
         )
@@ -352,7 +363,9 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
         return "<p>Nenhum achado estruturado ainda. Quando nuclei/nmap/nikto (ou a triagem) gerarem itens, eles aparecem aqui.</p>"
     parts: list[str] = []
     for i, f in enumerate(findings[:120], 1):
-        status = _STATUS.get(str(f.get("status") or "candidate"), str(f.get("status") or "Pendente"))
+        status = _STATUS.get(
+            str(f.get("status") or "candidate"), str(f.get("status") or "Pendente")
+        )
         sev_label = str(f.get("severity_label") or f.get("severity") or "info")
         host = f.get("surface_target") or f.get("host") or "—"
         evidence = str(f.get("evidence") or "")[:1600]
@@ -360,9 +373,7 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
         headline = f.get("plain_title") or f.get("title") or "Achado"
         tech = str(f.get("title") or "")
         tech_line = (
-            f"<p class='note'>Nome técnico: {_esc(tech)}</p>"
-            if tech and tech != headline
-            else ""
+            f"<p class='note'>Nome técnico: {_esc(tech)}</p>" if tech and tech != headline else ""
         )
         what = str(f.get("what_it_is") or "")
         everyday = str(f.get("everyday") or "")
@@ -370,21 +381,31 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
         happen = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("could_happen") or [])[:4])
         decide = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("how_to_decide") or [])[:4])
         kind = _esc(f.get("kind_label") or "")
+        kind_html = f"<span class='tag'>{kind}</span>" if kind else ""
+        what_html = f"<p>{_esc(what)}</p>" if what else ""
+        everyday_html = f"<p><i>{_esc(everyday)}</i></p>" if everyday else ""
+        why_html = f"<p><b>Por que importa:</b> {_esc(why)}</p>" if why else ""
+        happen_html = (
+            f"<p><b>Se for verdade, pode acontecer:</b></p><ul>{happen}</ul>" if happen else ""
+        )
+        decide_html = f"<p><b>Como decidir:</b></p><ul>{decide}</ul>" if decide else ""
+        cmd_html = f"<p><b>Comando:</b> <code>{_esc(cmd)}</code></p>" if cmd else ""
+        evidence_html = f"<p><b>Evidência:</b> {_esc(evidence)}</p>" if evidence else ""
         parts.append(
             f"<div class='finding {_sev_class(f.get('severity'))}'>"
             f"<p><b>{i}. {_esc(headline)}</b></p>"
             f"{tech_line}"
             f"<p><span class='tag'>{_esc(sev_label)}</span><span class='tag'>{_esc(status)}</span>"
-            f"{f'<span class=\"tag\">{kind}</span>' if kind else ''}"
+            f"{kind_html}"
             f"<span class='tag'>{_esc(f.get('tool') or '—')}</span>"
             f"<span class='tag'>{_esc(host)}</span></p>"
-            f"{f'<p>{_esc(what)}</p>' if what else ''}"
-            f"{f'<p><i>{_esc(everyday)}</i></p>' if everyday else ''}"
-            f"{f'<p><b>Por que importa:</b> {_esc(why)}</p>' if why else ''}"
-            f"{f'<p><b>Se for verdade, pode acontecer:</b></p><ul>{happen}</ul>' if happen else ''}"
-            f"{f'<p><b>Como decidir:</b></p><ul>{decide}</ul>' if decide else ''}"
-            f"{f'<p><b>Comando:</b> <code>{_esc(cmd)}</code></p>' if cmd else ''}"
-            f"{f'<p><b>Evidência:</b> {_esc(evidence)}</p>' if evidence else ''}"
+            f"{what_html}"
+            f"{everyday_html}"
+            f"{why_html}"
+            f"{happen_html}"
+            f"{decide_html}"
+            f"{cmd_html}"
+            f"{evidence_html}"
             f"</div>"
         )
     return "".join(parts)
@@ -406,13 +427,16 @@ def _render_remediations(rows: list[dict[str, Any]]) -> str:
             if steps_html
             else f"<p>{_esc(r.get('action') or '')}</p>"
         )
+        who_html = f"<p><b>Quem faz:</b> {who}</p>" if who else ""
+        why_html = f"<p>{why}</p>" if why else ""
+        verify_html = f"<p><b>Como saber que corrigiu:</b> {verify}</p>" if verify else ""
         parts.append(
             f"<div class='test fix'><h3>{i}. {_esc(r.get('remediation_title') or 'Correção')}</h3>"
             f"<p><b>Achado:</b> {_esc(r.get('finding_title'))} · {_esc(sev)}</p>"
-            f"{f'<p><b>Quem faz:</b> {who}</p>' if who else ''}"
-            f"{f'<p>{why}</p>' if why else ''}"
+            f"{who_html}"
+            f"{why_html}"
             f"{steps_block}"
-            f"{f'<p><b>Como saber que corrigiu:</b> {verify}</p>' if verify else ''}"
+            f"{verify_html}"
             f"</div>"
         )
     return "".join(parts)

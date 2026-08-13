@@ -98,7 +98,7 @@ def get_report(report_id: str) -> dict[str, Any] | None:
         raw = row.content
         if raw is None:
             blob = b""
-        elif isinstance(raw, (bytes, bytearray)):
+        elif isinstance(raw, bytes | bytearray):
             blob = bytes(raw)
         else:
             blob = bytes(raw)
@@ -121,11 +121,7 @@ def delete_report(report_id: str) -> bool:
         return False
     ensure_dashboard_db()
     with session_scope() as db:
-        n = (
-            db.query(StoredReport)
-            .filter(StoredReport.id == rid)
-            .delete(synchronize_session=False)
-        )
+        n = db.query(StoredReport).filter(StoredReport.id == rid).delete(synchronize_session=False)
         return bool(n)
 
 

@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from backend.database import db as db_mod
 from backend.database import chat_store as cs
+from backend.database import db as db_mod
 
 
 class TestChatSessionsClientFilter(unittest.TestCase):

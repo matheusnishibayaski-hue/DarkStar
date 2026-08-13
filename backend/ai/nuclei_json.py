@@ -56,10 +56,7 @@ def parse_nuclei_json_lines(output: str) -> list[dict[str, Any]]:
 def _normalize_event(obj: dict[str, Any]) -> dict[str, Any] | None:
     info = obj.get("info") if isinstance(obj.get("info"), dict) else {}
     tid = str(
-        obj.get("template-id")
-        or obj.get("template_id")
-        or obj.get("templateID")
-        or ""
+        obj.get("template-id") or obj.get("template_id") or obj.get("templateID") or ""
     ).strip()
     name = str(info.get("name") or obj.get("name") or tid or "").strip()
     if not name and not tid:
@@ -67,9 +64,7 @@ def _normalize_event(obj: dict[str, Any]) -> dict[str, Any] | None:
     sev = str(info.get("severity") or obj.get("severity") or "unknown").lower()
     if sev not in {"critical", "high", "medium", "low", "info", "unknown"}:
         sev = "unknown"
-    matched = str(
-        obj.get("matched-at") or obj.get("matched_at") or obj.get("host") or ""
-    ).strip()
+    matched = str(obj.get("matched-at") or obj.get("matched_at") or obj.get("host") or "").strip()
     curl_cmd = str(obj.get("curl-command") or obj.get("curl_command") or "").strip()
     matcher = str(obj.get("matcher-name") or obj.get("matcher_name") or "").strip()
     extracted = obj.get("extracted-results") or obj.get("extracted_results") or []
@@ -112,7 +107,9 @@ def _normalize_event(obj: dict[str, Any]) -> dict[str, Any] | None:
     }
 
 
-def events_to_finding_patches(events: list[dict[str, Any]], *, tool: str, command: str) -> list[dict[str, Any]]:
+def events_to_finding_patches(
+    events: list[dict[str, Any]], *, tool: str, command: str
+) -> list[dict[str, Any]]:
     """Converte eventos normalizados em patches para _upsert_finding."""
     patches = []
     for ev in events:

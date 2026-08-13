@@ -8,11 +8,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from backend.executor import data_cleanup as dc
 from backend.executor import files_store
 from backend.main import app
+from fastapi.testclient import TestClient
 
 
 class TestDataCleanup(unittest.TestCase):

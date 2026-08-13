@@ -10,6 +10,7 @@ from typing import Any
 
 from backend.config import ALERT_ON_CRITICAL, ALERT_RISK_JUMP, ALERT_WEBHOOK_URL
 from backend.security.audit import record_event
+from backend.security.http_client import http_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ def send_webhook(text: str, *, payload: dict[str, Any] | None = None) -> bool:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with http_urlopen(req, timeout=8) as resp:
             ok = 200 <= getattr(resp, "status", 200) < 300
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
         logger.warning("alert_webhook_failed: %s", exc)
@@ -52,9 +53,7 @@ def maybe_alert_delta(
     messages: list[str] = []
     new_findings = delta.get("new") or []
     critical_new = [
-        f
-        for f in new_findings
-        if str(f.get("severity") or "").lower() in {"critical", "high"}
+        f for f in new_findings if str(f.get("severity") or "").lower() in {"critical", "high"}
     ]
     surf = delta.get("surface") or {}
     ports_opened = surf.get("ports_opened") or []
@@ -74,9 +73,7 @@ def maybe_alert_delta(
     if sensitive:
         messages.append(
             f"[DarkStar] {target}: porta(s) sensível(is) aberta(s): "
-            + ", ".join(
-                f"{p.get('port') if isinstance(p, dict) else p}" for p in sensitive[:8]
-            )
+            + ", ".join(f"{p.get('port') if isinstance(p, dict) else p}" for p in sensitive[:8])
         )
     score = float(risk.get("score") or 0)
     if previous_score is not None and (score - previous_score) >= ALERT_RISK_JUMP:

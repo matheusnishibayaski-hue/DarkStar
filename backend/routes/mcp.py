@@ -25,7 +25,9 @@ class McpToolCallRequest(BaseModel):
 
 def _ensure_enabled() -> None:
     if not MCP_ENABLED:
-        raise HTTPException(status_code=404, detail="Servidor MCP desabilitado (MCP_ENABLED=false).")
+        raise HTTPException(
+            status_code=404, detail="Servidor MCP desabilitado (MCP_ENABLED=false)."
+        )
 
 
 @router.get("/info")

@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import unittest
 from unittest.mock import MagicMock, patch
-from tests.llm_test_utils import make_openrouter_provider
 
-from fastapi.testclient import TestClient
-
-from backend.ai.agent import ChatResponse, ToolExecution, chat_stream
+from backend.ai.agent import ChatResponse, chat_stream
 from backend.ai.autopilot import AutonomousResponse, run_autonomous_stream
 from backend.ai.report import generate_report
 from backend.security.missions import get_mission_registry
+from fastapi.testclient import TestClient
+
+from tests.llm_test_utils import make_openrouter_provider
 
 
 class TestAgentStreamAndHealing(unittest.TestCase):
@@ -32,18 +32,16 @@ class TestAgentStreamAndHealing(unittest.TestCase):
         self.assertEqual(ag._apply_preferred_tool("scan", None), "scan")
         self.assertEqual(ag._apply_preferred_tool("scan", "auto"), "scan")
         hist = [{"role": "user", "content": "lab.internal.com"}]
-        with patch.object(
-            ag, "extract_targets", return_value=["lab.internal.com"]
-        ), patch.object(ag, "build_recon_context", return_value="CTX"), patch(
-            "backend.executor.recon_db.is_recon_target", return_value=True
+        with (
+            patch.object(ag, "extract_targets", return_value=["lab.internal.com"]),
+            patch.object(ag, "build_recon_context", return_value="CTX"),
+            patch("backend.executor.recon_db.is_recon_target", return_value=True),
         ):
             enriched, targets = ag._apply_recon_context("go", hist)
         self.assertIn("CTX", enriched)
         self.assertEqual(targets, ["lab.internal.com"])
 
-        converted = ag._convert_history(
-            [{"role": "bogus", "content": "x"}] * 20
-        )
+        converted = ag._convert_history([{"role": "bogus", "content": "x"}] * 20)
         self.assertLessEqual(len(converted), 10)
         self.assertEqual(converted[0]["role"], "user")
 
@@ -60,12 +58,11 @@ class TestAgentStreamAndHealing(unittest.TestCase):
         )
         # len(patch) must be > 2 for merge to run
         patch_data = {"open_ports": [80], "cves": ["CVE-1"], "services": ["http"]}
-        with patch.object(
-            ag, "extract_recon_from_output", return_value=patch_data
-        ), patch.object(ag, "merge_recon_update") as merge, patch(
-            "backend.executor.recon_db.extract_targets", return_value=["lab.test"]
-        ), patch(
-            "backend.executor.recon_db.is_recon_target", return_value=True
+        with (
+            patch.object(ag, "extract_recon_from_output", return_value=patch_data),
+            patch.object(ag, "merge_recon_update") as merge,
+            patch("backend.executor.recon_db.extract_targets", return_value=["lab.test"]),
+            patch("backend.executor.recon_db.is_recon_target", return_value=True),
         ):
             ag._persist_recon(result, ["lab.test"])
             merge.assert_called()
@@ -97,20 +94,15 @@ class TestAgentStreamAndHealing(unittest.TestCase):
         )
 
         provider = make_openrouter_provider(client, models=("m1", "m2"))
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent.execute_in_kali", return_value=fail
-        ), patch(
-            "backend.ai.agent.summarize_output", return_value=("fail", False)
-        ), patch(
-            "backend.ai.agent.format_result_for_llm", return_value="fail"
-        ), patch(
-            "backend.ai.agent.get_stream_hub"
-        ) as hub, patch(
-            "backend.ai.agent._persist_recon"
-        ), patch(
-            "backend.ai.agent.should_attempt_healing", return_value=True
-        ), patch(
-            "backend.ai.agent.healing_prompt", return_value="heal"
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch("backend.ai.agent.execute_in_kali", return_value=fail),
+            patch("backend.ai.agent.summarize_output", return_value=("fail", False)),
+            patch("backend.ai.agent.format_result_for_llm", return_value="fail"),
+            patch("backend.ai.agent.get_stream_hub") as hub,
+            patch("backend.ai.agent._persist_recon"),
+            patch("backend.ai.agent.should_attempt_healing", return_value=True),
+            patch("backend.ai.agent.healing_prompt", return_value="heal"),
         ):
             hub.return_value.create = MagicMock()
             from backend.ai.agent import chat
@@ -130,27 +122,33 @@ class TestAgentStreamAndHealing(unittest.TestCase):
             MagicMock(choices=[MagicMock(message=ok_msg)]),
         ]
         provider = make_openrouter_provider(client, models=("m1", "m2"))
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent.time.sleep"
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch("backend.ai.agent.time.sleep"),
         ):
             result = _run_openrouter_body([], "hi", None, None, None, None, None)
         self.assertEqual(result.message, "ok")
 
     def test_report_artifacts_and_recon_sections(self):
-        with patch(
-            "backend.ai.report.list_recon_summaries",
-            return_value=[
-                {
-                    "target": "t",
-                    "open_ports_count": 1,
-                    "cves_count": 0,
-                    "vulnerabilities_count": 0,
-                    "updated_at": "2026-01-01T00:00:00",
-                }
-            ],
-        ), patch(
-            "backend.ai.report.list_output_files",
-            return_value=[{"name": "a.txt", "size": 2048, "modified_at": "2026-01-01T00:00:00"}],
+        with (
+            patch(
+                "backend.ai.report.list_recon_summaries",
+                return_value=[
+                    {
+                        "target": "t",
+                        "open_ports_count": 1,
+                        "cves_count": 0,
+                        "vulnerabilities_count": 0,
+                        "updated_at": "2026-01-01T00:00:00",
+                    }
+                ],
+            ),
+            patch(
+                "backend.ai.report.list_output_files",
+                return_value=[
+                    {"name": "a.txt", "size": 2048, "modified_at": "2026-01-01T00:00:00"}
+                ],
+            ),
         ):
             md = generate_report(
                 [],
@@ -175,9 +173,7 @@ class TestAutopilotStream(unittest.TestCase):
     def test_stream_wrapper(self):
         fake = AutonomousResponse(message="done", stopped_reason="finished_early")
         with patch("backend.ai.autopilot.run_autonomous", return_value=fake):
-            body = "".join(
-                run_autonomous_stream("scanme.nmap.org", "mapear")
-            )
+            body = "".join(run_autonomous_stream("scanme.nmap.org", "mapear"))
         self.assertIn("event: done", body)
 
     def test_run_kali_in_cycle(self):
@@ -209,16 +205,16 @@ class TestAutopilotStream(unittest.TestCase):
             return "out"
 
         executions: list = []
-        with patch(
-            "backend.ai.autopilot._record_execution", side_effect=_record
-        ), patch(
-            "backend.ai.autopilot.should_attempt_healing", return_value=False
-        ), patch(
-            "backend.ai.autopilot._completion",
-            side_effect=[
-                LLMCompletion(message=LLMMessage(tool_calls=[tool_call])),
-                LLMCompletion(message=LLMMessage(tool_calls=[finish])),
-            ],
+        with (
+            patch("backend.ai.autopilot._record_execution", side_effect=_record),
+            patch("backend.ai.autopilot.should_attempt_healing", return_value=False),
+            patch(
+                "backend.ai.autopilot._completion",
+                side_effect=[
+                    LLMCompletion(message=LLMMessage(tool_calls=[tool_call])),
+                    LLMCompletion(message=LLMMessage(tool_calls=[finish])),
+                ],
+            ),
         ):
             text, finished, met, model = ap._run_autonomous_cycle(
                 MagicMock(),

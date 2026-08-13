@@ -7,9 +7,45 @@ from collections import Counter
 from typing import Any
 
 _INFO_SEV = {"info", "informational", "none", "unknown", ""}
+_HIGH_SEV = {"critical", "high", "alto"}
 _HTTP_HINTS = ("http", "https", "header", "hsts", "csp", "cookie", "xss", "csrf")
 _WAF_HINTS = ("waf", "cloudflare", "akamai", "blocked", "rate limit", "429", "403 forbidden")
 _TIMEOUT_HINTS = ("timeout", "timed out", "connection refused", "no route")
+_INCOMPLETE_HINTS = (
+    "timeout",
+    "timed out",
+    "unresponsive",
+    "sem resposta",
+    "wordlist ausente",
+    "missing wordlist",
+    "no input",
+    "não respondeu",
+    "connection refused",
+    "no route",
+)
+_PAYLOAD_HINTS = (
+    "<script",
+    "alert(",
+    "onerror=",
+    "onmouseover=",
+    "union select",
+    "sleep(",
+    "../etc/passwd",
+    "{{7*7}}",
+    "`id`",
+    "whoami",
+    "' or '1'='1",
+    '" or "1"="1',
+)
+_WEB_VULN_KINDS = frozenset({"xss", "sqli", "rce", "lfi", "ssti"})
+_SCAN_TITLE_PREFIXES = (
+    "ok —",
+    "ok -",
+    "falha —",
+    "falha -",
+    "resultado —",
+    "resultado -",
+)
 
 
 def _blob(finding: dict[str, Any]) -> str:
@@ -410,9 +446,61 @@ _LAY: dict[str, dict[str, Any]] = {
 }
 
 
+def is_incomplete_evidence(blob: str) -> bool:
+    text = (blob or "").lower()
+    return any(h in text for h in _INCOMPLETE_HINTS)
+
+
+def has_exploit_payload(blob: str) -> bool:
+    text = (blob or "").lower()
+    return any(h in text for h in _PAYLOAD_HINTS)
+
+
+def apply_fp_hard_rules(
+    *,
+    kind: str,
+    blob: str,
+    likely_fp: int,
+    verdict: str,
+) -> tuple[int, str, bool, str]:
+    """Mesma escala: likely_fp = chance de alarme falso (0–100)."""
+    likely = max(0, min(100, int(likely_fp)))
+    v = verdict if verdict in {"confirmed", "false_positive", "unsure"} else "unsure"
+    adjusted = False
+    reason = ""
+    incomplete = is_incomplete_evidence(blob)
+
+    if kind == "scan_summary":
+        if v != "false_positive" or likely < 88:
+            adjusted = True
+            reason = "Isto é log de teste, não uma falha. Ajustado para alarme falso."
+        v = "false_positive"
+        likely = max(likely, 88)
+    elif incomplete:
+        if v == "confirmed":
+            adjusted = True
+            reason = (
+                "O teste não completou (timeout, wordlist ou sem resposta); não dá para confirmar."
+            )
+            v = "unsure"
+        if likely <= 25:
+            likely = 40
+    elif kind in _WEB_VULN_KINDS and has_exploit_payload(blob):
+        if v == "false_positive" or likely >= 55:
+            adjusted = True
+            reason = "Há payload/evidência clássica; chance de alarme falso reduzida."
+            if v == "false_positive":
+                v = "unsure"
+        likely = min(likely, 22)
+        if v != "unsure":
+            v = "confirmed"
+
+    return likely, v, adjusted, reason
+
+
 def _detect_kind(finding: dict[str, Any], blob: str) -> str:
     title = str(finding.get("title") or "").strip().lower()
-    if title.startswith("ok —") or title.startswith("ok -") or title.startswith("falha —") or title.startswith("falha -"):
+    if any(title.startswith(p) for p in _SCAN_TITLE_PREFIXES):
         return "scan_summary"
     if "xss" in blob or "cross-site" in blob:
         return "xss"
@@ -466,18 +554,24 @@ def _severity_plain(sev: str) -> str:
     return _SEV_PLAIN.get(str(sev or "info").lower(), "Atenção")
 
 
-def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+def explain_false_positive(
+    finding: dict[str, Any], *, siblings: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """Score 0–100 e textos em PT para o analista decidir."""
     siblings = siblings or []
     blob = _blob(finding)
     kind = _detect_kind(finding, blob)
     guide = _LAY.get(kind) or _LAY["generic"]
     sev = str(finding.get("severity") or "").lower()
+    title_raw = str(finding.get("title") or "")
+    if re.search(r"\[(critical|high)\]", title_raw, re.I) and sev in _INFO_SEV:
+        sev = "high"
     status = str(finding.get("status") or "candidate")
     reasons: list[str] = []
     why_vuln: list[str] = []
     why_fp: list[str] = []
     score = 15
+    inflate_info = kind not in _WEB_VULN_KINDS
 
     suppressed = False
     try:
@@ -488,29 +582,39 @@ def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, 
         suppressed = False
     if suppressed:
         score += 40
-        reasons.append("Você (ou alguém neste lab) já marcou um achado parecido como falso positivo.")
+        reasons.append(
+            "Você (ou alguém neste lab) já marcou um achado parecido como falso positivo."
+        )
         why_fp.append("Esse padrão já foi classificado como alarme falso antes.")
 
-    if sev in _INFO_SEV:
+    if sev in _INFO_SEV and inflate_info:
         score += 25
         reasons.append("O scanner classificou isso só como informação, não como ataque comprovado.")
-        why_fp.append("Itens ‘info’ costumam ser enumeração (banner, porta, tecnologia), não uma falha explorável.")
-    elif sev in {"low", "baixo"}:
+        why_fp.append(
+            "Itens ‘info’ costumam ser enumeração (banner, porta, tecnologia), não uma falha explorável."
+        )
+    elif sev in {"low", "baixo"} and inflate_info:
         score += 8
         reasons.append("Severidade baixa: impacto limitado se for real.")
-    elif sev in {"critical", "high", "alto"}:
+    elif sev in _HIGH_SEV:
         score -= 15
         why_vuln.append("A ferramenta marcou impacto alto — vale confirmar com calma.")
 
     if finding.get("cve") or "cve-" in blob:
         score -= 10
-        why_vuln.append("Há um CVE citado: se o software for mesmo essa versão, o risco é concreto.")
+        why_vuln.append(
+            "Há um CVE citado: se o software for mesmo essa versão, o risco é concreto."
+        )
     if any(k in blob for k in ("sql", "xss", "rce", "ssti", "lfi", "rfi")):
         score -= 12
-        why_vuln.append("O nome sugere uma falha clássica de aplicação — se a evidência mostrar payload, trate como vulnerabilidade.")
+        why_vuln.append(
+            "O nome sugere uma falha clássica de aplicação — se a evidência mostrar payload, trate como vulnerabilidade."
+        )
 
     if any(k in blob for k in ("missing header", "hsts", "x-frame", "csp", "x-content-type")):
-        why_vuln.append("Headers de segurança ausentes facilitam ataques no navegador (clickjacking, XSS, downgrade HTTP).")
+        why_vuln.append(
+            "Headers de segurança ausentes facilitam ataques no navegador (clickjacking, XSS, downgrade HTTP)."
+        )
         host = str(finding.get("host") or finding.get("surface_target") or "")
         if host and not any(h in blob for h in _HTTP_HINTS) and "http" not in host:
             score += 18
@@ -523,7 +627,9 @@ def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, 
 
     if any(k in blob for k in _TIMEOUT_HINTS):
         score += 18
-        why_fp.append("Timeout ou conexão recusada não prova a vulnerabilidade — só que o teste não completou.")
+        why_fp.append(
+            "Timeout ou conexão recusada não prova a vulnerabilidade — só que o teste não completou."
+        )
 
     title_key = str(finding.get("title") or "").strip().lower()[:80]
     cve_key = str(finding.get("cve") or "").upper()
@@ -539,12 +645,16 @@ def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, 
             dup += 1
     if dup:
         score += 12
-        reasons.append("Há outro achado com o mesmo título/CVE nesta conversa (possível duplicata).")
+        reasons.append(
+            "Há outro achado com o mesmo título/CVE nesta conversa (possível duplicata)."
+        )
         why_fp.append("Scanners repetem o mesmo alerta em URLs diferentes.")
 
     tool = str(finding.get("tool") or "").lower()
     if tool in {"nmap", "naabu", "masscan"} and "tcp" in blob:
-        why_fp.append("Porta aberta não é, por si só, uma vulnerabilidade — só superfície de ataque.")
+        why_fp.append(
+            "Porta aberta não é, por si só, uma vulnerabilidade — só superfície de ataque."
+        )
         if sev in _INFO_SEV or not finding.get("cve"):
             score += 10
 
@@ -552,12 +662,23 @@ def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, 
         score += 22
         why_fp.append("Este item é o log de que um teste rodou, não a descrição de um buraco.")
 
+    if kind in _WEB_VULN_KINDS and has_exploit_payload(blob):
+        score -= 20
+        why_vuln.append(
+            "A evidência traz payload típico — isso costuma ser problema real, não ruído."
+        )
+
     if not why_vuln:
-        why_vuln.append(str(guide.get("why_it_matters") or "")[:240] or (
-            "Se a evidência mostrar o problema de forma reproduzível no alvo autorizado, trate como vulnerabilidade."
-        ))
+        why_vuln.append(
+            str(guide.get("why_it_matters") or "")[:240]
+            or (
+                "Se a evidência mostrar o problema de forma reproduzível no alvo autorizado, trate como vulnerabilidade."
+            )
+        )
     if not why_fp:
-        why_fp.append("Pode ser ruído de scanner, ambiente de lab, ou um controle que já existe atrás de WAF.")
+        why_fp.append(
+            "Pode ser ruído de scanner, ambiente de lab, ou um controle que já existe atrás de WAF."
+        )
     if not reasons:
         reasons.append("Ainda não há confirmação humana — precisa da sua leitura.")
 
@@ -570,16 +691,28 @@ def explain_false_positive(finding: dict[str, Any], *, siblings: list[dict[str, 
     score = max(0, min(100, score))
     if score >= 55:
         suggestion = "false_positive"
-        suggestion_label = "A ferramenta pode ter se enganado"
-        suggestion_hint = "Pelo que vimos, isto parece mais alarme falso do que um ataque de verdade."
     elif score <= 25:
         suggestion = "confirmed"
-        suggestion_label = "Isto parece um problema real"
-        suggestion_hint = "Vale olhar com calma: o tipo de falha e a evidência combinam com um risco concreto."
     else:
         suggestion = "unsure"
+    score, suggestion, _adj, _why = apply_fp_hard_rules(
+        kind=kind, blob=blob, likely_fp=score, verdict=suggestion
+    )
+    if suggestion == "false_positive":
+        suggestion_label = "A ferramenta pode ter se enganado"
+        suggestion_hint = (
+            "Pelo que vimos, isto parece mais alarme falso do que um ataque de verdade."
+        )
+    elif suggestion == "confirmed":
+        suggestion_label = "Isto parece um problema real"
+        suggestion_hint = (
+            "Vale olhar com calma: o tipo de falha e a evidência combinam com um risco concreto."
+        )
+    else:
         suggestion_label = "Precisa da sua leitura"
-        suggestion_hint = "A automação não tem certeza. Use os passos abaixo e escolha uma das três opções."
+        suggestion_hint = (
+            "A automação não tem certeza. Use os passos abaixo e escolha uma das três opções."
+        )
 
     how = list(guide.get("how_to_decide") or [])
     verify = " ".join(how) if how else _what_to_check(finding, blob)
@@ -622,7 +755,9 @@ def _what_to_check(finding: dict[str, Any], blob: str) -> str:
             "Sem reprodução no alvo autorizado, trate como incerto."
         )
     if any(k in blob for k in _WAF_HINTS):
-        return "O teste pode ter sido bloqueado. Tente de outra origem ou marque incerto até retestar."
+        return (
+            "O teste pode ter sido bloqueado. Tente de outra origem ou marque incerto até retestar."
+        )
     if re.search(r"\d+/tcp", blob) or "open port" in blob:
         return (
             "Porta aberta não é, sozinha, uma falha. "
@@ -661,7 +796,16 @@ def build_triage_queue(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def residual_risk_score(findings: list[dict[str, Any]]) -> dict[str, Any]:
     """Score 0–100 só com confirmados (pós-triagem)."""
-    weights = {"critical": 25, "high": 18, "alto": 18, "medium": 10, "medio": 10, "low": 4, "baixo": 4, "info": 1}
+    weights = {
+        "critical": 25,
+        "high": 18,
+        "alto": 18,
+        "medium": 10,
+        "medio": 10,
+        "low": 4,
+        "baixo": 4,
+        "info": 1,
+    }
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
     raw = 0
     for f in confirmed:

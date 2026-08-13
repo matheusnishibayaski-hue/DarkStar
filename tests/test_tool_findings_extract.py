@@ -11,11 +11,9 @@ from backend.executor import recon_db as recon_mod
 from backend.executor import surface as surface_mod
 from backend.executor.recon_db import is_recon_target, sync_recon_counts_from_surface
 from backend.executor.surface import (
-    load_surface,
     repair_surface_from_stored_output,
     update_surface_from_execution,
 )
-
 
 NMAP_HTTPONLY = """
 Nmap scan report for lab.test

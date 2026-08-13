@@ -143,7 +143,9 @@ def api_portfolio(
     for j in jobs:
         jobs_by_target.setdefault(_host(str(j.get("target") or "")), []).append(j)
 
-    summaries = { _host(str(s.get("target") or "")): s for s in list_surface_summaries(client_id=cid) }
+    summaries = {
+        _host(str(s.get("target") or "")): s for s in list_surface_summaries(client_id=cid)
+    }
     hosts = _collect_hosts(session_data, findings)
     if not hosts and any(isinstance(f, dict) for f in findings):
         hosts = ["_session"]
@@ -155,13 +157,17 @@ def api_portfolio(
         host_findings = _findings_for_host(findings, host)
         counts = _status_counts(host_findings)
         risk = _risk_payload(host, host_findings)
-        delta = _delta_payload(host) if host != "_session" else {
-            "has_baseline": False,
-            "fixed": 0,
-            "new": 0,
-            "still_open": 0,
-            "ports_opened": 0,
-        }
+        delta = (
+            _delta_payload(host)
+            if host != "_session"
+            else {
+                "has_baseline": False,
+                "fixed": 0,
+                "new": 0,
+                "still_open": 0,
+                "ports_opened": 0,
+            }
+        )
         hist = load_risk_history(host, limit=12) if host != "_session" else []
         next_jobs = sorted(
             jobs_by_target.get(host) or [],
@@ -178,7 +184,9 @@ def api_portfolio(
                 "lifecycle": lifecycle,
                 "lifecycle_label": _LIFECYCLE_PT.get(str(lifecycle).lower(), str(lifecycle)),
                 "phase": surface.get("phase"),
-                "updated_at": surface.get("updated_at") or summary.get("updated_at") or session_data.get("updated_at"),
+                "updated_at": surface.get("updated_at")
+                or summary.get("updated_at")
+                or session_data.get("updated_at"),
                 "risk": risk,
                 "delta": delta,
                 "risk_history": hist,

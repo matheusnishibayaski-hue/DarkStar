@@ -190,9 +190,7 @@ def sync_session_intel_from_logs(session_id: str) -> dict[str, Any]:
         stdout = parsed["stdout"]
         stderr = parsed["stderr"]
         targets = [
-            normalize_target(t)
-            for t in extract_targets(cmd, stdout, stderr)
-            if is_recon_target(t)
+            normalize_target(t) for t in extract_targets(cmd, stdout, stderr) if is_recon_target(t)
         ]
         for t in targets:
             touch_session(session_id, t)
@@ -274,14 +272,14 @@ def backfill_session_findings_from_client(
         stdout = str(ex.get("stdout") or "")
         stderr = str(ex.get("stderr") or "")
         targets = [
-            normalize_target(t)
-            for t in extract_targets(cmd, stdout, stderr)
-            if is_recon_target(t)
+            normalize_target(t) for t in extract_targets(cmd, stdout, stderr) if is_recon_target(t)
         ]
         for t in targets:
             touch_session(session_id, t)
 
-        digest = hashlib.sha1(f"{session_id}:{cmd}:{idx}".encode()).hexdigest()[:12]
+        digest = hashlib.sha1(  # noqa: S324
+            f"{session_id}:{cmd}:{idx}".encode(), usedforsecurity=False
+        ).hexdigest()[:12]
         fid = f"exec-client-{digest}"
         if fid in by_id:
             continue

@@ -87,7 +87,9 @@ def cli(ctx: click.Context, verbose: bool) -> None:
     help=f"Máximo de rodadas (default env MAX_AUTONOMOUS_ROUNDS={MAX_AUTONOMOUS_ROUNDS})",
 )
 @click.option("--objective", default=None, help="Objetivo customizado da missão")
-@click.option("--github-repo", default=None, help="owner/repo para comentar no PR (requer GITHUB_TOKEN)")
+@click.option(
+    "--github-repo", default=None, help="owner/repo para comentar no PR (requer GITHUB_TOKEN)"
+)
 @click.option("--pr", "pr_number", type=int, default=None, help="Número do PR para comentar")
 @click.option(
     "--github-pr",

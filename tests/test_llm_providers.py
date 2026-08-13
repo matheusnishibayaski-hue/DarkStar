@@ -92,9 +92,7 @@ class TestToolHeal(unittest.TestCase):
         provider.complete.side_effect = [
             LLMCompletion(message=LLMMessage(content="ainda quebrado")),
             LLMCompletion(
-                message=LLMMessage(
-                    content='{"command":"nmap -V","reason":"versão do nmap"}'
-                )
+                message=LLMMessage(content='{"command":"nmap -V","reason":"versão do nmap"}')
             ),
         ]
         result = heal_tool_arguments(
@@ -172,9 +170,7 @@ class TestCompatibleCompleteExtractsContentTools(unittest.TestCase):
     def test_content_tool_becomes_tool_calls(self):
         p = OllamaAdapter()
         raw_msg = MagicMock()
-        raw_msg.content = (
-            '```json\n{"command":"nmap -V","reason":"ver"}\n```'
-        )
+        raw_msg.content = '```json\n{"command":"nmap -V","reason":"ver"}\n```'
         raw_msg.tool_calls = None
         choice = MagicMock()
         choice.message = raw_msg

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from backend.config import INTELLIGENCE_DIR, INTELLIGENCE_STORAGE, DATABASE_URL
+from backend.config import DATABASE_URL, INTELLIGENCE_DIR, INTELLIGENCE_STORAGE
 from backend.intelligence.exceptions import StorageUnavailable
 
 
@@ -95,6 +95,4 @@ def load_threat_model_json(target: str) -> dict[str, Any] | None:
 
 def require_postgres() -> None:
     if not use_postgres():
-        raise StorageUnavailable(
-            "INTELLIGENCE_STORAGE=postgres exige DATABASE_URL configurado."
-        )
+        raise StorageUnavailable("INTELLIGENCE_STORAGE=postgres exige DATABASE_URL configurado.")

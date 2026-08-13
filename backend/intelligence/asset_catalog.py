@@ -7,18 +7,30 @@ from typing import Any
 ASSET_CATALOG: dict[str, list[dict[str, Any]]] = {
     "financial": [
         {"name": "Payment / core banking API", "criticality": 10, "focus": "auth, injection, IDOR"},
-        {"name": "Admin / backoffice panel", "criticality": 9, "focus": "exposure, MFA, default creds"},
+        {
+            "name": "Admin / backoffice panel",
+            "criticality": 9,
+            "focus": "exposure, MFA, default creds",
+        },
         {"name": "Customer PII database path", "criticality": 9, "focus": "SQLi, access control"},
         {"name": "API gateway / BFF", "criticality": 8, "focus": "rate limit, JWT, SSRF"},
     ],
     "healthcare": [
-        {"name": "Patient / EHR data store", "criticality": 10, "focus": "access control, encryption"},
+        {
+            "name": "Patient / EHR data store",
+            "criticality": 10,
+            "focus": "access control, encryption",
+        },
         {"name": "Clinician admin portal", "criticality": 9, "focus": "authZ, session"},
         {"name": "Compliance / audit logs", "criticality": 7, "focus": "integrity, exposure"},
         {"name": "Appointment / patient API", "criticality": 8, "focus": "IDOR, PHI leak"},
     ],
     "ecommerce": [
-        {"name": "Payment processor integration", "criticality": 10, "focus": "PCI paths, XSS on checkout"},
+        {
+            "name": "Payment processor integration",
+            "criticality": 10,
+            "focus": "PCI paths, XSS on checkout",
+        },
         {"name": "Customer account / PII", "criticality": 8, "focus": "auth, IDOR"},
         {"name": "Inventory / admin CMS", "criticality": 7, "focus": "exposure, RCE templates"},
         {"name": "Search / catalog API", "criticality": 6, "focus": "injection, abuse"},

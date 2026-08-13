@@ -12,8 +12,9 @@ false_positive ou discarded (não reproduzível após 2 tentativas).
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 from backend.executor.result import ExecutionResult
 from backend.executor.surface import load_surface, save_surface
@@ -160,10 +161,7 @@ def build_verify_command(
     if pass_number >= 3:
         ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         if tid:
-            return (
-                f"nuclei -u {base} -id {tid} -silent -timeout 15 "
-                f"-H 'User-Agent: {ua}' -jsonl"
-            )
+            return f"nuclei -u {base} -id {tid} -silent -timeout 15 -H 'User-Agent: {ua}' -jsonl"
         return f"curl -sI -m 20 -A '{ua}' {base}"
 
     if ftype == "header":
@@ -197,10 +195,7 @@ def build_verify_command(
         if tid and pass_number == 2:
             return f"nuclei -u {base} -id {tid} -silent -timeout 15 -jsonl"
         if pass_number == 1:
-            return (
-                f"nuclei -u {base} -severity critical,high,medium "
-                f"-silent -timeout 10 -jsonl"
-            )
+            return f"nuclei -u {base} -severity critical,high,medium -silent -timeout 10 -jsonl"
         return f"curl -sI -m 15 {base}"
 
     if ftype == "port_info":
@@ -501,22 +496,16 @@ def run_verification_pipeline(
     surface_ctx = {"ports": ports, "urls": urls, "services": data.get("services") or []}
 
     pending = [
-        f
-        for f in (data.get("findings") or [])
-        if f.get("status") in {"candidate", "inconclusive"}
+        f for f in (data.get("findings") or []) if f.get("status") in {"candidate", "inconclusive"}
     ]
     pending = _sort_findings(pending)
 
     # Garante que todos high/critical entram antes do teto (até max)
     critical_high = [
-        f
-        for f in pending
-        if str(f.get("severity") or "").lower() in {"critical", "high"}
+        f for f in pending if str(f.get("severity") or "").lower() in {"critical", "high"}
     ]
     others = [
-        f
-        for f in pending
-        if str(f.get("severity") or "").lower() not in {"critical", "high"}
+        f for f in pending if str(f.get("severity") or "").lower() not in {"critical", "high"}
     ]
     # Expand teto se há mais critical/high que o limite
     effective_max = max(max_findings, len(critical_high))
@@ -526,9 +515,7 @@ def run_verification_pipeline(
     def _verify_one(finding: dict[str, Any], pass_number: int) -> VerifyOutcome:
         fid = str(finding.get("id") or "")
         title = str(finding.get("title") or "")
-        cmd = build_verify_command(
-            finding, target, urls=urls, ports=ports, pass_number=pass_number
-        )
+        cmd = build_verify_command(finding, target, urls=urls, ports=ports, pass_number=pass_number)
         if not cmd:
             _apply_status(
                 target,
@@ -567,9 +554,7 @@ def run_verification_pipeline(
             pass_number=pass_number,
             surface_context=surface_ctx,
         )
-        evidence = (
-            f"{reason}\n---\n{(exec_result.stdout or exec_result.stderr or '')[:600]}"
-        )
+        evidence = f"{reason}\n---\n{(exec_result.stdout or exec_result.stderr or '')[:600]}"
         _apply_status(
             target,
             fid,

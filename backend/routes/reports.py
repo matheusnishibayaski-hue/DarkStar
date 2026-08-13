@@ -78,13 +78,15 @@ def api_get_report_meta(report_id: str):
 
 
 def _disposition(file_name: str, *, inline: bool = True) -> str:
-    raw = (file_name or "relatorio.pdf").replace('"', "").replace("\n", " ").strip() or "relatorio.pdf"
+    raw = (file_name or "relatorio.pdf").replace('"', "").replace(
+        "\n", " "
+    ).strip() or "relatorio.pdf"
     ascii_name = _ASCII_NAME.sub("-", raw).strip(".-") or "relatorio.pdf"
     if not ascii_name.lower().endswith(".pdf"):
         ascii_name += ".pdf"
     kind = "inline" if inline else "attachment"
     encoded = quote(raw, safe="")
-    return f'{kind}; filename="{ascii_name}"; filename*=UTF-8\'\'{encoded}'
+    return f"{kind}; filename=\"{ascii_name}\"; filename*=UTF-8''{encoded}"
 
 
 @router.get("/{report_id}")
@@ -99,7 +101,7 @@ def api_get_report(report_id: str):
     content = row.get("content")
     if content is None:
         raise HTTPException(status_code=404, detail="report empty")
-    if not isinstance(content, (bytes, bytearray)):
+    if not isinstance(content, bytes | bytearray):
         content = bytes(content)
     if not content:
         raise HTTPException(status_code=404, detail="report empty")

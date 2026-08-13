@@ -103,9 +103,7 @@ def api_generate_report(req: ReportRequest):
             if not target:
                 from backend.executor.recon_db import extract_targets, is_recon_target
 
-                texts = [m.content for m in req.history] + [
-                    e.command for e in req.tool_executions
-                ]
+                texts = [m.content for m in req.history] + [e.command for e in req.tool_executions]
                 found = [t for t in extract_targets(*texts) if is_recon_target(t)]
                 target = found[0] if found else ""
 

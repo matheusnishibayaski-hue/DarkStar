@@ -7,8 +7,6 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from backend.ai.delta import compute_delta, snapshot_confirmed
 from backend.ai.remediation import remediation_for, remediations_for_findings
 from backend.ai.report import generate_report, generate_report_html
@@ -25,6 +23,8 @@ from backend.executor.surface import (
     save_surface,
     update_surface_from_execution,
 )
+from fastapi.testclient import TestClient
+
 from tests.auth_patch import patch_chat_api_token
 
 
@@ -65,9 +65,7 @@ class TestDedupAndTemplate(unittest.TestCase):
                     blocked=False,
                 )
                 data = surface_mod.load_surface("dedup.test")
-                cve_findings = [
-                    f for f in data["findings"] if f.get("cve") == "CVE-2024-9999"
-                ]
+                cve_findings = [f for f in data["findings"] if f.get("cve") == "CVE-2024-9999"]
                 self.assertEqual(len(cve_findings), 1)
                 self.assertGreaterEqual(cve_findings[0].get("sources", 1), 2)
                 self.assertTrue(cve_findings[0].get("template_id"))
@@ -204,9 +202,7 @@ class TestUnifiedReport(unittest.TestCase):
                     },
                 ]
                 save_surface("rep2.test", data)
-                md = generate_report(
-                    [], [], surface_target="rep2.test", snapshot_baseline=False
-                )
+                md = generate_report([], [], surface_target="rep2.test", snapshot_baseline=False)
                 self.assertIn("Achados Confirmados", md)
                 self.assertIn("Missing HSTS", md)
                 self.assertIn("Anexo técnico", md)

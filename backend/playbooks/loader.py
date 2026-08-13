@@ -52,7 +52,9 @@ def _expand_args(args: list[str], target: str) -> list[str]:
     return [a.replace("{target}", target).replace("{target_safe}", safe) for a in args]
 
 
-def run_playbook(playbook_id: str, target: str, mission_id: str | None = None, chat_session_id: str | None = None) -> dict[str, Any]:
+def run_playbook(
+    playbook_id: str, target: str, mission_id: str | None = None, chat_session_id: str | None = None
+) -> dict[str, Any]:
     playbook = load_playbook(playbook_id)
     if not playbook:
         raise ValueError(f"Playbook '{playbook_id}' não encontrado.")

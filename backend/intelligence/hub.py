@@ -10,9 +10,9 @@ from typing import Any
 from backend.config import INTELLIGENCE_ENABLED
 from backend.executor.recon_db import normalize_target
 from backend.executor.surface import load_surface, surface_summary
+from backend.intelligence import store
 from backend.intelligence.exceptions import SurfaceNotFound
 from backend.intelligence.patterns import bump_patterns, compact_finding, top_patterns
-from backend.intelligence import store
 from backend.intelligence.suggest import build_suggestions
 
 logger = logging.getLogger(__name__)
@@ -196,7 +196,11 @@ def suggest(
     }
     patterns = _load_patterns_blob(industry)
     items = build_suggestions(data, patterns, industry=industry, limit=max(1, min(limit, 30)))
-    return {"target": norm, "suggestions": items, "storage": "postgres" if store.use_postgres() else "json"}
+    return {
+        "target": norm,
+        "suggestions": items,
+        "storage": "postgres" if store.use_postgres() else "json",
+    }
 
 
 def stats() -> dict[str, Any]:
@@ -264,7 +268,11 @@ def _load_patterns_blob(industry: str | None) -> dict[str, Any]:
 
 def _stats_postgres() -> dict[str, Any]:
     from backend.database.db import init_db, session_scope
-    from backend.database.models_intelligence import IndustryPattern, PentestRecord, TargetIntelligence
+    from backend.database.models_intelligence import (
+        IndustryPattern,
+        PentestRecord,
+        TargetIntelligence,
+    )
 
     init_db()
     with session_scope() as session:

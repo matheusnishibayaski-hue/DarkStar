@@ -21,6 +21,7 @@ def _remediation_seed(finding: dict[str, Any]) -> dict[str, Any]:
 
     return remediation_for(finding)
 
+
 logger = logging.getLogger(__name__)
 
 _TRACK_PATH = BASE_DIR / "backend" / "data" / "remediation_track.json"
@@ -164,18 +165,18 @@ class RemediationAdvisor:
 Generate a remediation plan as JSON for this pentest finding.
 
 Finding:
-- title: {finding.get('title')}
-- severity: {finding.get('severity')}
-- status: {finding.get('status')}
-- host/url: {finding.get('host') or finding.get('url') or finding.get('matched_at') or ''}
-- cve: {finding.get('cve') or ''}
-- tool: {finding.get('tool') or ''}
-- evidence: {str(finding.get('evidence') or '')[:1200]}
-- static_remediation_title: {seed.get('title')}
-- static_remediation_action: {seed.get('action')}
+- title: {finding.get("title")}
+- severity: {finding.get("severity")}
+- status: {finding.get("status")}
+- host/url: {finding.get("host") or finding.get("url") or finding.get("matched_at") or ""}
+- cve: {finding.get("cve") or ""}
+- tool: {finding.get("tool") or ""}
+- evidence: {str(finding.get("evidence") or "")[:1200]}
+- static_remediation_title: {seed.get("title")}
+- static_remediation_action: {seed.get("action")}
 
 Optional code_context:
-{code_context or '(none)'}
+{code_context or "(none)"}
 
 Optional project_info:
 {json.dumps(project_info, ensure_ascii=False)[:800]}
@@ -206,7 +207,9 @@ Use Portuguese for titles/descriptions. Steps: 3-6 practical ops/security action
                     description=str(step_data.get("description") or step_data.get("action") or "")[
                         :2000
                     ],
-                    command=(str(step_data["command"])[:1000] if step_data.get("command") else None),
+                    command=(
+                        str(step_data["command"])[:1000] if step_data.get("command") else None
+                    ),
                     code_snippet=(
                         str(step_data["code_snippet"])[:4000]
                         if step_data.get("code_snippet")
@@ -333,7 +336,20 @@ class RemediationVerifier:
             except SyntaxError as exc:
                 syntax_valid = False
                 issues.append(f"syntax: {exc}")
-        elif fixed_code.strip() and lang not in {"", "python", "py", "javascript", "js", "typescript", "ts", "bash", "shell", "config", "nginx", "yaml"}:
+        elif fixed_code.strip() and lang not in {
+            "",
+            "python",
+            "py",
+            "javascript",
+            "js",
+            "typescript",
+            "ts",
+            "bash",
+            "shell",
+            "config",
+            "nginx",
+            "yaml",
+        }:
             issues.append("syntax check skipped for this language")
         if test_command:
             issues.append("test_command not executed (safety: no host command run)")
@@ -421,11 +437,15 @@ class RemediationTracker:
     def stats(self) -> dict[str, Any]:
         data = self._load()
         total = len(data)
-        completed = sum(1 for v in data.values() if isinstance(v, dict) and v.get("status") == "completed")
+        completed = sum(
+            1 for v in data.values() if isinstance(v, dict) and v.get("status") == "completed"
+        )
         in_progress = sum(
             1 for v in data.values() if isinstance(v, dict) and v.get("status") == "in_progress"
         )
-        failed = sum(1 for v in data.values() if isinstance(v, dict) and v.get("status") == "failed")
+        failed = sum(
+            1 for v in data.values() if isinstance(v, dict) and v.get("status") == "failed"
+        )
         return {
             "total_tracked": total,
             "completed": completed,

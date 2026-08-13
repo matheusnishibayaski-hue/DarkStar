@@ -15,9 +15,7 @@ def _provider_mock(*, configured: bool = True):
     p = MagicMock()
     p.name = "openrouter"
     p.is_configured.return_value = configured
-    p.configuration_error.return_value = (
-        "Configure OPENROUTER_API_KEY no arquivo .env.\n\nObtenha uma chave em: https://openrouter.ai/keys"
-    )
+    p.configuration_error.return_value = "Configure OPENROUTER_API_KEY no arquivo .env.\n\nObtenha uma chave em: https://openrouter.ai/keys"
     p.resolve_models.return_value = ("m1", "m2")
     p.is_retryable_error.return_value = False
     p.format_error.side_effect = lambda e: f"Erro: {e}"

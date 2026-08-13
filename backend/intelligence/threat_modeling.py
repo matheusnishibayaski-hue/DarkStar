@@ -9,15 +9,14 @@ from typing import Any
 from backend.ai.chains import infer_attack_chains
 from backend.executor.recon_db import normalize_target
 from backend.executor.surface import load_surface
+from backend.intelligence import store
 from backend.intelligence.asset_catalog import assets_for_industry
 from backend.intelligence.business_context import BusinessContext, parse_business_context
-from backend.intelligence import store
 
 logger = logging.getLogger(__name__)
 
 DISCLAIMER = (
-    "Modelo heurístico local; não substitui threat model formal (STRIDE/PTES) "
-    "nem validação humana."
+    "Modelo heurístico local; não substitui threat model formal (STRIDE/PTES) nem validação humana."
 )
 
 
@@ -61,9 +60,7 @@ def build_scan_plan(
         )
 
     unverified = [
-        f
-        for f in findings
-        if str(f.get("status") or "") in {"", "candidate", "inconclusive"}
+        f for f in findings if str(f.get("status") or "") in {"", "candidate", "inconclusive"}
     ]
     if unverified:
         plan.append(
@@ -151,11 +148,7 @@ def get_threat_model(target: str) -> dict[str, Any] | None:
 
         init_db()
         with session_scope() as session:
-            row = (
-                session.query(TargetIntelligence)
-                .filter_by(target_name=norm)
-                .one_or_none()
-            )
+            row = session.query(TargetIntelligence).filter_by(target_name=norm).one_or_none()
             if not row or not row.threat_model_json:
                 return store.load_threat_model_json(norm)
             try:

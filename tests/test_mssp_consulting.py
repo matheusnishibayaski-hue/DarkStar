@@ -27,9 +27,7 @@ class TestClientsStore(unittest.TestCase):
             with patch.object(clients_store, "CLIENTS_DIR", root):
                 with patch("backend.config.CLIENTS_DIR", root):
                     clients_store.ensure_default_client()
-                    c = clients_store.create_client(
-                        "acme-corp", display_name="Acme"
-                    )
+                    c = clients_store.create_client("acme-corp", display_name="Acme")
                     self.assertEqual(c["client_id"], "acme-corp")
                     items = clients_store.list_clients()
                     ids = {i["client_id"] for i in items}
@@ -144,9 +142,7 @@ class TestExecutiveFallback(unittest.TestCase):
                                     "surface": {},
                                 },
                             ):
-                                result = generate_executive_summary(
-                                    "exec.test", use_llm=True
-                                )
+                                result = generate_executive_summary("exec.test", use_llm=True)
                 self.assertIn(result["source"], {"fallback", "fallback_error"})
                 self.assertTrue(result["text"])
 

@@ -49,9 +49,7 @@ def _triage_response(session_id: str, executions: list[dict] | None = None) -> d
     if executions:
         backfill_session_findings_from_client(session_id, executions)
         try:
-            ingest_extracted_findings(
-                session_id, extra_executions=executions, skip_disk_logs=True
-            )
+            ingest_extracted_findings(session_id, extra_executions=executions, skip_disk_logs=True)
         except Exception:  # noqa: BLE001
             pass
         findings = aggregate_session_findings(session_id, sync=False)
@@ -172,15 +170,15 @@ def api_intel_finding_ai_review(session_id: str, finding_id: str):
     finding = next((f for f in findings if str(f.get("id")) == fid), None)
     if not finding:
         raise HTTPException(status_code=404, detail="Achado não encontrado.")
-    cached = finding.get("ai_review")
-    if isinstance(cached, dict) and cached.get("source") == "llm":
-        return {"finding_id": fid, "ai_review": cached, "cached": True}
     from backend.ai.fp_ai_review import review_finding
 
+    was_cached = (
+        isinstance(finding.get("ai_review"), dict) and finding["ai_review"].get("source") == "llm"
+    )
     review = review_finding(finding)
     if review.get("source") == "llm":
         merge_session_finding_fields(session_id, fid, {"ai_review": review})
-    return {"finding_id": fid, "ai_review": review, "cached": False}
+    return {"finding_id": fid, "ai_review": review, "cached": was_cached}
 
 
 @router.get("/sessions/{session_id}/triage-queue")

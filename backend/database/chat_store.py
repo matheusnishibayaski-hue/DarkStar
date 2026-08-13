@@ -155,11 +155,7 @@ def delete_chat_session(session_id: str) -> bool:
         return False
     ensure_dashboard_db()
     with session_scope() as db:
-        n = (
-            db.query(ChatSession)
-            .filter(ChatSession.id == sid)
-            .delete(synchronize_session=False)
-        )
+        n = db.query(ChatSession).filter(ChatSession.id == sid).delete(synchronize_session=False)
         return bool(n)
 
 
@@ -178,4 +174,9 @@ def migrate_chat_sessions(sessions: list[dict[str, Any]]) -> dict[str, Any]:
         except Exception as exc:  # noqa: BLE001
             logger.warning("chat_migrate_item_failed: %s", exc)
             errors += 1
-    return {"imported": imported, "skipped": skipped, "errors": errors, "total": len(sessions or [])}
+    return {
+        "imported": imported,
+        "skipped": skipped,
+        "errors": errors,
+        "total": len(sessions or []),
+    }

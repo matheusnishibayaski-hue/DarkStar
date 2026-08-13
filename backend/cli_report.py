@@ -94,11 +94,7 @@ def build_cli_report(
     buckets = findings_for_report(target)
     findings = flatten_report_findings(buckets, include_candidates=include_candidates)
     # Exit codes usam confirmados + inconclusive (não FP/discarded); critical/high de todos relevantes
-    scored = [
-        f
-        for f in findings
-        if f.get("status") in {"confirmed", "inconclusive", "candidate"}
-    ]
+    scored = [f for f in findings if f.get("status") in {"confirmed", "inconclusive", "candidate"}]
     counts = count_by_severity(scored)
     try:
         risk = risk_score_for_target(target)
@@ -159,7 +155,9 @@ def convert_to_sarif(report: dict[str, Any]) -> dict[str, Any]:
         )
         msg = str(f.get("title") or f.get("evidence") or "Finding")
         desc = str(f.get("evidence") or f.get("remediation") or "")
-        uri = str(f.get("url") or f.get("matched_at") or f.get("host") or report.get("target") or "")
+        uri = str(
+            f.get("url") or f.get("matched_at") or f.get("host") or report.get("target") or ""
+        )
         locations: list[dict[str, Any]] = []
         if uri:
             locations.append(

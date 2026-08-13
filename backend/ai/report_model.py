@@ -59,8 +59,7 @@ def normalize_severity(finding: dict[str, Any]) -> str:
     from backend.ai.fp_explain import detect_finding_kind
 
     blob = " ".join(
-        str(finding.get(k) or "")
-        for k in ("title", "evidence", "command", "cve", "severity")
+        str(finding.get(k) or "") for k in ("title", "evidence", "command", "cve", "severity")
     )
     tagged = re.search(r"\[(critical|high|medium|low|info)\]", blob, re.I)
     if tagged:
@@ -131,10 +130,7 @@ def _merge_extracted(
     from backend.ai.report import _extract_vulnerabilities
 
     out = list(findings)
-    seen = {
-        re.sub(r"\s+", " ", str(f.get("title") or "").lower())[:160]
-        for f in out
-    }
+    seen = {re.sub(r"\s+", " ", str(f.get("title") or "").lower())[:160] for f in out}
     for i, v in enumerate(_extract_vulnerabilities(executions or [])):
         detail = str(v.get("detail") or "Achado").strip()
         key = re.sub(r"\s+", " ", detail.lower())[:160]
@@ -278,7 +274,7 @@ def assemble_session_report(
         t = str(ex.get("tool") or "").strip()
         if not t:
             cmd = str(ex.get("command") or "").strip()
-            t = (cmd.split()[0].split("/")[-1] if cmd else "")
+            t = cmd.split()[0].split("/")[-1] if cmd else ""
         if t:
             tools[t.lower()] += 1
 
@@ -299,7 +295,11 @@ def assemble_session_report(
         iso_cov = int((fws.get("ISO27001") or {}).get("indicative_coverage_0_100") or 0)
         soc_cov = int((fws.get("SOC2") or {}).get("indicative_coverage_0_100") or 0)
 
-    top_fixes = [str(r.get("remediation_title") or "") for r in remediations[:5] if r.get("remediation_title")]
+    top_fixes = [
+        str(r.get("remediation_title") or "")
+        for r in remediations[:5]
+        if r.get("remediation_title")
+    ]
     exec_summary = _executive_paragraph(
         targets=targets or ([target] if target else []),
         n_tests=len(executions),
@@ -314,8 +314,10 @@ def assemble_session_report(
         sev_conf=sev_conf,
     )
     scope_bits = [str(m).strip() for m in user_msgs if str(m).strip()]
-    scope = " ".join(scope_bits)[:1200] if scope_bits else (
-        "Não declarado no chat — derivado das execuções desta conversa."
+    scope = (
+        " ".join(scope_bits)[:1200]
+        if scope_bits
+        else ("Não declarado no chat — derivado das execuções desta conversa.")
     )
     notes = [m.strip() for m in assistant_msgs if m and len(str(m).strip()) > 40]
 

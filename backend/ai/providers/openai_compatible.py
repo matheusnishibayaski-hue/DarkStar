@@ -7,7 +7,10 @@ from typing import Any
 from openai import OpenAI
 
 from backend.ai.providers.base import BaseLLMProvider, LLMCompletion, LLMMessage
-from backend.ai.providers.tool_parse import extract_tool_calls_from_content, sdk_message_to_tool_calls
+from backend.ai.providers.tool_parse import (
+    extract_tool_calls_from_content,
+    sdk_message_to_tool_calls,
+)
 
 
 class OpenAICompatibleProvider(BaseLLMProvider):

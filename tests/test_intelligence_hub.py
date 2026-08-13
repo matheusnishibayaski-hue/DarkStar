@@ -65,7 +65,9 @@ class TestIntelligenceHubJson(unittest.TestCase):
                 return_value={"findings": 10},
             ):
                 result = hub.record_from_surface("lab.example")
-        self.assertTrue(result["recorded"] if "recorded" in result else result.get("findings_count") == 10)
+        self.assertTrue(
+            result["recorded"] if "recorded" in result else result.get("findings_count") == 10
+        )
         self.assertEqual(result["storage"], "json")
         self.assertEqual(result["findings_count"], 10)
         # segunda gravação deve subir frequência

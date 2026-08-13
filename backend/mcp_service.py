@@ -18,7 +18,8 @@ Referência do protocolo: https://modelcontextprotocol.io
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from backend.config import ALLOWED_TARGETS, ALLOWED_TOOLS, MCP_ENABLED, TOOL_CATEGORIES
 from backend.deps import APP_VERSION

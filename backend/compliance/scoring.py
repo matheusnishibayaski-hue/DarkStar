@@ -33,8 +33,8 @@ def indicative_coverage(control_map: dict[str, Any]) -> dict[str, Any]:
             weighted_gaps += w
 
     # coverage = quanto está "sem gap mapeado"
-    coverage = 100.0 if weighted_total <= 0 else round(
-        (1.0 - (weighted_gaps / weighted_total)) * 100.0, 1
+    coverage = (
+        100.0 if weighted_total <= 0 else round((1.0 - (weighted_gaps / weighted_total)) * 100.0, 1)
     )
     status = "gaps_detected" if gaps else "no_mapped_gaps"
     return {

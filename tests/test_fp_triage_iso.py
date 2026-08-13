@@ -7,6 +7,13 @@ from unittest.mock import patch
 
 
 class TestFpExplain(unittest.TestCase):
+    def setUp(self):
+        self._fp = patch("backend.ai.fp_learn.is_suppressed", return_value=False)
+        self._fp.start()
+
+    def tearDown(self):
+        self._fp.stop()
+
     def test_info_port_is_likely_fp(self):
         from backend.ai.fp_explain import explain_false_positive
 
@@ -41,9 +48,25 @@ class TestFpExplain(unittest.TestCase):
             {"title": "OK — nmap", "severity": "info", "tool": "nmap", "status": "candidate"}
         )
         self.assertEqual(expl["kind"], "scan_summary")
-        self.assertGreaterEqual(expl["likely_fp"], 40)
+        self.assertGreaterEqual(expl["likely_fp"], 88)
+        self.assertEqual(expl["suggestion"], "false_positive")
         blob = (expl["what_it_is"] + expl["plain_title"]).lower()
         self.assertTrue("teste" in blob or "ferramenta" in blob)
+
+    def test_xss_high_payload_low_fp(self):
+        from backend.ai.fp_explain import explain_false_positive
+
+        expl = explain_false_positive(
+            {
+                "title": "[high] Reflected XSS in search",
+                "severity": "info",
+                "evidence": "search=<script>alert(1)</script> reflected in HTML",
+                "status": "candidate",
+            }
+        )
+        self.assertEqual(expl["kind"], "xss")
+        self.assertLessEqual(expl["likely_fp"], 25)
+        self.assertEqual(expl["suggestion"], "confirmed")
 
     def test_sqli_high_leans_vuln(self):
         from backend.ai.fp_explain import explain_false_positive
@@ -87,7 +110,12 @@ class TestFpExplain(unittest.TestCase):
                     "tool": "nmap",
                     "status": "confirmed",
                 },
-                {"id": "x1", "title": "SQL Injection in login", "severity": "high", "status": "confirmed"},
+                {
+                    "id": "x1",
+                    "title": "SQL Injection in login",
+                    "severity": "high",
+                    "status": "confirmed",
+                },
             ]
         )
         ids = {x["id"] for x in q}
@@ -166,12 +194,18 @@ class TestIngestExtractedFindings(unittest.TestCase):
 
         with (
             patch.object(si, "collect_session_tool_executions", return_value=execs),
-            patch.object(si, "load_session", return_value={"session_id": "sess-abc12345", "session_findings": []}),
+            patch.object(
+                si,
+                "load_session",
+                return_value={"session_id": "sess-abc12345", "session_findings": []},
+            ),
             patch.object(si, "save_session", side_effect=_save),
         ):
             n = si.ingest_extracted_findings("sess-abc12345")
         self.assertGreaterEqual(n, 1)
-        self.assertTrue(any(f.get("status") == "candidate" for f in saved.get("session_findings") or []))
+        self.assertTrue(
+            any(f.get("status") == "candidate" for f in saved.get("session_findings") or [])
+        )
 
     def test_ingest_merges_when_logs_already_exist(self):
         from backend.executor import session_intel as si
@@ -302,4 +336,3 @@ class TestSessionReportPack(unittest.TestCase):
         self.assertIn("script na página", html.lower())
         self.assertTrue(raw.startswith(b"%PDF"))
         self.assertGreater(len(raw), 2000)
-

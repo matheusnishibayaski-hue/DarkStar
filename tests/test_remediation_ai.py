@@ -7,17 +7,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
-
+from backend.ai.providers.base import LLMCompletion, LLMMessage
 from backend.ai.remediation_ai import (
     RemediationAdvisor,
     RemediationTracker,
     RemediationVerifier,
     remediation_advisor,
 )
-from backend.ai.providers.base import LLMCompletion, LLMMessage
-from tests.auth_patch import patch_chat_api_token
+from fastapi.testclient import TestClient
 
+from tests.auth_patch import patch_chat_api_token
 
 SAMPLE_FINDING = {
     "id": "f1",

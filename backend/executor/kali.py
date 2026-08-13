@@ -551,7 +551,11 @@ def execute_in_kali(
     args = parse_command_string(command)
     result: ExecutionResult | None = None
     for event in execute_kali_command_stream(
-        args, reason, execution_id=execution_id, mission_id=mission_id, chat_session_id=chat_session_id
+        args,
+        reason,
+        execution_id=execution_id,
+        mission_id=mission_id,
+        chat_session_id=chat_session_id,
     ):
         if event.get("type") == "done":
             result = event["result"]

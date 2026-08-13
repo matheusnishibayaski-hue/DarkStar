@@ -247,8 +247,7 @@ def compute_delta(target: str) -> dict[str, Any]:
 def format_delta_markdown(delta: dict[str, Any]) -> str:
     if not delta.get("has_baseline"):
         return (
-            "*Sem baseline anterior — este engajamento será a referência "
-            "para o próximo reteste.*"
+            "*Sem baseline anterior — este engajamento será a referência para o próximo reteste.*"
         )
     surf = delta.get("surface") or {}
     lines = [
@@ -279,17 +278,13 @@ def format_delta_markdown(delta: dict[str, Any]) -> str:
         lines.append("### Novos confirmados")
         lines.append("")
         for f in delta["new"][:30]:
-            lines.append(
-                f"- [{str(f.get('severity', '?')).upper()}] {f.get('title')}"
-            )
+            lines.append(f"- [{str(f.get('severity', '?')).upper()}] {f.get('title')}")
         lines.append("")
     if delta.get("still_open"):
         lines.append("### Ainda abertos")
         lines.append("")
         for f in delta["still_open"][:30]:
-            lines.append(
-                f"- [{str(f.get('severity', '?')).upper()}] {f.get('title')}"
-            )
+            lines.append(f"- [{str(f.get('severity', '?')).upper()}] {f.get('title')}")
         lines.append("")
     if surf.get("ports_opened"):
         lines.append("### Portas novas abertas")

@@ -33,9 +33,7 @@ PHASE_GOALS = {
         "Confirmar ou descartar achados candidatos com PoC mínimo e não destrutivo. "
         "Priorize findings high/critical. Marque mentalmente confirmed vs falso positivo."
     ),
-    "report": (
-        "Resuma achados confirmados, evidências e gaps. Chame finish_mission."
-    ),
+    "report": ("Resuma achados confirmados, evidências e gaps. Chame finish_mission."),
 }
 
 # Ferramentas típicas por fase (sugestão + allowlist soft)
@@ -266,8 +264,10 @@ def evaluate_phase_advance(surface: dict[str, Any]) -> PhaseDecision:
         return PhaseDecision(phase, False, "Enumere portas/URLs/serviços.", False)
 
     if phase == "vuln_scan":
-        ready = bool(candidates) or bool(confirmed) or (
-            bool(tools & PHASE_PREFERRED_TOOLS["vuln_scan"]) and commands >= 1
+        ready = (
+            bool(candidates)
+            or bool(confirmed)
+            or (bool(tools & PHASE_PREFERRED_TOOLS["vuln_scan"]) and commands >= 1)
         )
         # Sem achados após scan: ainda pode ir para verify/report
         if ready or (commands >= 4 and bool(ports or urls)):
@@ -282,11 +282,7 @@ def evaluate_phase_advance(surface: dict[str, Any]) -> PhaseDecision:
 
     if phase == "verify":
         # Pipeline assertivo roda ao final; aqui basta ter tentado ou não haver candidatos
-        open_items = [
-            f
-            for f in findings
-            if f.get("status") in {"candidate", "inconclusive"}
-        ]
+        open_items = [f for f in findings if f.get("status") in {"candidate", "inconclusive"}]
         if verified_attempted or not open_items or commands >= 2:
             return PhaseDecision(
                 "report",

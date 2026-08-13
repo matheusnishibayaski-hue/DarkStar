@@ -10,7 +10,7 @@ from typing import Any
 
 from backend.ai.fp_learn import is_suppressed
 from backend.executor.recon_db import normalize_target
-from backend.executor.surface import get_or_create_surface, load_surface, save_surface
+from backend.executor.surface import get_or_create_surface, save_surface
 
 _CVE_RE = re.compile(r"CVE-\d{4}-\d{4,}", re.I)
 

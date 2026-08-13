@@ -3,7 +3,11 @@
 from backend.ai.providers.base import BaseLLMProvider, LLMCompletion, LLMMessage, ToolCall
 from backend.ai.providers.factory import get_llm_provider, reset_llm_provider_cache
 from backend.ai.providers.ollama import OllamaAdapter
-from backend.ai.providers.openrouter import OPENROUTER_BASE_URL, OPENROUTER_HEADERS, OpenRouterAdapter
+from backend.ai.providers.openrouter import (
+    OPENROUTER_BASE_URL,
+    OPENROUTER_HEADERS,
+    OpenRouterAdapter,
+)
 from backend.ai.providers.runtime import (
     clear_provider_override,
     get_active_provider_name,

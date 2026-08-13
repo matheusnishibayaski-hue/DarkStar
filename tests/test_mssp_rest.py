@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from backend.ai.risk_history import load_risk_history, previous_score, record_ri
 from backend.ai.scanner_import import import_nessus_csv
 from backend.clients import backup as backup_mod
 from backend.clients import store as clients_store
+from backend.database import db as db_mod
 from backend.executor import surface as surface_mod
 from backend.executor.data_cleanup import purge_older_than
 from backend.executor.surface import get_or_create_surface, save_surface
@@ -21,19 +23,71 @@ from backend.security.roles import method_allowed
 
 
 class TestFpLearn(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        db_mod.reset_engine_for_tests()
+        fp_learn.reset_for_tests()
+        self._url = f"sqlite:///{(self.root / 'fp.db').as_posix()}"
+        self.patches = [
+            patch.object(db_mod, "DATABASE_URL", ""),
+            patch.object(db_mod, "_SQLITE_PATH", self.root / "fp.db"),
+            patch.object(db_mod, "resolve_database_url", return_value=self._url),
+            patch.object(fp_learn, "FP_SUPPRESS_PATH", self.root / "missing-fp.json"),
+        ]
+        for p in self.patches:
+            p.start()
+        db_mod.reset_engine_for_tests()
+        db_mod.init_db()
+        fp_learn._migrated = True
+
+    def tearDown(self):
+        for p in self.patches:
+            p.stop()
+        db_mod.reset_engine_for_tests()
+        fp_learn.reset_for_tests()
+        self.tmp.cleanup()
+
     def test_remember_and_suppress(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "fp.json"
-            with patch.object(fp_learn, "FP_SUPPRESS_PATH", path):
-                f = {
-                    "title": "Missing HSTS",
-                    "cve": "",
-                    "template_id": "http-missing-hsts",
-                    "severity": "medium",
+        f = {
+            "title": "Missing HSTS",
+            "cve": "",
+            "template_id": "http-missing-hsts",
+            "severity": "medium",
+        }
+        remember_false_positive(f, target="t.com")
+        self.assertTrue(is_suppressed(f))
+        self.assertGreaterEqual(len(list_suppressed()), 1)
+
+    def test_legacy_json_import_once(self):
+        path = self.root / "legacy.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "patterns": {
+                        "title:ok-nmap": {
+                            "pattern_key": "title:ok-nmap",
+                            "finding_type": "title",
+                            "title": "OK — nmap",
+                            "hits": 2,
+                            "targets": ["lab.test"],
+                        }
+                    }
                 }
-                remember_false_positive(f, target="t.com")
-                self.assertTrue(is_suppressed(f))
-                self.assertGreaterEqual(len(list_suppressed()), 1)
+            ),
+            encoding="utf-8",
+        )
+        self.patches[-1].stop()
+        json_patch = patch.object(fp_learn, "FP_SUPPRESS_PATH", path)
+        json_patch.start()
+        self.patches[-1] = json_patch
+        fp_learn.reset_for_tests()
+        f = {"title": "OK — nmap"}
+        self.assertTrue(is_suppressed(f))
+        items = list_suppressed()
+        self.assertTrue(any(str(i.get("title") or "").startswith("OK") for i in items))
+        self.assertFalse(path.is_file())
+        self.assertTrue(is_suppressed(f))
 
 
 class TestRiskHistory(unittest.TestCase):
@@ -91,7 +145,7 @@ class TestScannerImport(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             with patch.object(surface_mod, "SURFACE_DIR", root):
-                with patch("backend.ai.fp_learn.FP_SUPPRESS_PATH", Path(tmp) / "fp.json"):
+                with patch.object(fp_learn, "_migrated", True):
                     get_or_create_surface("import.test")
                     csv_body = (
                         "Plugin Name,Severity,CVE,Host,Port\n"

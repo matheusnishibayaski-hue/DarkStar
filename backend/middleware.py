@@ -90,9 +90,7 @@ async def privilege_guard(request: Request, call_next):
     )
 
     token = (
-        request.cookies.get(PRIVILEGE_COOKIE)
-        or request.headers.get(PRIVILEGE_HEADER)
-        or ""
+        request.cookies.get(PRIVILEGE_COOKIE) or request.headers.get(PRIVILEGE_HEADER) or ""
     ).strip()
     set_elevated(validate_privilege_token(token))
     return await call_next(request)
@@ -122,8 +120,6 @@ async def role_guard(request: Request, call_next):
     if not method_allowed(request.method, path):
         return JSONResponse(
             status_code=403,
-            content={
-                "detail": "Papel viewer: apenas leitura. Defina OPERATOR_ROLE=analyst|admin."
-            },
+            content={"detail": "Papel viewer: apenas leitura. Defina OPERATOR_ROLE=analyst|admin."},
         )
     return await call_next(request)

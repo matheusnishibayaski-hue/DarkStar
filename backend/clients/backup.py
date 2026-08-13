@@ -75,9 +75,7 @@ def restore_client(archive: bytes, *, overwrite: bool = False) -> dict[str, Any]
         cid = normalize_client_id(str(manifest.get("client_id") or "default"))
         dest = CLIENTS_DIR / cid
         if dest.exists() and any(dest.iterdir()) and not overwrite:
-            raise FileExistsError(
-                f"Cliente '{cid}' já tem dados — use overwrite=true"
-            )
+            raise FileExistsError(f"Cliente '{cid}' já tem dados — use overwrite=true")
         dest.mkdir(parents=True, exist_ok=True)
         for m in members:
             if m.name in {"manifest.json"} or not m.isfile():

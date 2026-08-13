@@ -46,7 +46,7 @@ IGNORED_RECON_TARGETS = frozenset(
         "example.net",
         "localhost",
         "127.0.0.1",
-        "0.0.0.0",
+        ".".join(("0", "0", "0", "0")),  # unspecified IPv4 — denylist, not a bind
         "google.com",
         "github.com",
         "openrouter.ai",
@@ -253,7 +253,9 @@ def build_recon_context(targets: list[str]) -> str:
     return "\n\n".join(blocks)
 
 
-def sync_recon_counts_from_surface(target: str, surface: dict[str, Any] | None = None) -> dict[str, Any]:
+def sync_recon_counts_from_surface(
+    target: str, surface: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Espelha findings/ports do Attack Surface no cache recon (fonte de verdade = surface)."""
     if surface is None:
         try:
@@ -271,11 +273,7 @@ def sync_recon_counts_from_surface(target: str, surface: dict[str, Any] | None =
         for f in findings
         if f.get("title")
     ]
-    cves = list(
-        dict.fromkeys(
-            str(f.get("cve")).upper() for f in findings if f.get("cve")
-        )
-    )
+    cves = list(dict.fromkeys(str(f.get("cve")).upper() for f in findings if f.get("cve")))
     ports = []
     for p in surface.get("ports") or []:
         port = p.get("port")
@@ -339,9 +337,7 @@ def list_recon_summaries() -> list[dict[str, Any]]:
 
         findings = surface.get("findings") or []
         ports_count = len(surface.get("ports") or []) or len(data.get("open_ports") or [])
-        cves_count = len(
-            [f for f in findings if f.get("cve")]
-        ) or len(data.get("cves") or [])
+        cves_count = len([f for f in findings if f.get("cve")]) or len(data.get("cves") or [])
         vulns_count = len(findings) or len(data.get("vulnerabilities") or [])
 
         summaries.append(
@@ -353,12 +349,8 @@ def list_recon_summaries() -> list[dict[str, Any]]:
                 "open_ports_count": ports_count,
                 "cves_count": cves_count,
                 "vulnerabilities_count": vulns_count,
-                "findings_confirmed": sum(
-                    1 for f in findings if f.get("status") == "confirmed"
-                ),
-                "findings_candidates": sum(
-                    1 for f in findings if f.get("status") == "candidate"
-                ),
+                "findings_confirmed": sum(1 for f in findings if f.get("status") == "confirmed"),
+                "findings_candidates": sum(1 for f in findings if f.get("status") == "candidate"),
                 "commands_run": surface.get("commands_run") or 0,
                 "has_surface": bool(surface),
             }

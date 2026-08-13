@@ -118,6 +118,7 @@ async def static_no_cache(request, call_next):
             response.headers["Pragma"] = "no-cache"
     return response
 
+
 app.include_router(system.router)
 app.include_router(files.router)
 app.include_router(data.router)

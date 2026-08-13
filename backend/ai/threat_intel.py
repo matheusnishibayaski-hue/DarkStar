@@ -26,10 +26,9 @@ import urllib.request
 from typing import Any
 
 from backend.config import THREAT_INTEL_CACHE_TTL, THREAT_INTEL_ENABLED
+from backend.security.http_client import http_urlopen
 
-CISA_KEV_URL = (
-    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
-)
+CISA_KEV_URL = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 FIRST_EPSS_URL = "https://api.first.org/data/v1/epss"
 
 _CVE_RE = re.compile(r"^CVE-\d{4}-\d{4,}$", re.IGNORECASE)
@@ -49,7 +48,7 @@ def normalize_cve(cve: str) -> str:
 def _http_get_json(url: str) -> Any:
     """GET simples com timeout curto. Isolado para facilitar mocks em testes."""
     req = urllib.request.Request(url, headers={"User-Agent": "chat-ia-kali-threat-intel/1.1"})
-    with urllib.request.urlopen(req, timeout=_HTTP_TIMEOUT_SEC) as resp:  # nosec B310 - URL fixa/allowlist
+    with http_urlopen(req, timeout=_HTTP_TIMEOUT_SEC) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 

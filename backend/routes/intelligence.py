@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from backend.config import INTELLIGENCE_ENABLED
-from backend.intelligence.exceptions import IntelligenceError, SurfaceNotFound
 from backend.intelligence import hub
+from backend.intelligence.exceptions import IntelligenceError, SurfaceNotFound
 from backend.intelligence.threat_modeling import generate_threat_model, get_threat_model
 
 router = APIRouter(prefix="/api/intelligence", tags=["intelligence"])

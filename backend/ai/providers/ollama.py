@@ -13,6 +13,7 @@ from backend.config import (
     OLLAMA_FALLBACK_MODEL,
     OLLAMA_MODEL,
 )
+from backend.security.http_client import http_urlopen
 
 
 class OllamaAdapter(OpenAICompatibleProvider):
@@ -74,7 +75,7 @@ class OllamaAdapter(OpenAICompatibleProvider):
     def _list_local_models(self) -> list[str]:
         try:
             req = urllib.request.Request(self._tags_url(), method="GET")
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
+            with http_urlopen(req, timeout=2.5) as resp:
                 import json
 
                 payload = json.loads(resp.read().decode("utf-8", errors="replace"))
@@ -93,7 +94,7 @@ class OllamaAdapter(OpenAICompatibleProvider):
         detail = ""
         try:
             req = urllib.request.Request(self._tags_url(), method="GET")
-            with urllib.request.urlopen(req, timeout=2.5) as resp:
+            with http_urlopen(req, timeout=2.5) as resp:
                 if getattr(resp, "status", 200) >= 400:
                     ok = False
                     detail = f"HTTP {resp.status}"

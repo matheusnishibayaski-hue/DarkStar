@@ -41,9 +41,7 @@ def build_delivery_bundle(target: str) -> bytes:
             "content": f"Risk score e findings do surface {t}.",
         },
     ]
-    md = generate_report(
-        history, [], title=title, surface_target=target, snapshot_baseline=False
-    )
+    md = generate_report(history, [], title=title, surface_target=target, snapshot_baseline=False)
     html_doc = generate_report_html(
         history, [], title=title, surface_target=target, snapshot_baseline=False
     )

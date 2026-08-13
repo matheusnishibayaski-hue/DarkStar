@@ -121,16 +121,16 @@ def list_execution_logs(limit: int = 100, session_id: str | None = None) -> list
         meta_path = LOG_DIR / f"{log_id}.meta.json"
         if meta_path.is_file():
             try:
-                chat_sid = str(json.loads(meta_path.read_text(encoding="utf-8")).get("chat_session_id") or "")
+                chat_sid = str(
+                    json.loads(meta_path.read_text(encoding="utf-8")).get("chat_session_id") or ""
+                )
             except (json.JSONDecodeError, OSError):
                 pass
         items.append(
             {
                 "id": log_id,
                 "size": st.st_size,
-                "modified_at": datetime.fromtimestamp(
-                    st.st_mtime, tz=timezone.utc
-                ).isoformat(),
+                "modified_at": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
                 "has_file": True,
                 "chat_session_id": chat_sid,
             }

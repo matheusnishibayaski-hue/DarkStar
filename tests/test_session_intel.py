@@ -1,6 +1,5 @@
 """Testes do intel agrupado por conversa."""
 
-import json
 import tempfile
 import unittest
 from pathlib import Path

@@ -28,10 +28,9 @@ router = APIRouter(prefix="/api", tags=["system"])
 
 @router.get("/client-config")
 def client_config():
-    from backend.security.privileges import master_key_configured, privilege_status
     from backend.ai.providers.runtime import get_active_provider_name
-
     from backend.config import OPERATOR_ROLE
+    from backend.security.privileges import master_key_configured, privilege_status
     from backend.security.roles import current_role
 
     active = get_active_provider_name()
@@ -234,8 +233,8 @@ def api_recon_delete(target: str):
 def api_recon_detail(target: str):
     if not target or len(target) > 128 or ".." in target:
         raise HTTPException(status_code=400, detail="Alvo inválido.")
-    from backend.executor.surface import load_surface, repair_surface_from_stored_output
     from backend.executor.recon_db import sync_recon_counts_from_surface
+    from backend.executor.surface import load_surface, repair_surface_from_stored_output
 
     try:
         repair_surface_from_stored_output(target)

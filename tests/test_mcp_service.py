@@ -5,9 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from fastapi.testclient import TestClient
-
 from backend import mcp_service
+from fastapi.testclient import TestClient
 
 
 class TestServerInfo(unittest.TestCase):
@@ -74,9 +73,7 @@ class TestCallTool(unittest.TestCase):
             "backend.security.scope.validate_command_scope",
             return_value=(False, "Fora do escopo"),
         ):
-            result = mcp_service.call_tool(
-                "run_kali_tool", {"command": "nmap -sV evil.example"}
-            )
+            result = mcp_service.call_tool("run_kali_tool", {"command": "nmap -sV evil.example"})
         self.assertFalse(result["isError"])
         payload = result["content"][0]["json"]
         self.assertTrue(payload["blocked"])
@@ -96,9 +93,10 @@ class TestCallTool(unittest.TestCase):
             stdout="ok",
             stderr="",
         )
-        with mock.patch(
-            "backend.security.scope.validate_command_scope", return_value=(True, "")
-        ), mock.patch("backend.executor.kali.execute_kali_command", return_value=fake_result):
+        with (
+            mock.patch("backend.security.scope.validate_command_scope", return_value=(True, "")),
+            mock.patch("backend.executor.kali.execute_kali_command", return_value=fake_result),
+        ):
             result = mcp_service.call_tool(
                 "run_kali_tool", {"command": "nmap -sV scanme.nmap.org", "reason": "teste"}
             )
@@ -108,12 +106,8 @@ class TestCallTool(unittest.TestCase):
         self.assertEqual(payload["tool"], "nmap")
 
     def test_enrich_target_threat_intel_tool(self):
-        with mock.patch(
-            "backend.ai.threat_intel.enrich_surface_with_threat_intel", return_value=3
-        ):
-            result = mcp_service.call_tool(
-                "enrich_target_threat_intel", {"target": "example.com"}
-            )
+        with mock.patch("backend.ai.threat_intel.enrich_surface_with_threat_intel", return_value=3):
+            result = mcp_service.call_tool("enrich_target_threat_intel", {"target": "example.com"})
         self.assertFalse(result["isError"])
         self.assertEqual(result["content"][0]["json"]["findings_enriched"], 3)
 
@@ -269,9 +263,7 @@ class TestMcpHttpRoutes(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
 
     def test_rpc_endpoint(self):
-        res = self.client.post(
-            "/api/mcp/rpc", json={"jsonrpc": "2.0", "id": 1, "method": "ping"}
-        )
+        res = self.client.post("/api/mcp/rpc", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.json()["result"], {})
 

@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from fastapi.testclient import TestClient
-
 from backend.ai.providers.runtime import clear_provider_override
 from backend.main import app
+from fastapi.testclient import TestClient
 
 
 class TestAiProviderApi(unittest.TestCase):

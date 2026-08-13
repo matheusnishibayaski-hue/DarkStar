@@ -10,11 +10,7 @@ def infer_attack_chains(surface: dict[str, Any]) -> list[dict[str, str]]:
     Gera hipóteses A+B → risco composto. Não confirma exploração —
     apenas sinaliza combinação no relatório.
     """
-    findings = [
-        f
-        for f in (surface.get("findings") or [])
-        if f.get("status") == "confirmed"
-    ]
+    findings = [f for f in (surface.get("findings") or []) if f.get("status") == "confirmed"]
     ports = surface.get("ports") or []
     urls = surface.get("urls") or []
     chains: list[dict[str, str]] = []
@@ -28,8 +24,7 @@ def infer_attack_chains(surface: dict[str, Any]) -> list[dict[str, str]]:
     missing_hsts = "hsts" in blob or "strict-transport" in blob
     exposed = any(k in blob for k in ("exposed", "admin", "panel", "debug", "swagger"))
     cve_high = any(
-        f.get("cve") and str(f.get("severity")).lower() in {"critical", "high"}
-        for f in findings
+        f.get("cve") and str(f.get("severity")).lower() in {"critical", "high"} for f in findings
     )
     xss = "xss" in blob
     sqli = "sql" in blob

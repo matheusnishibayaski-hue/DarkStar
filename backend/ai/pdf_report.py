@@ -58,8 +58,8 @@ def _pdf_text(value: Any) -> str:
 
 
 def _md_to_flowables(text: str, styles: dict[str, Any]) -> list[Any]:
-    from reportlab.platypus import Paragraph, Spacer
     from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, Spacer
 
     flow: list[Any] = []
     for raw_line in (text or "").splitlines():
@@ -150,9 +150,8 @@ def _safe_logo_path(logo_rel: str) -> Path | None:
 
 
 def _section_banner(title: str, subtitle: str, primary, header_bg, styles) -> list[Any]:
-    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
     from reportlab.lib.units import cm
-    from reportlab.lib import colors
+    from reportlab.platypus import Paragraph, Spacer, Table, TableStyle
 
     inner = [
         [
@@ -178,9 +177,9 @@ def _section_banner(title: str, subtitle: str, primary, header_bg, styles) -> li
 
 
 def _meta_table(rows: list[list[str]], primary, header_bg) -> Any:
-    from reportlab.platypus import Table, TableStyle
-    from reportlab.lib.units import cm
     from reportlab.lib import colors
+    from reportlab.lib.units import cm
+    from reportlab.platypus import Table, TableStyle
 
     data = [[_pdf_text(a), _pdf_text(b)] for a, b in rows]
     t = Table(data, colWidths=[4.2 * cm, 11.8 * cm])
@@ -289,8 +288,8 @@ def _append_iso_soc2(
 
 
 def _append_triage_annex(story, fp, pending, h2, body) -> None:
-    from reportlab.platypus import Paragraph, Spacer
     from reportlab.lib.units import cm
+    from reportlab.platypus import Paragraph, Spacer
 
     story.append(Paragraph("Anexo — rastreabilidade da triagem humana", h2))
     story.append(
@@ -330,7 +329,11 @@ def _bar_drawing(
         from reportlab.platypus import Spacer as _Sp
 
         return _Sp(1, 1)
-    maxv = int(max_value) if max_value and max_value > 0 else max((int(v) for _, v, _ in rows), default=1)
+    maxv = (
+        int(max_value)
+        if max_value and max_value > 0
+        else max((int(v) for _, v, _ in rows), default=1)
+    )
     maxv = max(1, maxv)
     h = 8 + len(rows) * (row_h + 3)
     d = Drawing(width, h)
@@ -466,7 +469,11 @@ def _pdf_from_session_model(
         )
     )
     story.append(kpi)
-    story.append(Paragraph(f"Risco residual: <b>{_pdf_text(risk.get('label'))}</b> (somente confirmados).", body))
+    story.append(
+        Paragraph(
+            f"Risco residual: <b>{_pdf_text(risk.get('label'))}</b> (somente confirmados).", body
+        )
+    )
 
     sev = model.get("severity") or {}
     score = max(0, min(100, int(risk.get("score") or 0)))
@@ -597,7 +604,9 @@ def _pdf_from_session_model(
         if f.get("everyday"):
             bits.append(Paragraph(f"<i>{_pdf_text(f['everyday'])}</i>", body))
         if f.get("why_it_matters"):
-            bits.append(Paragraph(f"<b>Por que importa:</b> {_pdf_text(f['why_it_matters'])}", body))
+            bits.append(
+                Paragraph(f"<b>Por que importa:</b> {_pdf_text(f['why_it_matters'])}", body)
+            )
         for hap in (f.get("could_happen") or [])[:4]:
             bits.append(Paragraph(f"• {_pdf_text(hap)}", body))
         decide = list(f.get("how_to_decide") or [])[:4]
@@ -776,9 +785,7 @@ def generate_report_pdf(
         surface = load_surface(target) if target else None
         findings = list(surface.get("findings") or []) if surface else []
         if surface:
-            display_name = str(
-                surface.get("label") or surface.get("client") or ""
-            ).strip()
+            display_name = str(surface.get("label") or surface.get("client") or "").strip()
         if not display_name and target:
             display_name = target
 
@@ -1065,9 +1072,7 @@ def generate_report_pdf(
         story.append(Paragraph(f"<b>Evolução:</b> {_pdf_text(narrative)}", body))
         story.append(Spacer(1, 0.25 * cm))
 
-        summary = generate_executive_summary(
-            target, regenerate=regenerate_executive, use_llm=True
-        )
+        summary = generate_executive_summary(target, regenerate=regenerate_executive, use_llm=True)
         story.append(Paragraph("Análise executiva", h3))
         story.extend(_md_to_flowables(summary["text"], md_styles))
         story.append(
@@ -1096,13 +1101,11 @@ def generate_report_pdf(
             pass
 
         try:
-            from backend.config import COMPLIANCE_ENABLED
             from backend.compliance.reporter import generate_compliance_report
+            from backend.config import COMPLIANCE_ENABLED
 
             if COMPLIANCE_ENABLED:
-                crep = generate_compliance_report(
-                    target, ["LGPD", "PCI-DSS"], findings=findings
-                )
+                crep = generate_compliance_report(target, ["LGPD", "PCI-DSS"], findings=findings)
                 story.append(Paragraph("Postura regulatória indicativa", h3))
                 story.append(
                     Paragraph(
@@ -1117,8 +1120,7 @@ def generate_report_pdf(
                     )
                     story.append(
                         Paragraph(
-                            f"• <b>{_pdf_text(fw_id)}</b>: cobertura indicativa "
-                            f"{_pdf_text(cov)}%",
+                            f"• <b>{_pdf_text(fw_id)}</b>: cobertura indicativa {_pdf_text(cov)}%",
                             body,
                         )
                     )
@@ -1127,9 +1129,7 @@ def generate_report_pdf(
 
         if delta.get("has_baseline"):
             story.append(Paragraph("Evolução desde o último scan", h3))
-            story.extend(
-                _md_to_flowables(format_delta_markdown(delta)[:2500], md_styles)
-            )
+            story.extend(_md_to_flowables(format_delta_markdown(delta)[:2500], md_styles))
     else:
         confirmed = [f for f in findings if f.get("status") == "confirmed"]
         story.append(
@@ -1155,11 +1155,7 @@ def generate_report_pdf(
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
     fp = [f for f in findings if f.get("status") == "false_positive"]
     discarded = [f for f in findings if f.get("status") == "discarded"]
-    pending = [
-        f
-        for f in findings
-        if f.get("status") in {"candidate", "inconclusive", None, ""}
-    ]
+    pending = [f for f in findings if f.get("status") in {"candidate", "inconclusive", None, ""}]
 
     story.append(
         _meta_table(
@@ -1308,7 +1304,9 @@ def generate_report_pdf(
             ]
             story.append(KeepTogether(block))
 
-    _append_iso_soc2(story, findings, target or display_name or "session", h2, h3, body, primary, header_bg)
+    _append_iso_soc2(
+        story, findings, target or display_name or "session", h2, h3, body, primary, header_bg
+    )
     _append_triage_annex(story, fp, pending, h2, body)
 
     execs = tool_executions or []
@@ -1325,9 +1323,7 @@ def generate_report_pdf(
                 )
             )
             if out:
-                story.append(
-                    Paragraph(f"<font face='Courier' size='7'>{out}</font>", body)
-                )
+                story.append(Paragraph(f"<font face='Courier' size='7'>{out}</font>", body))
 
     story.append(Spacer(1, 0.6 * cm))
     story.append(

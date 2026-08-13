@@ -17,9 +17,7 @@ def _extract_vulnerabilities(tool_executions: list[dict]) -> list[dict]:
     for ex in tool_executions:
         output = "\n".join(filter(None, [ex.get("stdout", ""), ex.get("stderr", "")]))
         command = ex.get("command", "")
-        for match in re.finditer(
-            r"\[(critical|high|medium|low|info)\][^\n]*", output, re.I
-        ):
+        for match in re.finditer(r"\[(critical|high|medium|low|info)\][^\n]*", output, re.I):
             line = match.group(0).strip()
             if line not in seen:
                 seen.add(line)
@@ -43,8 +41,7 @@ def _structured_executive(
 ) -> list[str]:
     """Resumo executivo 100% derivado dos confirmados do gate (não do chat)."""
     lines = [
-        f"**Postura de risco:** {risk.get('label', '—')} "
-        f"(score {risk.get('score', 0)}/100)  ",
+        f"**Postura de risco:** {risk.get('label', '—')} (score {risk.get('score', 0)}/100)  ",
         f"**Alvo:** {target}  ",
     ]
     if client:
@@ -180,9 +177,7 @@ def generate_report(
     if client:
         lines.append(f"**Cliente:** {client}  ")
     if risk:
-        lines.append(
-            f"**Risk score:** {risk.get('score', 0)}/100 — **{risk.get('label', '—')}**  "
-        )
+        lines.append(f"**Risk score:** {risk.get('score', 0)}/100 — **{risk.get('label', '—')}**  ")
     lines.extend(
         [
             f"**Execuções registradas:** {len(tool_executions)}",
@@ -295,9 +290,7 @@ def generate_report(
             lines.append("### Detalhamento (impacto)")
             lines.append("")
             for f in executive[:20]:
-                lines.append(
-                    f"#### [{str(f.get('severity', '?')).upper()}] {f.get('title')}"
-                )
+                lines.append(f"#### [{str(f.get('severity', '?')).upper()}] {f.get('title')}")
                 lines.append("")
                 lines.append(f"- **CVSS:** {f.get('cvss_score')} (`{f.get('cvss_vector', '')}`)")
                 lines.append(f"- **Impacto:** {f.get('impact', '—')}")
@@ -319,7 +312,7 @@ def generate_report(
                     lines.append(f"- **Template:** `{f.get('template_id')}`")
                 if f.get("evidence_path"):
                     lines.append(f"- **Pacote de evidência:** `{f.get('evidence_path')}`")
-                lines.append(f"- **Reteste:** validar com o mesmo template/CVE após correção.")
+                lines.append("- **Reteste:** validar com o mesmo template/CVE após correção.")
                 lines.append("")
         else:
             lines.append("*Nenhum achado no gate executivo.*")
@@ -336,9 +329,11 @@ def generate_report(
                 ]
             )
             for f in human[:25]:
-                reason = str(
-                    f.get("discard_reason") or f.get("evidence") or f.get("status") or ""
-                ).replace("|", "\\|").replace("\n", " ")[:80]
+                reason = (
+                    str(f.get("discard_reason") or f.get("evidence") or f.get("status") or "")
+                    .replace("|", "\\|")
+                    .replace("\n", " ")[:80]
+                )
                 lines.append(
                     f"| {str(f.get('severity', '')).upper()} | "
                     f"{str(f.get('title', '')).replace('|', '\\|')[:100]} | "
@@ -356,9 +351,7 @@ def generate_report(
     else:
         vulns = _extract_vulnerabilities(tool_executions)
         if vulns:
-            lines.extend(
-                ["| Severidade | Detalhe | Origem |", "|------------|---------|--------|"]
-            )
+            lines.extend(["| Severidade | Detalhe | Origem |", "|------------|---------|--------|"])
             for v in vulns[:50]:
                 lines.append(
                     f"| {v['severity']} | {v['detail'].replace('|', '\\|')[:120]} | "
@@ -400,13 +393,13 @@ def generate_report(
             lines.append(f"### {label}")
             lines.append("")
             if items:
-                lines.extend(
-                    ["| Sev | Título | Motivo |", "|-----|--------|--------|"]
-                )
+                lines.extend(["| Sev | Título | Motivo |", "|-----|--------|--------|"])
                 for f in items[:30]:
-                    reason = str(
-                        f.get("discard_reason") or f.get("evidence") or ""
-                    ).replace("|", "\\|").replace("\n", " ")[:80]
+                    reason = (
+                        str(f.get("discard_reason") or f.get("evidence") or "")
+                        .replace("|", "\\|")
+                        .replace("\n", " ")[:80]
+                    )
                     lines.append(
                         f"| {str(f.get('severity', '')).upper()} | "
                         f"{str(f.get('title', '')).replace('|', '\\|')[:100]} | {reason} |"
@@ -503,9 +496,7 @@ def generate_report_html(
         brand = html.escape(str(surface.get("brand_name") or REPORT_BRAND_NAME))
         client = html.escape(str(surface.get("client") or ""))
         risk = risk_score_for_target(surface_target)
-        risk_label = html.escape(
-            f"Risk {risk.get('score', 0)}/100 — {risk.get('label', '')}"
-        )
+        risk_label = html.escape(f"Risk {risk.get('score', 0)}/100 — {risk.get('label', '')}")
 
     body_parts: list[str] = []
     for raw in md.split("\n"):
@@ -551,6 +542,7 @@ def generate_report_html(
         flags=re.S,
     )
 
+    risk_badge = f'<div class="risk-badge">{risk_label}</div>' if risk_label else ""
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -594,7 +586,7 @@ def generate_report_html(
   <div class="brand">{brand}</div>
   <h1 class="cover-title">{html.escape(title)}</h1>
   <div class="meta">{client or "Relatório de segurança"} · Gerado automaticamente · Imprima para PDF</div>
-  {f'<div class="risk-badge">{risk_label}</div>' if risk_label else ''}
+  {risk_badge}
 </div>
 {joined}
 <div class="footer">Confidencial · {brand} · Revise fila humana antes da entrega ao cliente.</div>

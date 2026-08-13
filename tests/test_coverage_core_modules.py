@@ -41,11 +41,7 @@ class TestModelsCatalog(unittest.TestCase):
         cat = get_models_catalog()
         self.assertIn("tiers", cat)
         self.assertIn("default_model", cat)
-        providers = {
-            m["provider"]
-            for tier in cat["tiers"]
-            for m in tier["models"]
-        }
+        providers = {m["provider"] for tier in cat["tiers"] for m in tier["models"]}
         for expected in ("openai", "claude", "gemini", "grok", "deepseek"):
             self.assertIn(expected, providers)
         primary, fb = resolve_model(None, None)
@@ -111,15 +107,17 @@ class TestWifiScan(unittest.TestCase):
         net_proc = MagicMock(returncode=0, stdout="SSID 1 : Lab\n", stderr="")
         prof = MagicMock(returncode=0, stdout="Profile\n", stderr="warn")
 
-        with patch.object(wifi, "_run_netsh", side_effect=[ok_proc]), patch.object(
-            wifi, "save_execution_log", return_value="w1"
+        with (
+            patch.object(wifi, "_run_netsh", side_effect=[ok_proc]),
+            patch.object(wifi, "save_execution_log", return_value="w1"),
         ):
             r = wifi._scan_windows("wlan-interfaces", "ifaces")
         self.assertTrue(r.success)
 
-        with patch.object(
-            wifi, "_run_netsh", side_effect=[ok_proc, net_proc, prof]
-        ), patch.object(wifi, "save_execution_log", return_value="w2"):
+        with (
+            patch.object(wifi, "_run_netsh", side_effect=[ok_proc, net_proc, prof]),
+            patch.object(wifi, "save_execution_log", return_value="w2"),
+        ):
             r2 = wifi._scan_windows("wlan-scan", "scan")
         self.assertTrue(r2.success)
         self.assertIn("STDERR", r2.stdout)
@@ -141,37 +139,46 @@ class TestWifiScan(unittest.TestCase):
         from backend.executor import wifi_scan as wifi
 
         ok = MagicMock(returncode=0, stdout="wlan0", stderr="")
-        with patch.object(wifi.subprocess, "run", return_value=ok), patch.object(
-            wifi, "save_execution_log", return_value="l1"
+        with (
+            patch.object(wifi.subprocess, "run", return_value=ok),
+            patch.object(wifi, "save_execution_log", return_value="l1"),
         ):
             r = wifi._scan_linux("wlan-interfaces", "i")
         self.assertTrue(r.success)
 
-        with patch.object(
-            wifi.subprocess, "run", side_effect=FileNotFoundError
-        ), patch.object(wifi, "save_execution_log", return_value="l2"):
+        with (
+            patch.object(wifi.subprocess, "run", side_effect=FileNotFoundError),
+            patch.object(wifi, "save_execution_log", return_value="l2"),
+        ):
             r2 = wifi._scan_linux("wlan-scan", "s")
         self.assertFalse(r2.success)
 
-        with patch.object(
-            wifi.subprocess, "run", side_effect=RuntimeError("x")
-        ), patch.object(wifi, "save_execution_log", return_value="l3"):
+        with (
+            patch.object(wifi.subprocess, "run", side_effect=RuntimeError("x")),
+            patch.object(wifi, "save_execution_log", return_value="l3"),
+        ):
             r3 = wifi._scan_linux("wlan-scan", "s")
         self.assertIn("x", r3.stderr)
 
     def test_execute_host_wifi_dispatch(self):
         from backend.executor import wifi_scan as wifi
 
-        with patch.object(wifi.sys, "platform", "win32"), patch.object(
-            wifi, "_scan_windows", return_value=ExecutionResult("c", "r", "", "", 0, True)
-        ) as w:
+        with (
+            patch.object(wifi.sys, "platform", "win32"),
+            patch.object(
+                wifi, "_scan_windows", return_value=ExecutionResult("c", "r", "", "", 0, True)
+            ) as w,
+        ):
             wifi.execute_host_wifi("wlan-scan", "r")
             w.assert_called_once()
-        with patch.object(wifi.sys, "platform", "linux"), patch.object(
-            wifi, "_scan_linux", return_value=ExecutionResult("c", "r", "", "", 0, True)
-        ) as l:
+        with (
+            patch.object(wifi.sys, "platform", "linux"),
+            patch.object(
+                wifi, "_scan_linux", return_value=ExecutionResult("c", "r", "", "", 0, True)
+            ) as linux_scan,
+        ):
             wifi.execute_host_wifi("wlan-scan", "r")
-            l.assert_called_once()
+            linux_scan.assert_called_once()
 
     def test_windows_wifi_health(self):
         from backend.executor import wifi_scan as wifi

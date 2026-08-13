@@ -212,7 +212,9 @@ def save_scan_result(scan_result: dict[str, Any]) -> bool:
                 medium=int(scan_result.get("medium") or 0),
                 low=int(scan_result.get("low") or 0),
                 findings_json=json.dumps(compact, ensure_ascii=False),
-                rounds=float(scan_result.get("rounds") or scan_result.get("execution_time_seconds") or 0),
+                rounds=float(
+                    scan_result.get("rounds") or scan_result.get("execution_time_seconds") or 0
+                ),
                 status=str(scan_result.get("status") or "completed")[:32],
                 error_message=str(scan_result.get("error_message") or "")[:2000],
                 scan_type=str(scan_result.get("scan_type") or "manual")[:32],

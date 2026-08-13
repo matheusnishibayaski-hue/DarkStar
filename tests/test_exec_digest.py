@@ -49,7 +49,7 @@ class TestExecDigest(unittest.TestCase):
         self.assertIn("Não rodou", d["headline"])
 
     def test_nuclei_unresponsive(self):
-        from backend.ai.exec_digest import digest_execution, clean_tool_output
+        from backend.ai.exec_digest import clean_tool_output, digest_execution
 
         banner = "  __  _  __\n / / / |/ /\nprojectdiscovery.io\n"
         stdout = (
@@ -75,8 +75,34 @@ class TestAiReviewParse(unittest.TestCase):
         )
         self.assertEqual(parsed["verdict"], "false_positive")
         self.assertEqual(parsed["confidence"], 70)
+        self.assertEqual(parsed["likely_fp"], 70)
         self.assertEqual(parsed["source"], "llm")
         self.assertTrue(parsed["reasons"])
+
+    def test_parse_likely_fp_same_scale(self):
+        from backend.ai.fp_ai_review import parse_ai_review
+
+        parsed = parse_ai_review('{"verdict":"unsure","likely_fp":42,"summary":"pouca prova"}')
+        self.assertEqual(parsed["likely_fp"], 42)
+        self.assertEqual(parsed["confidence"], 42)
+
+    def test_calibrate_scan_summary_clamps_confirmed(self):
+        from backend.ai.fp_ai_review import calibrate_review, parse_ai_review
+
+        parsed = parse_ai_review('{"verdict":"confirmed","likely_fp":10,"summary":"buraco real"}')
+        out = calibrate_review(
+            {
+                "title": "OK — nmap",
+                "severity": "info",
+                "tool": "nmap",
+                "evidence": "Nmap done: 0 hosts up",
+            },
+            parsed,
+        )
+        self.assertEqual(out["verdict"], "false_positive")
+        self.assertGreaterEqual(out["likely_fp"], 88)
+        self.assertTrue(out["adjusted"])
+        self.assertTrue(out.get("adjust_reason"))
 
     def test_review_uses_cache_and_mock_llm(self):
         from backend.ai.fp_ai_review import review_finding

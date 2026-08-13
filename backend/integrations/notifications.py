@@ -33,6 +33,7 @@ from backend.config import (
     TELEGRAM_CHAT_ID,
 )
 from backend.security.audit import record_event
+from backend.security.http_client import http_urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ def _post_json(url: str, payload: dict[str, Any], *, timeout: float = 8) -> tupl
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with http_urlopen(req, timeout=timeout) as resp:
             code = getattr(resp, "status", 200)
             return 200 <= code < 300 or code == 204, int(code)
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
@@ -229,7 +230,7 @@ class JiraNotifier(NotificationChannel):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
+            with http_urlopen(req, timeout=15) as resp:
                 return 200 <= getattr(resp, "status", 200) < 300
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             logger.warning("jira_notify_failed: %s", exc)

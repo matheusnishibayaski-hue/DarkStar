@@ -10,8 +10,6 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
-from fastapi.testclient import TestClient
-
 from backend.ai.chains import infer_attack_chains
 from backend.ai.cvss import correlate_cve_version, enrich_finding, estimate_cvss
 from backend.ai.evidence import write_finding_evidence
@@ -26,9 +24,14 @@ from backend.ai.verify import (
 )
 from backend.executor import surface as surface_mod
 from backend.executor.result import ExecutionResult
-from backend.executor.surface import get_or_create_surface, save_surface, update_surface_from_execution
-from tests.auth_patch import patch_chat_api_token
+from backend.executor.surface import (
+    get_or_create_surface,
+    save_surface,
+    update_surface_from_execution,
+)
+from fastapi.testclient import TestClient
 
+from tests.auth_patch import patch_chat_api_token
 
 NUCLEI_JSON = json.dumps(
     {
@@ -104,14 +107,10 @@ class TestGateAndPass3(unittest.TestCase):
             )
         )
         self.assertFalse(
-            _executive_eligible(
-                {"status": "confirmed", "confidence": "low", "template_id": "x"}
-            )
+            _executive_eligible({"status": "confirmed", "confidence": "low", "template_id": "x"})
         )
         self.assertFalse(
-            _executive_eligible(
-                {"status": "confirmed", "confidence": "medium", "sources": 1}
-            )
+            _executive_eligible({"status": "confirmed", "confidence": "medium", "sources": 1})
         )
         self.assertTrue(
             _executive_eligible(
@@ -216,9 +215,7 @@ class TestRiskChainsReport(unittest.TestCase):
                 ]
                 data["urls"] = ["https://rep.max"]
                 save_surface("rep.max", data)
-                md = generate_report(
-                    [], [], surface_target="rep.max", snapshot_baseline=False
-                )
+                md = generate_report([], [], surface_target="rep.max", snapshot_baseline=False)
                 self.assertIn("Resumo Executivo", md)
                 self.assertIn("Metodologia", md)
                 self.assertIn("Limitações", md)

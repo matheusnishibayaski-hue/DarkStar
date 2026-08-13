@@ -62,6 +62,7 @@ def all_allowed_tool_ids() -> list[str]:
 
     return sorted(ALLOWED_TOOLS)
 
+
 PROFILE_LABELS = {
     "basic": "Básico",
     "intermediate": "Intermediário",

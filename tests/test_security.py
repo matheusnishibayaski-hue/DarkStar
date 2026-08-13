@@ -56,12 +56,11 @@ class TestRateLimit(unittest.TestCase):
         def mock_chat_stream(*_args, **_kwargs):
             yield 'event: done\ndata: {"message":"ok","tool_executions":[]}\n\n'
 
-        with patch_chat_api_token(""), patch(
-            "backend.middleware.RATE_LIMIT_REQUESTS", 2
-        ), patch(
-            "backend.middleware.RATE_LIMIT_WINDOW_SEC", 60
-        ), patch(
-            "backend.routes.chat.chat_stream", mock_chat_stream
+        with (
+            patch_chat_api_token(""),
+            patch("backend.middleware.RATE_LIMIT_REQUESTS", 2),
+            patch("backend.middleware.RATE_LIMIT_WINDOW_SEC", 60),
+            patch("backend.routes.chat.chat_stream", mock_chat_stream),
         ):
             rl._limiter = None
             client = TestClient(app)

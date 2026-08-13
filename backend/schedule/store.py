@@ -92,9 +92,7 @@ def save_job(data: dict[str, Any]) -> dict[str, Any]:
     # Espelho legado
     try:
         SCHEDULE_DIR.mkdir(parents=True, exist_ok=True)
-        _path(job_id).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        _path(job_id).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError:
         pass
     return data

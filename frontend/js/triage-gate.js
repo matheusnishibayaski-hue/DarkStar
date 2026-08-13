@@ -167,6 +167,16 @@ function renderOpinionBlock(t) {
     </section>`;
 }
 
+function reviewFpChance(review) {
+  if (review.likely_fp != null && review.likely_fp !== "") {
+    return Math.max(0, Math.min(100, Number(review.likely_fp) || 0));
+  }
+  const conf = Number(review.confidence) || 0;
+  if (review.verdict === "confirmed") return Math.max(0, Math.min(100, 100 - conf));
+  if (review.verdict === "false_positive") return Math.max(0, Math.min(100, conf));
+  return Math.max(0, Math.min(100, conf || 50));
+}
+
 function renderAiReviewHtml(review) {
   if (!review) {
     return `<p class="triage-ai-loading">Segunda leitura da IA…</p>`;
@@ -178,11 +188,15 @@ function renderAiReviewHtml(review) {
   }
   const reasons = itemsHtml(review.reasons);
   const summary = review.summary ? `<p>${escapeHtml(review.summary)}</p>` : "";
+  const adjusted = review.adjusted && review.adjust_reason
+    ? `<p class="triage-opinion-note">${escapeHtml(review.adjust_reason)}</p>`
+    : "";
   return `
     <p class="triage-opinion-verdict">${escapeHtml(verdictLabel(review.verdict))}</p>
-    <p class="triage-opinion-meta">Confiança da IA: <strong>${Number(review.confidence) || 0}%</strong></p>
+    <p class="triage-opinion-meta">Chance de alarme falso: <strong>${reviewFpChance(review)}%</strong> — a decisão final é sua.</p>
     ${summary}
     ${reasons ? `<ul>${reasons}</ul>` : ""}
+    ${adjusted}
     <p class="triage-opinion-note">Isto não marca o achado sozinho.</p>`;
 }
 

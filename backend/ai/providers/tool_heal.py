@@ -17,9 +17,7 @@ _SCHEMA_HINTS = {
     "run_kali_tool": (
         '{"command":"nmap -sV scanme.nmap.org","reason":"enumerar serviços no alvo autorizado"}'
     ),
-    "finish_mission": (
-        '{"summary":"Resumo final da missão em português.","objective_met":true}'
-    ),
+    "finish_mission": ('{"summary":"Resumo final da missão em português.","objective_met":true}'),
 }
 
 

@@ -3,18 +3,19 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import tempfile
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
-from tests.llm_test_utils import make_openrouter_provider
-
-from fastapi.testclient import TestClient
 
 from backend.ai.agent import ChatResponse, chat_stream
 from backend.ai.autopilot import AutonomousResponse, run_autonomous, run_autonomous_stream
 from backend.security.missions import get_mission_registry
+from fastapi.testclient import TestClient
+
+from tests.llm_test_utils import make_openrouter_provider
 
 
 class TestAgentGaps(unittest.TestCase):
@@ -54,20 +55,18 @@ class TestAgentGaps(unittest.TestCase):
             tool="nmap",
             exit_code=0,
         )
-        with patch(
-            "backend.executor.recon_db.extract_targets", return_value=[]
-        ), patch(
-            "backend.executor.recon_db.is_recon_target", return_value=False
+        with (
+            patch("backend.executor.recon_db.extract_targets", return_value=[]),
+            patch("backend.executor.recon_db.is_recon_target", return_value=False),
         ):
             ag._persist_recon(ok, [])
 
-        with patch(
-            "backend.executor.recon_db.extract_targets", return_value=["a.com"]
-        ), patch(
-            "backend.executor.recon_db.is_recon_target", return_value=True
-        ), patch.object(
-            ag, "extract_recon_from_output", return_value={"a": 1}
-        ), patch.object(ag, "merge_recon_update") as merge:
+        with (
+            patch("backend.executor.recon_db.extract_targets", return_value=["a.com"]),
+            patch("backend.executor.recon_db.is_recon_target", return_value=True),
+            patch.object(ag, "extract_recon_from_output", return_value={"a": 1}),
+            patch.object(ag, "merge_recon_update") as merge,
+        ):
             ag._persist_recon(ok, ["a.com"])
             merge.assert_not_called()
 
@@ -87,16 +86,13 @@ class TestAgentGaps(unittest.TestCase):
             tool="nmap",
             truncated_for_llm=False,
         )
-        with patch("backend.ai.agent.new_log_id", return_value="eid1"), patch(
-            "backend.ai.agent.get_stream_hub"
-        ) as hub, patch(
-            "backend.ai.agent.execute_in_kali", return_value=fake
-        ), patch(
-            "backend.ai.agent.summarize_output", return_value=("ok", False)
-        ), patch(
-            "backend.ai.agent.format_result_for_llm", return_value="fmt"
-        ), patch(
-            "backend.ai.agent._persist_recon"
+        with (
+            patch("backend.ai.agent.new_log_id", return_value="eid1"),
+            patch("backend.ai.agent.get_stream_hub") as hub,
+            patch("backend.ai.agent.execute_in_kali", return_value=fake),
+            patch("backend.ai.agent.summarize_output", return_value=("ok", False)),
+            patch("backend.ai.agent.format_result_for_llm", return_value="fmt"),
+            patch("backend.ai.agent._persist_recon"),
         ):
             hub.return_value.create = MagicMock()
             out = ag._record_execution(
@@ -119,10 +115,13 @@ class TestAgentGaps(unittest.TestCase):
 
         mid = "missioncov1"
         provider = make_openrouter_provider(api_key="sk")
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent._run_openrouter_body",
-            return_value=ChatResponse(message="ok"),
-        ) as body:
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch(
+                "backend.ai.agent._run_openrouter_body",
+                return_value=ChatResponse(message="ok"),
+            ) as body,
+        ):
             res = ag._run_openrouter([], "hi", mission_id=mid)
         self.assertEqual(res.message, "ok")
         body.assert_called_once()
@@ -153,17 +152,20 @@ class TestAgentGaps(unittest.TestCase):
         final = MagicMock(content="done", tool_calls=None)
         client = MagicMock()
         client.chat.completions.create.side_effect = [
-            MagicMock(choices=[MagicMock(message=MagicMock(content="", tool_calls=[unknown, bad]))]),
+            MagicMock(
+                choices=[MagicMock(message=MagicMock(content="", tool_calls=[unknown, bad]))]
+            ),
             MagicMock(choices=[MagicMock(message=final)]),
         ]
         provider = make_openrouter_provider(client, models=("m1", "m1"))
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent.resolve_tool_arguments",
-            return_value=(None, "Falha ao decodificar os argumentos fornecidos pela IA."),
-        ), patch(
-            "backend.ai.agent._record_execution", return_value="out"
-        ) as rec, patch(
-            "backend.ai.agent.should_attempt_healing", return_value=False
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch(
+                "backend.ai.agent.resolve_tool_arguments",
+                return_value=(None, "Falha ao decodificar os argumentos fornecidos pela IA."),
+            ),
+            patch("backend.ai.agent._record_execution", return_value="out") as rec,
+            patch("backend.ai.agent.should_attempt_healing", return_value=False),
         ):
             # seed one execution so healing index works
             from backend.ai.agent import ToolExecution
@@ -222,12 +224,11 @@ class TestAgentGaps(unittest.TestCase):
             return "out"
 
         provider = make_openrouter_provider(client, models=("m1", "m1"))
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent.MAX_TOOL_ITERATIONS", 2
-        ), patch(
-            "backend.ai.agent._record_execution", side_effect=_rec
-        ), patch(
-            "backend.ai.agent.should_attempt_healing", return_value=False
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch("backend.ai.agent.MAX_TOOL_ITERATIONS", 2),
+            patch("backend.ai.agent._record_execution", side_effect=_rec),
+            patch("backend.ai.agent.should_attempt_healing", return_value=False),
         ):
             result = ag._run_openrouter_body([], "hi", None, None, None, None, None)
         self.assertEqual(result.message, "final")
@@ -251,20 +252,17 @@ class TestAgentGaps(unittest.TestCase):
             return "out"
 
         provider = make_openrouter_provider(client, models=("m1", "m1"))
-        with patch("backend.ai.agent.get_llm_provider", return_value=provider), patch(
-            "backend.ai.agent.MAX_TOOL_ITERATIONS", 1
-        ), patch(
-            "backend.ai.agent._record_execution", side_effect=_rec
-        ), patch(
-            "backend.ai.agent.should_attempt_healing", return_value=False
+        with (
+            patch("backend.ai.agent.get_llm_provider", return_value=provider),
+            patch("backend.ai.agent.MAX_TOOL_ITERATIONS", 1),
+            patch("backend.ai.agent._record_execution", side_effect=_rec),
+            patch("backend.ai.agent.should_attempt_healing", return_value=False),
         ):
             result = ag._run_openrouter_body([], "hi", None, None, None, None, None)
         self.assertIn("Erro na finalização", result.message)
 
     def test_chat_stream_error_event(self):
-        with patch(
-            "backend.ai.agent.chat", side_effect=RuntimeError("stream-boom")
-        ):
+        with patch("backend.ai.agent.chat", side_effect=RuntimeError("stream-boom")):
             body = "".join(chat_stream([], "hi"))
         self.assertIn("event: error", body)
         self.assertIn("stream-boom", body)
@@ -331,15 +329,19 @@ class TestAutopilotGaps(unittest.TestCase):
         provider = MagicMock()
         provider.is_retryable_error.side_effect = lambda e: "429" in e or "rate" in e.lower()
         provider.format_error.side_effect = lambda e: e
-        with patch(
-            "backend.ai.autopilot._completion",
-            side_effect=[
-                RuntimeError("429 rate"),
-                LLMCompletion(message=LLMMessage(content="", tool_calls=[finish])),
-            ],
-        ), patch("backend.ai.autopilot.time.sleep"), patch(
-            "backend.ai.autopilot.resolve_tool_arguments",
-            return_value=(None, "args inválidos"),
+        with (
+            patch(
+                "backend.ai.autopilot._completion",
+                side_effect=[
+                    RuntimeError("429 rate"),
+                    LLMCompletion(message=LLMMessage(content="", tool_calls=[finish])),
+                ],
+            ),
+            patch("backend.ai.autopilot.time.sleep"),
+            patch(
+                "backend.ai.autopilot.resolve_tool_arguments",
+                return_value=(None, "args inválidos"),
+            ),
         ):
             text, finished, met, model = ap._run_autonomous_cycle(
                 provider, [{"role": "system", "content": "s"}], [], "m1", "m2", 2
@@ -352,23 +354,21 @@ class TestAutopilotGaps(unittest.TestCase):
         tool = ToolCall(id="k", name="run_kali_tool", arguments="not-json")
 
         def _record(command, reason, executions, **kwargs):
-            executions.append(
-                MagicMock(success=False, blocked=False, exit_code=1, command=command)
-            )
+            executions.append(MagicMock(success=False, blocked=False, exit_code=1, command=command))
             return "fail"
 
-        with patch(
-            "backend.ai.autopilot._completion",
-            return_value=LLMCompletion(message=LLMMessage(content="", tool_calls=[tool])),
-        ), patch(
-            "backend.ai.autopilot.resolve_tool_arguments",
-            return_value=({"command": "nmap", "reason": "x"}, ""),
-        ), patch(
-            "backend.ai.autopilot._record_execution", side_effect=_record
-        ), patch(
-            "backend.ai.autopilot.should_attempt_healing", return_value=True
-        ), patch(
-            "backend.ai.autopilot.healing_prompt", return_value="heal"
+        with (
+            patch(
+                "backend.ai.autopilot._completion",
+                return_value=LLMCompletion(message=LLMMessage(content="", tool_calls=[tool])),
+            ),
+            patch(
+                "backend.ai.autopilot.resolve_tool_arguments",
+                return_value=({"command": "nmap", "reason": "x"}, ""),
+            ),
+            patch("backend.ai.autopilot._record_execution", side_effect=_record),
+            patch("backend.ai.autopilot.should_attempt_healing", return_value=True),
+            patch("backend.ai.autopilot.healing_prompt", return_value="heal"),
         ):
             text, finished, met, _ = ap._run_autonomous_cycle(
                 MagicMock(), [{"role": "system", "content": "s"}], [], "m1", "m2", 1
@@ -383,17 +383,19 @@ class TestAutopilotGaps(unittest.TestCase):
 
         events = []
 
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="scanme.nmap.org"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value="CTX"
-        ), patch(
-            "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle",
-            return_value=("done", True, True, "m1"),
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="scanme.nmap.org"),
+            patch("backend.ai.autopilot.build_recon_context", return_value="CTX"),
+            patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2),
+            patch(
+                "backend.ai.autopilot._run_autonomous_cycle",
+                return_value=("done", True, True, "m1"),
+            ),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous(
                 "scanme.nmap.org",
@@ -405,36 +407,38 @@ class TestAutopilotGaps(unittest.TestCase):
         self.assertIn("mission_start", events)
         self.assertIn("CTX", "CTX")  # recon context applied in system
 
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle",
-            side_effect=RuntimeError("llm down"),
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch(
+                "backend.ai.autopilot._run_autonomous_cycle",
+                side_effect=RuntimeError("llm down"),
+            ),
         ):
             res = run_autonomous("t.com", "obj")
         self.assertEqual(res.stopped_reason, "error")
 
         # max tools path
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.MAX_AUTONOMOUS_TOOLS", 0
-        ), patch(
-            "backend.ai.autopilot.max_tool_budget", return_value=0
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot.MAX_AUTONOMOUS_TOOLS", 0),
+            patch("backend.ai.autopilot.max_tool_budget", return_value=0),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous("t.com", "obj")
         self.assertEqual(res.stopped_reason, "max_tools")
 
     def test_stream_error(self):
-        with patch(
-            "backend.ai.autopilot.run_autonomous", side_effect=RuntimeError("ap-fail")
-        ):
+        with patch("backend.ai.autopilot.run_autonomous", side_effect=RuntimeError("ap-fail")):
             body = "".join(run_autonomous_stream("t.com", "obj"))
         self.assertIn("event: error", body)
 
@@ -445,34 +449,28 @@ class TestSystemAndInfraGaps(unittest.TestCase):
 
         client = TestClient(app)
         with patch("backend.routes.system.subprocess.run") as run:
-            run.return_value = MagicMock(
-                returncode=1, stdout="", stderr="docker down"
-            )
+            run.return_value = MagicMock(returncode=1, stdout="", stderr="docker down")
             res = client.get("/api/health")
         self.assertEqual(res.status_code, 200)
         self.assertFalse(res.json()["docker"])
 
-        with patch(
-            "backend.routes.system.subprocess.run", side_effect=FileNotFoundError
-        ):
+        with patch("backend.routes.system.subprocess.run", side_effect=FileNotFoundError):
             res = client.get("/api/health")
         self.assertIn("Docker", res.json()["kali_error"])
 
-        with patch(
-            "backend.routes.system.subprocess.run", side_effect=RuntimeError("boom")
-        ):
+        with patch("backend.routes.system.subprocess.run", side_effect=RuntimeError("boom")):
             res = client.get("/api/health")
         self.assertIn("boom", res.json()["kali_error"])
 
-        with patch("backend.routes.system.subprocess.run") as run, patch(
-            "backend.routes.system.sys.platform", "win32"
-        ), patch(
-            "backend.executor.wifi_scan.windows_wifi_health",
-            side_effect=RuntimeError("wifi-x"),
+        with (
+            patch("backend.routes.system.subprocess.run") as run,
+            patch("backend.routes.system.sys.platform", "win32"),
+            patch(
+                "backend.executor.wifi_scan.windows_wifi_health",
+                side_effect=RuntimeError("wifi-x"),
+            ),
         ):
-            run.return_value = MagicMock(
-                returncode=0, stdout="kali-tools\n", stderr=""
-            )
+            run.return_value = MagicMock(returncode=0, stdout="kali-tools\n", stderr="")
             res = client.get("/api/health")
         self.assertEqual(res.json().get("wifi_message"), "wifi-x")
 
@@ -491,9 +489,7 @@ class TestSystemAndInfraGaps(unittest.TestCase):
         from backend.main import app
 
         client = TestClient(app)
-        with patch(
-            "backend.routes.system.read_execution_log", return_value="logdata"
-        ):
+        with patch("backend.routes.system.read_execution_log", return_value="logdata"):
             res = client.get("/api/logs/abc123")
         self.assertEqual(res.status_code, 200)
         self.assertEqual(res.text, "logdata")
@@ -501,13 +497,14 @@ class TestSystemAndInfraGaps(unittest.TestCase):
     def test_kali_scope_block(self):
         from backend.executor import kali as k
 
-        with patch.object(k, "validate_command", return_value=(True, "")), patch(
-            "backend.executor.kali.validate_command_scope",
-            return_value=(False, "fora do escopo"),
+        with (
+            patch.object(k, "validate_command", return_value=(True, "")),
+            patch(
+                "backend.executor.kali.validate_command_scope",
+                return_value=(False, "fora do escopo"),
+            ),
         ):
-            events = list(
-                k.execute_kali_command_stream(["nmap", "evil.example"], "r")
-            )
+            events = list(k.execute_kali_command_stream(["nmap", "evil.example"], "r"))
         types = [e.get("type") for e in events]
         self.assertIn("done", types)
         done = next(e for e in events if e["type"] == "done")
@@ -518,9 +515,7 @@ class TestSystemAndInfraGaps(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(rd, "RECON_DIR", root), patch.object(
-                rd, "RECON_TTL_DAYS", 1
-            ):
+            with patch.object(rd, "RECON_DIR", root), patch.object(rd, "RECON_TTL_DAYS", 1):
                 path = root / "old.com.json"
                 path.write_text(
                     json.dumps(
@@ -563,7 +558,9 @@ class TestSystemAndInfraGaps(unittest.TestCase):
                 self.assertIsNone(rd._parse_updated_at("not-a-date"))
 
                 with patch.object(rd, "RECON_TTL_DAYS", 0):
-                    self.assertFalse(rd._is_recon_expired({"updated_at": "2020-01-01T00:00:00+00:00"}))
+                    self.assertFalse(
+                        rd._is_recon_expired({"updated_at": "2020-01-01T00:00:00+00:00"})
+                    )
 
                 ctx = rd.build_recon_context(["missing.example"])
                 self.assertEqual(ctx, "")
@@ -571,10 +568,10 @@ class TestSystemAndInfraGaps(unittest.TestCase):
                 self.assertIn("live.com", ctx)
 
     def test_observability_fallbacks(self):
-        from backend import observability as obs
-
         # Force psutil + resource fail → ctypes or empty
         import builtins
+
+        from backend import observability as obs
 
         real_import = builtins.__import__
 
@@ -600,10 +597,9 @@ class TestSystemAndInfraGaps(unittest.TestCase):
     def test_report_empty_recon_line(self):
         from backend.ai.report import generate_report
 
-        with patch(
-            "backend.ai.report.list_recon_summaries", return_value=[]
-        ), patch(
-            "backend.ai.report.list_output_files", return_value=[]
+        with (
+            patch("backend.ai.report.list_recon_summaries", return_value=[]),
+            patch("backend.ai.report.list_output_files", return_value=[]),
         ):
             md = generate_report([], [])
         self.assertIn("Nenhum dado de recon", md)
@@ -660,6 +656,7 @@ class TestRateLimitFix(unittest.TestCase):
     def test_chat_stream_rate_limited_fresh_limiter(self):
         import backend.security.rate_limit as rl
         from backend.main import app
+
         from tests.auth_patch import patch_chat_api_token
 
         rl._limiter = None
@@ -667,12 +664,11 @@ class TestRateLimitFix(unittest.TestCase):
         def mock_chat_stream(*_args, **_kwargs):
             yield 'event: done\ndata: {"message":"ok","tool_executions":[]}\n\n'
 
-        with patch_chat_api_token(""), patch(
-            "backend.middleware.RATE_LIMIT_REQUESTS", 2
-        ), patch(
-            "backend.middleware.RATE_LIMIT_WINDOW_SEC", 60
-        ), patch(
-            "backend.routes.chat.chat_stream", mock_chat_stream
+        with (
+            patch_chat_api_token(""),
+            patch("backend.middleware.RATE_LIMIT_REQUESTS", 2),
+            patch("backend.middleware.RATE_LIMIT_WINDOW_SEC", 60),
+            patch("backend.routes.chat.chat_stream", mock_chat_stream),
         ):
             rl._limiter = None
             client = TestClient(app)
@@ -717,9 +713,7 @@ class TestFinalCoveragePush(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 ap._run_autonomous_cycle(provider, [], [], "m1", "m1", 2)
 
-        text, finished, met, _ = ap._run_autonomous_cycle(
-            provider, [], [], "m1", "m2", 0
-        )
+        text, finished, met, _ = ap._run_autonomous_cycle(provider, [], [], "m1", "m2", 0)
         self.assertEqual(text, "")
         self.assertFalse(finished)
 
@@ -746,16 +740,16 @@ class TestFinalCoveragePush(unittest.TestCase):
             return "early", True, False, "m1"
 
         events = []
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t.com"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t.com"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2),
+            patch("backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous(
                 "t.com",
@@ -779,16 +773,16 @@ class TestFinalCoveragePush(unittest.TestCase):
             )
             return "partial text", False, False, "m1"
 
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t.com"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle2
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t.com"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1),
+            patch("backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle2),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous("t.com", "obj")
         self.assertIn("partial text", res.message)
@@ -801,14 +795,15 @@ class TestFinalCoveragePush(unittest.TestCase):
             get_mission_registry().cancel(mid)
             return "bye", True, True, "m1"
 
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t.com"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle3
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t.com"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle3),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous("t.com", "obj", mission_id=mid)
         self.assertEqual(res.stopped_reason, "cancelled")
@@ -827,23 +822,21 @@ class TestFinalCoveragePush(unittest.TestCase):
             )
             return "", False, False, "m1"
 
-        with patch("backend.ai.autopilot.get_llm_provider", return_value=make_openrouter_provider(MagicMock())), patch(
-            "backend.ai.autopilot.normalize_target", return_value="t.com"
-        ), patch(
-            "backend.ai.autopilot.build_recon_context", return_value=""
-        ), patch(
-            "backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1
-        ), patch(
-            "backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle4
-        ), patch(
-            "backend.ai.autopilot.generate_report", return_value="# r"
+        with (
+            patch(
+                "backend.ai.autopilot.get_llm_provider",
+                return_value=make_openrouter_provider(MagicMock()),
+            ),
+            patch("backend.ai.autopilot.normalize_target", return_value="t.com"),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 1),
+            patch("backend.ai.autopilot._run_autonomous_cycle", side_effect=cycle4),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
             res = run_autonomous("t.com", "obj")
         self.assertIn("Missão encerrada", res.message)
 
-        ex = ToolExecution(
-            command="c", reason="r", stdout="", stderr="", exit_code=0, success=True
-        )
+        ex = ToolExecution(command="c", reason="r", stdout="", stderr="", exit_code=0, success=True)
         self.assertEqual(ap._execution_dict(ex)["command"], "c")
 
         def fake_run(*_a, emit=None, **_k):
@@ -860,8 +853,9 @@ class TestFinalCoveragePush(unittest.TestCase):
         from backend.main import app
 
         client = TestClient(app)
-        with patch("backend.routes.system.subprocess.run") as run, patch(
-            "backend.routes.system.sys.platform", "linux"
+        with (
+            patch("backend.routes.system.subprocess.run") as run,
+            patch("backend.routes.system.sys.platform", "linux"),
         ):
             run.side_effect = [
                 MagicMock(returncode=0, stdout="other\n", stderr=""),
@@ -876,8 +870,9 @@ class TestFinalCoveragePush(unittest.TestCase):
             self.assertEqual(res.status_code, 200)
             self.assertIn("não está rodando", res.json()["kali_error"])
 
-        with patch("backend.routes.system.subprocess.run") as run, patch(
-            "backend.routes.system.sys.platform", "linux"
+        with (
+            patch("backend.routes.system.subprocess.run") as run,
+            patch("backend.routes.system.sys.platform", "linux"),
         ):
             run.side_effect = [
                 MagicMock(returncode=0, stdout="kali-tools\n", stderr=""),
@@ -890,8 +885,9 @@ class TestFinalCoveragePush(unittest.TestCase):
             res = client.get("/api/health")
             self.assertTrue(res.json()["wifi_ready"])
 
-        with patch("backend.routes.system.subprocess.run") as run, patch(
-            "backend.routes.system.sys.platform", "linux"
+        with (
+            patch("backend.routes.system.subprocess.run") as run,
+            patch("backend.routes.system.sys.platform", "linux"),
         ):
             run.side_effect = [
                 MagicMock(returncode=0, stdout="kali-tools\n", stderr=""),
@@ -900,8 +896,9 @@ class TestFinalCoveragePush(unittest.TestCase):
             res = client.get("/api/health")
             self.assertIn("Nenhuma interface", res.json()["wifi_message"])
 
-        with patch("backend.routes.system.subprocess.run") as run, patch(
-            "backend.routes.system.sys.platform", "linux"
+        with (
+            patch("backend.routes.system.subprocess.run") as run,
+            patch("backend.routes.system.sys.platform", "linux"),
         ):
             run.side_effect = [
                 MagicMock(returncode=0, stdout="kali-tools\n", stderr=""),
@@ -914,28 +911,23 @@ class TestFinalCoveragePush(unittest.TestCase):
         from backend.main import app
 
         client = TestClient(app)
-        with patch(
-            "backend.routes.files.resolve_output_file", return_value=None
-        ):
+        with patch("backend.routes.files.resolve_output_file", return_value=None):
             self.assertEqual(client.get("/api/files/x.txt").status_code, 400)
 
         p = MagicMock()
         p.is_file.return_value = True
         p.stat.return_value.st_size = 10**12
         p.name = "big.txt"
-        with patch(
-            "backend.routes.files.resolve_output_file", return_value=p
-        ), patch(
-            "backend.routes.files.is_allowed_extension", return_value=True
-        ), patch(
-            "backend.routes.files.MAX_FILE_DOWNLOAD_BYTES", 100
+        with (
+            patch("backend.routes.files.resolve_output_file", return_value=p),
+            patch("backend.routes.files.is_allowed_extension", return_value=True),
+            patch("backend.routes.files.MAX_FILE_DOWNLOAD_BYTES", 100),
         ):
             self.assertEqual(client.get("/api/files/big.txt").status_code, 413)
 
-        with patch(
-            "backend.routes.files.resolve_output_file", return_value=p
-        ), patch(
-            "backend.routes.files.is_allowed_extension", return_value=False
+        with (
+            patch("backend.routes.files.resolve_output_file", return_value=p),
+            patch("backend.routes.files.is_allowed_extension", return_value=False),
         ):
             self.assertEqual(client.get("/api/files/big.txt").status_code, 403)
 
@@ -955,39 +947,36 @@ class TestFinalCoveragePush(unittest.TestCase):
         proc.stderr = MagicMock()
         proc.kill = MagicMock()
 
-        with patch("backend.executor.kali.subprocess.Popen", return_value=proc), patch(
-            "backend.executor.kali.threading.Thread"
-        ), patch(
-            "backend.executor.kali.time.time", side_effect=[0, 0.5, 100]
-        ), patch(
-            "backend.executor.kali.Queue"
-        ) as Q:
+        with (
+            patch("backend.executor.kali.subprocess.Popen", return_value=proc),
+            patch("backend.executor.kali.threading.Thread"),
+            patch("backend.executor.kali.time.time", side_effect=[0, 0.5, 100]),
+            patch("backend.executor.kali.Queue") as Q,
+        ):
             q = MagicMock()
             q.get.return_value = ("stderr", "err\n")
             Q.return_value = q
-            with self.assertRaises(Exception):
+            with self.assertRaises(subprocess.TimeoutExpired):
                 k._run_docker_streaming(
                     ["nmap", "-V"], timeout=1, execution_id=None, mission_id=None
                 )
 
         # wifi rfkill path
-        with patch.object(k, "validate_command", return_value=(True, "")), patch(
-            "backend.executor.kali.validate_command_scope", return_value=(True, "")
-        ), patch(
-            "backend.security.privileges.privilege_blocks_tool", return_value=(False, "")
-        ), patch.object(k, "_is_wifi_tool", return_value=True), patch(
-            "backend.executor.kali.subprocess.run", return_value=MagicMock()
-        ) as run, patch.object(
-            k,
-            "_run_docker_streaming",
-            return_value=(0, "out", ""),
-        ), patch(
-            "backend.executor.kali.save_execution_log", return_value="lid"
-        ), patch(
-            "backend.executor.kali._audit_result"
-        ), patch(
-            "backend.executor.kali.get_stream_hub"
-        ) as hub:
+        with (
+            patch.object(k, "validate_command", return_value=(True, "")),
+            patch("backend.executor.kali.validate_command_scope", return_value=(True, "")),
+            patch("backend.security.privileges.privilege_blocks_tool", return_value=(False, "")),
+            patch.object(k, "_is_wifi_tool", return_value=True),
+            patch("backend.executor.kali.subprocess.run", return_value=MagicMock()) as run,
+            patch.object(
+                k,
+                "_run_docker_streaming",
+                return_value=(0, "out", ""),
+            ),
+            patch("backend.executor.kali.save_execution_log", return_value="lid"),
+            patch("backend.executor.kali._audit_result"),
+            patch("backend.executor.kali.get_stream_hub") as hub,
+        ):
             hub.return_value.get.return_value = None
             hub.return_value.finish = MagicMock()
             list(k.execute_kali_command_stream(["airodump-ng", "wlan0"], "r"))
@@ -1025,23 +1014,24 @@ class TestFinalCoveragePush(unittest.TestCase):
     def test_wifi_stderr_branches(self):
         from backend.executor import wifi_scan as ws
 
-        with patch.object(
-            ws,
-            "_run_netsh",
-            return_value=MagicMock(returncode=0, stdout="ok", stderr="warn"),
-        ), patch(
-            "backend.executor.wifi_scan.save_execution_log", return_value="id"
+        with (
+            patch.object(
+                ws,
+                "_run_netsh",
+                return_value=MagicMock(returncode=0, stdout="ok", stderr="warn"),
+            ),
+            patch("backend.executor.wifi_scan.save_execution_log", return_value="id"),
         ):
             r = ws.execute_host_wifi("wlan-interfaces", "r")
         self.assertIn("STDERR", r.stdout + r.stderr)
 
-        with patch(
-            "backend.executor.wifi_scan.subprocess.run",
-            return_value=MagicMock(returncode=0, stdout="ok", stderr="e"),
-        ), patch(
-            "backend.executor.wifi_scan.save_execution_log", return_value="id"
-        ), patch(
-            "backend.executor.wifi_scan.sys.platform", "linux"
+        with (
+            patch(
+                "backend.executor.wifi_scan.subprocess.run",
+                return_value=MagicMock(returncode=0, stdout="ok", stderr="e"),
+            ),
+            patch("backend.executor.wifi_scan.save_execution_log", return_value="id"),
+            patch("backend.executor.wifi_scan.sys.platform", "linux"),
         ):
             # call linux path if exists
             if hasattr(ws, "execute_linux_wifi"):
@@ -1075,9 +1065,7 @@ class TestFinalCoveragePush(unittest.TestCase):
                 return fake_resource
             return real_import(name, *a, **k)
 
-        with patch("builtins.__import__", side_effect=importer), patch(
-            "sys.platform", "linux"
-        ):
+        with patch("builtins.__import__", side_effect=importer), patch("sys.platform", "linux"):
             m = obs.get_metrics()
         self.assertIn("memory_mb", m)
 
@@ -1156,9 +1144,7 @@ class TestFinalCoveragePush(unittest.TestCase):
 
             fake_root = MagicMock()
             fake_root.is_dir.return_value = False
-            with patch.object(fs, "ensure_outputs_dir"), patch.object(
-                fs, "OUTPUTS_DIR"
-            ) as od:
+            with patch.object(fs, "ensure_outputs_dir"), patch.object(fs, "OUTPUTS_DIR") as od:
                 od.resolve.return_value = fake_root
                 self.assertEqual(fs.list_output_files(), [])
 
@@ -1171,7 +1157,7 @@ class TestFinalCoveragePush(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             f = root / "events-2099-01-01.jsonl"
-            f.write_text("\n{notjson}\n{\"ts\":\"2099\",\"type\":\"x\"}\n", encoding="utf-8")
+            f.write_text('\n{notjson}\n{"ts":"2099","type":"x"}\n', encoding="utf-8")
             with patch.object(au, "AUDIT_DIR", root):
                 events = au.list_events(limit=10)
             self.assertTrue(any(e.get("type") == "x" for e in events))
@@ -1191,23 +1177,24 @@ class TestLastPercent(unittest.TestCase):
             outside = MagicMock()
             outside.is_relative_to.return_value = False
             with patch.object(fs, "OUTPUTS_DIR", root):
-                with patch.object(
-                    Path, "resolve", side_effect=[root_resolved, outside]
-                ):
+                with patch.object(Path, "resolve", side_effect=[root_resolved, outside]):
                     self.assertIsNone(fs.resolve_output_file("ok.txt"))
 
             # AttributeError fallback on is_relative_to
             fake_path = MagicMock()
             fake_path.is_relative_to.side_effect = AttributeError
             fake_path.parents = []
-            with patch.object(fs, "OUTPUTS_DIR", root), patch.object(
-                Path, "resolve", side_effect=[root_resolved, fake_path]
+            with (
+                patch.object(fs, "OUTPUTS_DIR", root),
+                patch.object(Path, "resolve", side_effect=[root_resolved, fake_path]),
             ):
                 self.assertIsNone(fs.resolve_output_file("ok.txt"))
 
-            with patch.object(fs, "OUTPUTS_DIR", root), patch.object(
-                fs, "ensure_outputs_dir"
-            ), patch.object(fs, "is_allowed_extension", return_value=True):
+            with (
+                patch.object(fs, "OUTPUTS_DIR", root),
+                patch.object(fs, "ensure_outputs_dir"),
+                patch.object(fs, "is_allowed_extension", return_value=True),
+            ):
                 listed = fs.list_output_files()
             self.assertTrue(listed)
 
@@ -1215,9 +1202,7 @@ class TestLastPercent(unittest.TestCase):
         from backend.executor import recon_db as rd
 
         with patch.object(rd, "RECON_TTL_DAYS", 7):
-            self.assertFalse(
-                rd._is_recon_expired({"updated_at": "not-iso"})
-            )
+            self.assertFalse(rd._is_recon_expired({"updated_at": "not-iso"}))
         with tempfile.TemporaryDirectory() as tmp:
             missing = Path(tmp) / "nope"
             with patch.object(rd, "RECON_DIR", missing):
@@ -1241,12 +1226,14 @@ class TestLastPercent(unittest.TestCase):
         boom_resource.getrusage = boom_getrusage  # type: ignore[attr-defined]
         boom_resource.RUSAGE_SELF = 0  # type: ignore[attr-defined]
 
-        with patch.dict(
-            sys.modules, {"psutil": boom_psutil, "resource": boom_resource}
-        ), patch("sys.platform", "win32"), patch.object(
-            real_ctypes.windll.psapi,
-            "GetProcessMemoryInfo",
-            return_value=1,
+        with (
+            patch.dict(sys.modules, {"psutil": boom_psutil, "resource": boom_resource}),
+            patch("sys.platform", "win32"),
+            patch.object(
+                real_ctypes.windll.psapi,
+                "GetProcessMemoryInfo",
+                return_value=1,
+            ),
         ):
             m = obs.get_metrics()
         self.assertIn("memory_mb", m)
@@ -1298,24 +1285,27 @@ class TestLastPercent(unittest.TestCase):
             success=False,
             tool="nmap",
         )
-        with patch.object(
-            pl,
-            "load_playbook",
-            return_value={
-                "id": "p",
-                "steps": [
-                    {"tool": "nmap", "args": ["{target}"]},
-                    {"tool": "nmap", "args": ["{target}"]},
-                ],
-            },
-        ), patch(
-            "backend.playbooks.loader.execute_kali_command", return_value=step_fail
-        ), patch(
-            "backend.playbooks.loader.validate_command_scope",
-            return_value=(True, ""),
-        ), patch(
-            "backend.playbooks.loader.validate_autonomous_target",
-            return_value=(True, ""),
+        with (
+            patch.object(
+                pl,
+                "load_playbook",
+                return_value={
+                    "id": "p",
+                    "steps": [
+                        {"tool": "nmap", "args": ["{target}"]},
+                        {"tool": "nmap", "args": ["{target}"]},
+                    ],
+                },
+            ),
+            patch("backend.playbooks.loader.execute_kali_command", return_value=step_fail),
+            patch(
+                "backend.playbooks.loader.validate_command_scope",
+                return_value=(True, ""),
+            ),
+            patch(
+                "backend.playbooks.loader.validate_autonomous_target",
+                return_value=(True, ""),
+            ),
         ):
             out = pl.run_playbook("p", "scanme.nmap.org")
         self.assertEqual(out["steps_run"], 1)
@@ -1323,5 +1313,3 @@ class TestLastPercent(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
-

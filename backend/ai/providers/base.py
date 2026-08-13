@@ -37,8 +37,7 @@ class BaseLLMProvider(ABC):
     name: str = "base"
 
     @abstractmethod
-    def is_configured(self) -> bool:
-        ...
+    def is_configured(self) -> bool: ...
 
     @abstractmethod
     def configuration_error(self) -> str:
@@ -47,8 +46,7 @@ class BaseLLMProvider(ABC):
     @abstractmethod
     def resolve_models(
         self, model: str | None = None, fallback: str | None = None
-    ) -> tuple[str, str]:
-        ...
+    ) -> tuple[str, str]: ...
 
     @abstractmethod
     def complete(
@@ -58,12 +56,10 @@ class BaseLLMProvider(ABC):
         messages: list[dict],
         tools: list[dict] | None = None,
         tool_choice: str | dict | None = "auto",
-    ) -> LLMCompletion:
-        ...
+    ) -> LLMCompletion: ...
 
     @abstractmethod
-    def format_error(self, error: str) -> str:
-        ...
+    def format_error(self, error: str) -> str: ...
 
     def is_retryable_error(self, error: str) -> bool:
         lowered = error.lower()

@@ -40,12 +40,8 @@ def _exec_result(
 
 class TestClassifyAndCommands(unittest.TestCase):
     def test_classify(self):
-        self.assertEqual(
-            classify_finding_type({"title": "CVE-2024-1234 foo"}), "cve"
-        )
-        self.assertEqual(
-            classify_finding_type({"title": "Missing HSTS header"}), "header"
-        )
+        self.assertEqual(classify_finding_type({"title": "CVE-2024-1234 foo"}), "cve")
+        self.assertEqual(classify_finding_type({"title": "Missing HSTS header"}), "header")
         self.assertEqual(
             classify_finding_type({"title": "80/tcp open http", "tool": "nmap"}),
             "port_info",
@@ -75,9 +71,7 @@ class TestScoreVerification(unittest.TestCase):
         finding = {"title": "Missing HSTS header", "severity": "medium"}
         status, conf, _ = score_verification(
             finding,
-            _exec_result(
-                "HTTP/1.1 200 OK\nStrict-Transport-Security: max-age=31536000\n\n"
-            ),
+            _exec_result("HTTP/1.1 200 OK\nStrict-Transport-Security: max-age=31536000\n\n"),
         )
         self.assertEqual(status, "false_positive")
 
@@ -137,32 +131,22 @@ class TestPipeline(unittest.TestCase):
                             if "curl" in command:
                                 return _exec_result("HTTP/1.1 200\nServer: x\n")
                     if "nuclei" in command or "exposed" in reason.lower():
-                        return _exec_result(
-                            "[high] exposed panel\nvulnerable confirmed\n"
-                        )
+                        return _exec_result("[high] exposed panel\nvulnerable confirmed\n")
                     return _exec_result("HTTP/1.1 200\nServer: x\n")
 
                 # Simpler deterministic fake:
                 def fake_exec2(command: str, reason: str) -> ExecutionResult:
                     calls.append(command)
-                    if "Missing HSTS" in reason or (
-                        "curl" in command and "hsts" in reason.lower()
-                    ):
+                    if "Missing HSTS" in reason or ("curl" in command and "hsts" in reason.lower()):
                         return _exec_result("HTTP/1.1 200 OK\nContent-Type: text/html\n")
                     if "exposed" in reason.lower():
-                        return _exec_result(
-                            "[high] exposed panel\nvulnerable\n"
-                        )
+                        return _exec_result("[high] exposed panel\nvulnerable\n")
                     # default by command type
                     if command.startswith("curl"):
                         return _exec_result("HTTP/1.1 200 OK\nContent-Type: text/html\n")
-                    return _exec_result(
-                        "[high] exposed panel\nvulnerable\n", success=True
-                    )
+                    return _exec_result("[high] exposed panel\nvulnerable\n", success=True)
 
-                result = run_verification_pipeline(
-                    "lab.test", execute=fake_exec2, max_findings=10
-                )
+                result = run_verification_pipeline("lab.test", execute=fake_exec2, max_findings=10)
                 self.assertGreaterEqual(result.verify_commands_run, 1)
 
                 final = surface_mod.load_surface("lab.test")
@@ -170,8 +154,7 @@ class TestPipeline(unittest.TestCase):
                 # Nenhum candidate/inconclusive residual
                 self.assertTrue(
                     all(
-                        s in {"confirmed", "false_positive", "discarded"}
-                        for s in statuses.values()
+                        s in {"confirmed", "false_positive", "discarded"} for s in statuses.values()
                     )
                 )
                 self.assertEqual(statuses["f1"], "confirmed")  # missing HSTS
@@ -215,9 +198,7 @@ class TestReportSections(unittest.TestCase):
                     },
                 ]
                 save_surface("rep.test", data)
-                md = generate_report(
-                    [], [], surface_target="rep.test", snapshot_baseline=False
-                )
+                md = generate_report([], [], surface_target="rep.test", snapshot_baseline=False)
                 self.assertIn("Confirmados", md)
                 self.assertIn("Falsos positivos", md)
                 self.assertIn("Descartados", md)

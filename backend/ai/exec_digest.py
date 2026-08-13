@@ -140,8 +140,7 @@ def _digest_httpx(clean: str, ok: bool) -> tuple[str, list[str], str]:
     fail = ""
     if _NO_INPUT.search(clean):
         fail = (
-            "O httpx esperava um arquivo com `-l` (lista de URLs), "
-            "não nomes separados por vírgula."
+            "O httpx esperava um arquivo com `-l` (lista de URLs), não nomes separados por vírgula."
         )
         return "Não rodou: faltou arquivo de entrada.", [], fail
     urls = _HTTP_STATUS.findall(clean)
@@ -177,7 +176,9 @@ def _digest_gobuster(clean: str, ok: bool) -> tuple[str, list[str], str]:
     if _WORDLIST.search(clean) or "no such file" in clean.lower():
         fail = "A wordlist apontada não existe neste Kali (caminho seclists ausente)."
         return "Não rodou: wordlist não encontrada.", [], fail
-    hits = [ln.strip() for ln in clean.splitlines() if "Status:" in ln or ln.strip().startswith("/")]
+    hits = [
+        ln.strip() for ln in clean.splitlines() if "Status:" in ln or ln.strip().startswith("/")
+    ]
     if hits:
         return f"Encontrou {len(hits)} caminho(s).", hits[:6], ""
     if ok:

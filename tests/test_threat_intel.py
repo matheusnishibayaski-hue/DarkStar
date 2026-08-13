@@ -134,9 +134,7 @@ class TestEnrichFinding(unittest.TestCase):
         _reset_caches()
 
     def test_enrich_elevates_severity_when_kev(self):
-        kev_payload = {
-            "vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]
-        }
+        kev_payload = {"vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]}
         epss_payload = {"data": [{"epss": "0.9", "percentile": "0.99"}]}
 
         def _fake_get(url: str):
@@ -161,11 +159,11 @@ class TestEnrichFinding(unittest.TestCase):
         self.assertNotIn("cisa_kev_flag", finding)
 
     def test_enrich_does_not_downgrade_critical(self):
-        kev_payload = {
-            "vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]
-        }
+        kev_payload = {"vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]}
         with mock.patch.object(
-            ti, "_http_get_json", side_effect=lambda u: kev_payload if "cisa.gov" in u else {"data": []}
+            ti,
+            "_http_get_json",
+            side_effect=lambda u: kev_payload if "cisa.gov" in u else {"data": []},
         ):
             finding = {"cve": "CVE-2021-44228", "severity": "critical"}
             ti.enrich_finding_with_threat_intel(finding)
@@ -184,13 +182,15 @@ class TestEnrichSurface(unittest.TestCase):
                 {"id": "2", "cve": "", "severity": "info"},
             ],
         }
-        kev_payload = {
-            "vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]
-        }
-        with mock.patch(
-            "backend.executor.surface.load_surface", return_value=surface_data
-        ), mock.patch("backend.executor.surface.save_surface") as save_mock, mock.patch.object(
-            ti, "_http_get_json", side_effect=lambda u: kev_payload if "cisa.gov" in u else {"data": []}
+        kev_payload = {"vulnerabilities": [{"cveID": "CVE-2021-44228", "dateAdded": "2021-12-10"}]}
+        with (
+            mock.patch("backend.executor.surface.load_surface", return_value=surface_data),
+            mock.patch("backend.executor.surface.save_surface") as save_mock,
+            mock.patch.object(
+                ti,
+                "_http_get_json",
+                side_effect=lambda u: kev_payload if "cisa.gov" in u else {"data": []},
+            ),
         ):
             processed = ti.enrich_surface_with_threat_intel("example.com")
         self.assertEqual(processed, 1)
@@ -212,9 +212,7 @@ class TestRiskScoreKevBoost(unittest.TestCase):
 
     def test_high_epss_boosts_score_over_base(self):
         base = compute_risk_score([{"severity": "medium", "cvss_score": 5.0}])
-        boosted = compute_risk_score(
-            [{"severity": "medium", "cvss_score": 5.0, "epss_score": 0.9}]
-        )
+        boosted = compute_risk_score([{"severity": "medium", "cvss_score": 5.0, "epss_score": 0.9}])
         self.assertGreater(boosted["score"], base["score"])
 
 

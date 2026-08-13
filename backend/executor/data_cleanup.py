@@ -125,7 +125,9 @@ def delete_execution_log(log_id: str) -> dict[str, Any]:
     }
 
 
-def delete_logs_for_session(session_id: str, extra_log_ids: list[str] | None = None) -> dict[str, Any]:
+def delete_logs_for_session(
+    session_id: str, extra_log_ids: list[str] | None = None
+) -> dict[str, Any]:
     """Remove todos os logs vinculados a um chat (sessão do navegador)."""
     from backend.executor.logs import list_log_ids_for_session
 

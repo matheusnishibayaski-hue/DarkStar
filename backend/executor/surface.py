@@ -201,9 +201,7 @@ def get_or_create_surface(
     from backend.clients.store import normalize_client_id
 
     existing = load_surface(target)
-    cid = normalize_client_id(
-        client_id or (existing or {}).get("client_id") or "default"
-    )
+    cid = normalize_client_id(client_id or (existing or {}).get("client_id") or "default")
     if existing:
         if objective:
             existing["objective"] = objective
@@ -308,7 +306,7 @@ def _canonical_finding_key(
 
 
 def _finding_id_from_key(key: str) -> str:
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+    return hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _merge_finding(existing: dict[str, Any], incoming: dict[str, Any]) -> None:
@@ -377,10 +375,7 @@ def _upsert_finding(
         if finding.get("cve") and existing.get("cve") == finding["cve"]:
             _merge_finding(existing, finding)
             return
-        if (
-            finding.get("template_id")
-            and existing.get("template_id") == finding["template_id"]
-        ):
+        if finding.get("template_id") and existing.get("template_id") == finding["template_id"]:
             _merge_finding(existing, finding)
             return
     finding.setdefault("tools", [finding["tool"]] if finding.get("tool") else [])
@@ -413,12 +408,8 @@ def surface_summary(data: dict[str, Any]) -> dict[str, Any]:
         "findings_total": len(findings),
         "findings_confirmed": sum(1 for f in findings if f.get("status") == "confirmed"),
         "findings_candidates": sum(1 for f in findings if f.get("status") == "candidate"),
-        "findings_inconclusive": sum(
-            1 for f in findings if f.get("status") == "inconclusive"
-        ),
-        "findings_false_positive": sum(
-            1 for f in findings if f.get("status") == "false_positive"
-        ),
+        "findings_inconclusive": sum(1 for f in findings if f.get("status") == "inconclusive"),
+        "findings_false_positive": sum(1 for f in findings if f.get("status") == "false_positive"),
         "findings_discarded": sum(1 for f in findings if f.get("status") == "discarded"),
         "tools_run": list(data.get("tools_run") or []),
         "commands_run": data.get("commands_run", 0),
@@ -538,9 +529,7 @@ def update_surface_from_execution(
     # Achados candidatos (Nuclei tipado + severidade genérica)
     seen_lines: set[str] = set()
     for match in _NUCLEI_TPL_RE.finditer(output):
-        sev_m = re.search(
-            r"\[(critical|high|medium|low|info)\]", match.group(0), re.I
-        )
+        sev_m = re.search(r"\[(critical|high|medium|low|info)\]", match.group(0), re.I)
         sev = (sev_m.group(1) if sev_m else "unknown").lower()
         tid = match.group("tid").lower()
         title = match.group("title").strip()[:240]
@@ -634,9 +623,7 @@ def update_surface_from_execution(
         _unique_append(data["hypotheses"], hint)
 
     # Cap listas + limpa hosts lixo (css/js de HTML)
-    data["hosts"] = [
-        h for h in (data.get("hosts") or []) if is_recon_target(str(h))
-    ][:100]
+    data["hosts"] = [h for h in (data.get("hosts") or []) if is_recon_target(str(h))][:100]
     data["findings"] = (data.get("findings") or [])[:100]
     data["ports"] = (data.get("ports") or [])[:200]
     data["urls"] = (data.get("urls") or [])[:200]
@@ -772,7 +759,17 @@ def _extract_tool_specific_findings(
     if tool in {"gobuster", "dirb", "ffuf", "feroxbuster"} or any(
         x in cmd for x in ("gobuster", "dirb", "ffuf", "feroxbuster")
     ):
-        interesting = ("admin", "login", "backup", "config", "upload", "api", "debug", ".git", "phpmyadmin")
+        interesting = (
+            "admin",
+            "login",
+            "backup",
+            "config",
+            "upload",
+            "api",
+            "debug",
+            ".git",
+            "phpmyadmin",
+        )
         for match in _DIR_HIT_RE.finditer(output):
             path = match.group("path")
             code = match.group("code")

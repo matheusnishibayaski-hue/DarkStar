@@ -51,7 +51,9 @@ def build_suggestions(
             }
         )
 
-    candidates = [f for f in findings if str(f.get("status") or "") in {"", "candidate", "inconclusive"}]
+    candidates = [
+        f for f in findings if str(f.get("status") or "") in {"", "candidate", "inconclusive"}
+    ]
     if candidates:
         suggestions.append(
             {
@@ -99,7 +101,9 @@ def build_suggestions(
     # Dedup por suggestion text
     seen: set[str] = set()
     unique: list[dict[str, Any]] = []
-    for s in sorted(suggestions, key=lambda x: (int(x.get("priority") or 9), x.get("suggestion", ""))):
+    for s in sorted(
+        suggestions, key=lambda x: (int(x.get("priority") or 9), x.get("suggestion", ""))
+    ):
         text = str(s.get("suggestion") or "")
         if text in seen:
             continue

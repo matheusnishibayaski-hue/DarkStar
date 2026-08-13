@@ -15,8 +15,7 @@ DISCLAIMER_PT = (
     "(ISO 27001 / SOC 2 / LGPD / GDPR / PCI / HIPAA)."
 )
 DISCLAIMER_EN = (
-    "Indicative control mapping only — NOT an audit, certification, "
-    "or compliance opinion."
+    "Indicative control mapping only — NOT an audit, certification, or compliance opinion."
 )
 
 
@@ -62,9 +61,7 @@ def render_markdown(report: dict[str, Any]) -> str:
     ]
     for fw_id, block in (report.get("frameworks") or {}).items():
         lines.append(f"## {block.get('name', fw_id)}")
-        lines.append(
-            f"- Cobertura indicativa: **{block.get('indicative_coverage_0_100')}%**"
-        )
+        lines.append(f"- Cobertura indicativa: **{block.get('indicative_coverage_0_100')}%**")
         lines.append(f"- Status: `{block.get('status')}`")
         lines.append(f"- Gaps: {block.get('gaps')} / {block.get('controls_total')} controles")
         lines.append("")

@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
 _KIND_TO_KEY = {
     "xss": "xss",
     "sqli": "sqli",
@@ -324,7 +323,9 @@ def remediation_for(finding: dict[str, Any]) -> dict[str, Any]:
     steps = list(base.get("steps") or [])
     cve = str(finding.get("cve") or "")
     if not cve:
-        m = re.search(r"CVE-\d{4}-\d+", str(finding.get("title") or finding.get("evidence") or ""), re.I)
+        m = re.search(
+            r"CVE-\d{4}-\d+", str(finding.get("title") or finding.get("evidence") or ""), re.I
+        )
         if m:
             cve = m.group(0).upper()
     action = str(base.get("action") or "")

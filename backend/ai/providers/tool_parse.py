@@ -58,7 +58,9 @@ def parse_tool_arguments(raw: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def _dict_to_tool_call(data: dict[str, Any], default_name: str = "run_kali_tool") -> ToolCall | None:
+def _dict_to_tool_call(
+    data: dict[str, Any], default_name: str = "run_kali_tool"
+) -> ToolCall | None:
     fn = data.get("function") if isinstance(data.get("function"), dict) else None
     name = str(
         data.get("name") or data.get("tool") or (fn.get("name") if fn else None) or ""
