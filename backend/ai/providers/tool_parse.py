@@ -94,8 +94,7 @@ def _dict_to_tool_call(
     else:
         return None
 
-    if not name:
-        name = default_name
+    name = name or default_name
 
     if isinstance(args, str):
         args_str = args

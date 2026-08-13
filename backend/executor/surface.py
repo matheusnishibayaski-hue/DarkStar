@@ -533,7 +533,8 @@ def update_surface_from_execution(
         sev = (sev_m.group(1) if sev_m else "unknown").lower()
         tid = match.group("tid").lower()
         title = match.group("title").strip()[:240]
-        if not title or match.group(0) in seen_lines:
+        already = match.group(0) in seen_lines
+        if title == "" or already:
             continue
         seen_lines.add(match.group(0))
         cve = _extract_cve(title) or (_extract_cve(tid) if tid.startswith("cve-") else "")
@@ -566,7 +567,7 @@ def update_surface_from_execution(
         seen_lines.add(line)
         sev = match.group("sev").lower()
         title = match.group("title").strip()[:240]
-        if not title:
+        if title == "":
             continue
         cve = _extract_cve(title)
         tid = _extract_template_id(title, tool_name)

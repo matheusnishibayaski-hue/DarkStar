@@ -33,9 +33,12 @@ def _sqlite_url() -> str:
 
 def resolve_database_url() -> str:
     """Postgres se DATABASE_URL set; senão SQLite local para dashboard."""
-    if DATABASE_URL and not _using_sqlite:
-        return DATABASE_URL
-    return _sqlite_url()
+    use_postgres = bool(DATABASE_URL) and not _using_sqlite
+    if not use_postgres:
+        sqlite_url = _sqlite_url()
+        return sqlite_url
+    chosen_url = str(DATABASE_URL)
+    return chosen_url
 
 
 def using_sqlite_fallback() -> bool:

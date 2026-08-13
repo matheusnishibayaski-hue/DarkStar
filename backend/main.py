@@ -49,6 +49,13 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 FRONTEND_DIR = BASE_DIR / "frontend"
 
 
+def _resolve_cors_origins(raw: list[str]) -> list[str]:
+    origins = [origin for origin in raw if origin != "*"]
+    if not origins:
+        origins = ["http://127.0.0.1:8000", "http://localhost:8000"]
+    return origins
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     try:
@@ -92,9 +99,7 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="DarkStar", version=APP_VERSION, lifespan=lifespan)
 
-_cors_origins = [origin for origin in CORS_ORIGINS if origin != "*"]
-if not _cors_origins:
-    _cors_origins = ["http://127.0.0.1:8000", "http://localhost:8000"]
+_cors_origins = _resolve_cors_origins(CORS_ORIGINS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,

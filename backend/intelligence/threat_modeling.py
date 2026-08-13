@@ -142,21 +142,25 @@ def generate_threat_model(
 
 def get_threat_model(target: str) -> dict[str, Any] | None:
     norm = normalize_target(target)
-    if store.use_postgres():
-        from backend.database.db import init_db, session_scope
-        from backend.database.models_intelligence import TargetIntelligence
+    if not store.use_postgres():
+        return store.load_threat_model_json(norm)
 
-        init_db()
-        with session_scope() as session:
-            row = session.query(TargetIntelligence).filter_by(target_name=norm).one_or_none()
-            if not row or not row.threat_model_json:
-                return store.load_threat_model_json(norm)
-            try:
-                data = json.loads(row.threat_model_json)
-            except json.JSONDecodeError:
-                return None
-            return data if isinstance(data, dict) else None
-    return store.load_threat_model_json(norm)
+    from backend.database.db import init_db, session_scope
+    from backend.database.models_intelligence import TargetIntelligence
+
+    init_db()
+    parsed: dict[str, Any] | None = None
+    with session_scope() as session:
+        row = session.query(TargetIntelligence).filter_by(target_name=norm).one_or_none()
+        if not row or not row.threat_model_json:
+            return store.load_threat_model_json(norm)
+        try:
+            data = json.loads(row.threat_model_json)
+        except json.JSONDecodeError:
+            return None
+        if isinstance(data, dict):
+            parsed = data
+    return parsed
 
 
 def _persist_threat_model(

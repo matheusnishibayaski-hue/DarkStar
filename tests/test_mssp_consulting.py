@@ -16,6 +16,7 @@ from backend.ai.executive_summary import (
 )
 from backend.clients import store as clients_store
 from backend.clients.runtime import get_active_client_id, set_active_client_id
+from backend.database import db as db_mod
 from backend.executor import surface as surface_mod
 from backend.executor.surface import get_or_create_surface, save_surface
 
@@ -24,18 +25,34 @@ class TestClientsStore(unittest.TestCase):
     def test_create_list_activate(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(clients_store, "CLIENTS_DIR", root):
-                with patch("backend.config.CLIENTS_DIR", root):
-                    clients_store.ensure_default_client()
-                    c = clients_store.create_client("acme-corp", display_name="Acme")
-                    self.assertEqual(c["client_id"], "acme-corp")
-                    items = clients_store.list_clients()
-                    ids = {i["client_id"] for i in items}
-                    self.assertIn("default", ids)
-                    self.assertIn("acme-corp", ids)
-                    set_active_client_id("acme-corp")
-                    self.assertEqual(get_active_client_id(), "acme-corp")
-                    set_active_client_id("default")
+            url = f"sqlite:///{(root / 't.db').as_posix()}"
+            db_mod.reset_engine_for_tests()
+            patches = [
+                patch.object(db_mod, "DATABASE_URL", ""),
+                patch.object(db_mod, "_SQLITE_PATH", root / "t.db"),
+                patch.object(db_mod, "resolve_database_url", return_value=url),
+                patch.object(clients_store, "CLIENTS_DIR", root),
+                patch("backend.config.CLIENTS_DIR", root),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                db_mod.reset_engine_for_tests()
+                db_mod.init_db()
+                clients_store.ensure_default_client()
+                c = clients_store.create_client("acme-corp", display_name="Acme")
+                self.assertEqual(c["client_id"], "acme-corp")
+                items = clients_store.list_clients()
+                ids = {i["client_id"] for i in items}
+                self.assertIn("default", ids)
+                self.assertIn("acme-corp", ids)
+                set_active_client_id("acme-corp")
+                self.assertEqual(get_active_client_id(), "acme-corp")
+                set_active_client_id("default")
+            finally:
+                for p in patches:
+                    p.stop()
+                db_mod.reset_engine_for_tests()
 
 
 class TestSurfaceDelta(unittest.TestCase):

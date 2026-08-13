@@ -176,7 +176,7 @@ def api_export(
         for line in lines:
             c.drawString(50, y, line[:90])
             y -= 16
-        for row in history[:15]:
+        for row in history[:80]:
             line = (
                 f"- {row.get('target')} · vulns={row.get('vulnerability_count')} "
                 f"crit={row.get('critical')} ({str(row.get('timestamp') or '')[:19]})"

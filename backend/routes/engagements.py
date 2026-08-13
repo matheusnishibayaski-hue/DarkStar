@@ -388,8 +388,10 @@ def api_finding_status(target: str, finding_id: str, req: FindingStatusRequest):
     }:
         raise HTTPException(status_code=400, detail="status inválido")
     finding = mark_finding_status(target, finding_id, req.status, evidence=req.evidence)
-    if not finding:
-        raise HTTPException(status_code=404, detail="Finding ou alvo não encontrado.")
+    if finding is None:
+        detail = "Finding ou alvo não encontrado."
+        missing = HTTPException(status_code=404, detail=detail)
+        raise missing
     return finding
 
 

@@ -244,7 +244,7 @@ def api_recon_detail(target: str):
     data = get_recon_data(target)
     if surface:
         sync_recon_counts_from_surface(target, surface)
-        data = get_recon_data(target) or data or {"target": target}
+        data = get_recon_data(target) or data
     if not data and not surface:
         raise HTTPException(status_code=404, detail="Nenhum recon salvo para este alvo.")
     if not data:

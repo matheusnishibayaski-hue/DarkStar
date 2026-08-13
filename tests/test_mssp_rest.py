@@ -106,7 +106,19 @@ class TestScheduleStore(unittest.TestCase):
     def test_create_list_advance(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(schedule_store, "SCHEDULE_DIR", root):
+            url = f"sqlite:///{(root / 't.db').as_posix()}"
+            db_mod.reset_engine_for_tests()
+            patches = [
+                patch.object(db_mod, "DATABASE_URL", ""),
+                patch.object(db_mod, "_SQLITE_PATH", root / "t.db"),
+                patch.object(db_mod, "resolve_database_url", return_value=url),
+                patch.object(schedule_store, "SCHEDULE_DIR", root),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                db_mod.reset_engine_for_tests()
+                db_mod.init_db()
                 job = schedule_store.create_job(
                     target="sched.test",
                     interval="weekly",
@@ -118,11 +130,27 @@ class TestScheduleStore(unittest.TestCase):
                 advanced = schedule_store.advance_job(job, status="ok")
                 self.assertEqual(advanced["last_status"], "ok")
                 self.assertTrue(schedule_store.delete_job(job["id"]))
+            finally:
+                for p in patches:
+                    p.stop()
+                db_mod.reset_engine_for_tests()
 
     def test_custom_interval_days_repeat(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(schedule_store, "SCHEDULE_DIR", root):
+            url = f"sqlite:///{(root / 't.db').as_posix()}"
+            db_mod.reset_engine_for_tests()
+            patches = [
+                patch.object(db_mod, "DATABASE_URL", ""),
+                patch.object(db_mod, "_SQLITE_PATH", root / "t.db"),
+                patch.object(db_mod, "resolve_database_url", return_value=url),
+                patch.object(schedule_store, "SCHEDULE_DIR", root),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                db_mod.reset_engine_for_tests()
+                db_mod.init_db()
                 job = schedule_store.create_job(
                     target="repeat.test",
                     job_type="repeat",
@@ -138,6 +166,10 @@ class TestScheduleStore(unittest.TestCase):
                 self.assertGreater(delta, 14 * 86400 - 60)
                 self.assertLess(delta, 16 * 86400)
                 self.assertEqual(job["chat_session_id"], "sess-abc12345")
+            finally:
+                for p in patches:
+                    p.stop()
+                db_mod.reset_engine_for_tests()
 
 
 class TestScannerImport(unittest.TestCase):
@@ -161,20 +193,35 @@ class TestBackup(unittest.TestCase):
     def test_backup_restore_roundtrip(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            with patch.object(clients_store, "CLIENTS_DIR", root):
-                with patch("backend.clients.store.CLIENTS_DIR", root):
-                    with patch("backend.clients.backup.CLIENTS_DIR", root):
-                        with patch("backend.clients.backup.SURFACE_DIR", root / "surface"):
-                            (root / "surface").mkdir()
-                            clients_store.create_client("bak-co", display_name="Bak")
-                            raw = backup_mod.backup_client("bak-co")
-                            self.assertGreater(len(raw), 20)
-                            # limpa e restaura
-                            import shutil
+            url = f"sqlite:///{(root / 't.db').as_posix()}"
+            db_mod.reset_engine_for_tests()
+            patches = [
+                patch.object(db_mod, "DATABASE_URL", ""),
+                patch.object(db_mod, "_SQLITE_PATH", root / "t.db"),
+                patch.object(db_mod, "resolve_database_url", return_value=url),
+                patch.object(clients_store, "CLIENTS_DIR", root),
+                patch("backend.clients.store.CLIENTS_DIR", root),
+                patch("backend.clients.backup.CLIENTS_DIR", root),
+                patch("backend.clients.backup.SURFACE_DIR", root / "surface"),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                db_mod.reset_engine_for_tests()
+                db_mod.init_db()
+                (root / "surface").mkdir()
+                clients_store.create_client("bak-co", display_name="Bak")
+                raw = backup_mod.backup_client("bak-co")
+                self.assertGreater(len(raw), 20)
+                import shutil
 
-                            shutil.rmtree(root / "bak-co", ignore_errors=True)
-                            out = backup_mod.restore_client(raw, overwrite=True)
-                            self.assertEqual(out["client_id"], "bak-co")
+                shutil.rmtree(root / "bak-co", ignore_errors=True)
+                out = backup_mod.restore_client(raw, overwrite=True)
+                self.assertEqual(out["client_id"], "bak-co")
+            finally:
+                for p in patches:
+                    p.stop()
+                db_mod.reset_engine_for_tests()
 
 
 class TestRoles(unittest.TestCase):

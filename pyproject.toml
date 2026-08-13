@@ -31,9 +31,12 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 95
+fail_under = 100
 show_missing = true
 skip_empty = true
+exclude_also = [
+  "if TYPE_CHECKING:",
+]
 
 [tool.bandit]
 exclude_dirs = ["tests", "venv", "node_modules", "e2e"]

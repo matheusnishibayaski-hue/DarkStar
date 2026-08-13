@@ -471,6 +471,24 @@ Lista completa comentada: [`.env.example`](.env.example)
 
 ---
 
+## Testes e cobertura
+
+O CI ([`.github/workflows/tests.yml`](.github/workflows/tests.yml)) roda no **Ubuntu / Python 3.11**. A suíte unitária cobre **100% dos statements** de `backend/` (sem omitir módulos de código). O limiar é `fail_under = 100` no [`pyproject.toml`](pyproject.toml). Pastas de dado (`outputs/`, `audit/`, `logs/`, `recon/`, `data/`) ficam de fora — não são código.
+
+Não precisa de Docker, Kali, rede nem chave de IA: os testes usam mocks.
+
+```bash
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -v
+coverage run -m unittest discover -s tests
+coverage report
+```
+
+Lint (o mesmo do GitHub): `ruff check backend tests` e `ruff format --check backend tests`.  
+E2E opcional: `npm ci` + `npx playwright test -c e2e/playwright.config.js` com a API no ar.
+
+---
+
 ## Se travar em algo
 
 | Problema | Solução rápida |
@@ -488,6 +506,7 @@ Lista completa comentada: [`.env.example`](.env.example)
 | PDF sem a sua marca | `CONSULTING_*` vale no PDF **comercial por alvo** (`/api/engagements/.../report`), não na prévia da conversa |
 | Segunda opinião da IA some | Chave OpenRouter / Ollama no **04 offline**; a opinião automática da Argus continua valendo |
 | PDF com códigos `[34m` / logo do nuclei | `Ctrl+F5` e gere o PDF de novo — testes agora saem resumidos e limpos |
+| `coverage report` falha no CI | Instale `coverage==7.8.0` (está em `requirements-dev.txt`); o limiar é 100% do `backend/` |
 
 ---
 

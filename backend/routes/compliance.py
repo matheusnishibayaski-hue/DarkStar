@@ -63,6 +63,7 @@ def api_report_get(target: str, format: str = "json", frameworks: str = "LGPD"):
     fmt = (format or "json").lower()
     if fmt == "md":
         return PlainTextResponse(report.get("report_md") or "", media_type="text/markdown")
-    if fmt != "json":
-        raise HTTPException(status_code=400, detail="format: json|md")
-    return report
+    if fmt == "json":
+        payload = report
+        return payload
+    raise HTTPException(status_code=400, detail="format: json|md")

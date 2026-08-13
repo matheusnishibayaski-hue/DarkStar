@@ -143,11 +143,13 @@ def import_scanner_payload(
     text = content or ""
     if fmt == "auto":
         stripped = text.lstrip()
-        if stripped.startswith("{") or stripped.startswith("["):
+        if stripped.startswith("["):
             fmt = "nuclei"
         elif "Plugin Name" in text[:500] or "Risk Factor" in text[:500]:
             fmt = "nessus"
         elif "\n" in text and text.strip().startswith("{"):
+            fmt = "nuclei"
+        elif stripped.startswith("{"):
             fmt = "nuclei"
         else:
             # tenta nuclei linha a linha

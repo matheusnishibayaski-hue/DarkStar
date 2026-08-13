@@ -86,14 +86,27 @@ class TestSessionIntel(unittest.TestCase):
                 self.assertFalse((intel_dir / f"{sid}.json").exists())
 
     def test_backfill_client_executions(self):
+        from backend.database import db as db_mod
         from backend.executor import session_intel as si
 
         with tempfile.TemporaryDirectory() as tmp:
-            intel_dir = Path(tmp) / "intel"
+            root = Path(tmp)
+            intel_dir = root / "intel"
             intel_dir.mkdir()
             sid = "sess-backfill-123456"
-
-            with patch.object(si, "INTEL_SESSIONS_DIR", intel_dir):
+            url = f"sqlite:///{(root / 't.db').as_posix()}"
+            db_mod.reset_engine_for_tests()
+            patches = [
+                patch.object(db_mod, "DATABASE_URL", ""),
+                patch.object(db_mod, "_SQLITE_PATH", root / "t.db"),
+                patch.object(db_mod, "resolve_database_url", return_value=url),
+                patch.object(si, "INTEL_SESSIONS_DIR", intel_dir),
+            ]
+            for p in patches:
+                p.start()
+            try:
+                db_mod.reset_engine_for_tests()
+                db_mod.init_db()
                 stats = si.backfill_session_findings_from_client(
                     sid,
                     [
@@ -109,6 +122,10 @@ class TestSessionIntel(unittest.TestCase):
                 findings = si.aggregate_session_findings(sid, sync=False)
                 self.assertEqual(len(findings), 1)
                 self.assertIn("nmap", findings[0]["title"].lower())
+            finally:
+                for p in patches:
+                    p.stop()
+                db_mod.reset_engine_for_tests()
 
     def test_intel_session_routes(self):
         from backend.main import app
