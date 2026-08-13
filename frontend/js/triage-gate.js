@@ -141,6 +141,10 @@ function closeGate(proceed) {
   fn?.(Boolean(proceed));
 }
 
+function itemsHtml(arr) {
+  return (arr || []).map((x) => `<li>${escapeHtml(String(x))}</li>`).join("");
+}
+
 function verdictLabel(verdict) {
   const v = String(verdict || "unsure");
   if (v === "confirmed") return "Parece um problema real";
