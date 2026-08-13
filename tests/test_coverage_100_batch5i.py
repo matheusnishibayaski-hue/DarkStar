@@ -111,10 +111,15 @@ class TestLastMisses(unittest.TestCase):
             other = root / "other.bin"
             other.write_text("z", encoding="utf-8")
             orig = Path.stat
+            stat_counts: dict[str, int] = {}
 
             def _stat(self, *a, **kw):
                 if self.name == "other.bin":
-                    raise OSError("stat")
+                    key = str(self)
+                    n = stat_counts.get(key, 0)
+                    stat_counts[key] = n + 1
+                    if n >= 1:
+                        raise OSError("stat")
                 return orig(self, *a, **kw)
 
             with patch.object(dc, "OUTPUTS_DIR", root), patch.object(Path, "stat", _stat):

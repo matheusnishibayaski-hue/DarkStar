@@ -154,7 +154,18 @@ class TestJsonErrorPaths(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             p = Path(tmp) / "a.txt"
             p.write_text("x")
-            with patch.object(Path, "stat", side_effect=OSError("x")):
+            orig_stat = Path.stat
+            stat_counts: dict[str, int] = {}
+
+            def _stat_fail_on_size(self, *a, **kw):
+                key = str(self)
+                n = stat_counts.get(key, 0)
+                stat_counts[key] = n + 1
+                if n >= 1:
+                    raise OSError("x")
+                return orig_stat(self, *a, **kw)
+
+            with patch.object(Path, "stat", _stat_fail_on_size):
                 dc._dir_stats(Path(tmp), "*.txt") if hasattr(dc, "_dir_stats") else None
             with patch.object(dc, "OUTPUTS_DIR", Path(tmp)):
                 (Path(tmp) / "evidence").mkdir()
