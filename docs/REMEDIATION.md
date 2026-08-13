@@ -1,13 +1,14 @@
 # Remediação inteligente (wizard)
 
-Planos step-by-step gerados por LLM a partir de findings de pentest (host/URL/CVE/evidência), com fallback no mapa estático de `backend/ai/remediation.py`. UI: overlay no shell (triagem → **fix**), não página HTML isolada.
+Planos step-by-step gerados por LLM a partir de findings (host/URL/CVE/evidência), com fallback no mapa estático de `backend/ai/remediation.py`.
 
-## Fluxo
+No **workspace atual** a correção visível está no **PDF/prévia** (seção “Como corrigir”). O overlay do wizard existe no shell e a API abaixo funciona; **não há** botão **fix** na lista de achados da UI.
 
-1. Na triagem, clique **fix** num finding.
-2. `POST /api/remediation/generate` usa o provider atual (`get_llm_provider().complete`) ou o mapa estático se a LLM falhar.
-3. O overlay mostra causa raiz, passos, before/after opcional, comando de verificação (só texto — **não** executado no host) e referências.
-4. Marcar passos / **marcar resolvido** persiste em `backend/data/remediation_track.json`.
+## Fluxo (API)
+
+1. `POST /api/remediation/generate` usa o provider atual (`get_llm_provider().complete`) ou o mapa estático se a LLM falhar.
+2. O overlay (se aberto) mostra causa raiz, passos, before/after opcional, comando de verificação (só texto — **não** executado no host) e referências.
+3. Marcar passos / **marcar resolvido** persiste em `backend/data/remediation_track.json`.
 
 ## API
 

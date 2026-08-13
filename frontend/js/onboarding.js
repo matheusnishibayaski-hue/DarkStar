@@ -83,7 +83,7 @@ function renderStep() {
         <ol class="onboarding-steps">
           <li>Peça: <code>nmap -sV scanme.nmap.org</code> (ou abra o <strong>pilot</strong>)</li>
           <li>Aguarde <code>[ok]</code> e o dashboard</li>
-          <li>Abra <strong>Relatório</strong> (<kbd>Alt+R</kbd>) → triagem → <strong>Baixar PDF</strong></li>
+          <li>Abra <strong>Relatórios</strong> (<kbd>Alt+R</kbd>) → <strong>Baixar PDF</strong> (a triagem abre se precisar)</li>
         </ol>
         <p class="onboarding-note">Se aparecer <code>[blocked]</code>: confira whitelist e <code>ALLOWED_TARGETS</code>.</p>
       `,

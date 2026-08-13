@@ -32,7 +32,7 @@ export const HELP_HTML = `
     <li><kbd>M</kbd> ou <kbd>☰</kbd> — recolher/expandir barra lateral</li>
     <li>Sidebar — alternar entre conversas salvas</li>
     <li><kbd>Esc</kbd> — fechar painéis</li>
-    <li><kbd>snd</kbd> na barra de status — ligar/desligar efeitos sonoros CRT</li>
+    <li><kbd>05 som</kbd> na sidebar — ligar/desligar efeitos sonoros CRT</li>
   </ul>
 </section>
 <section class="help-section">
@@ -76,20 +76,19 @@ export const HELP_HTML = `
 <section class="help-section">
   <h3>Modelo de IA</h3>
   <ul class="help-list">
-    <li>Pill ao lado do prompt — Gemini ou DeepSeek por tier</li>
-    <li><strong>Economia</strong> — scans rápidos · <strong>Equilibrado</strong> — dia a dia · <strong>Raciocínio</strong> — análises profundas</li>
+    <li>Menu ao lado do prompt — escolhe o modelo (nuvem) ou o local no modo offline</li>
+    <li>Tiers típicos: economia (scans rápidos) · equilibrado (dia a dia) · raciocínio (análises profundas)</li>
   </ul>
 </section>
 <section class="help-section">
   <h3>Modos</h3>
   <ul class="help-list">
     <li><strong>Chat</strong> — a Argus executa ferramentas Kali via linguagem natural</li>
-    <li><strong>tools</strong> — fixe ferramenta ou deixe em auto</li>
+    <li><strong>01 workspace</strong> — ferramentas · logs · relatórios · mapa · dashboard</li>
     <li><strong>pilot</strong> — alvo + tipo de scan (básico → completo); PDF ao fim da missão</li>
-    <li><strong>offensive</strong> — requer master key (perfil full)</li>
-    <li><strong>offline</strong> — Argus via Ollama local (sem OpenRouter)</li>
-    <li>Ícones no prompt — <strong>logs</strong> e <strong>relatório/triagem</strong></li>
-    <li><strong>relatórios</strong> (prévia + carteira + PDF) · <strong>mapa</strong> · <strong>cancel</strong></li>
+    <li><strong>03 offensive</strong> — requer master key (perfil full)</li>
+    <li><strong>04 offline</strong> — Argus via Ollama local (sem OpenRouter)</li>
+    <li><strong>05 som</strong> — bipes CRT · <strong>06 ajuda</strong> — tour (F1)</li>
   </ul>
 </section>
 <p class="help-note">Use apenas em alvos autorizados.</p>

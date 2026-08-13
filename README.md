@@ -72,8 +72,9 @@ Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso po
 
 - candidato a vulnerabilidade passa por **verificação**
 - o que for fraco ou duvidoso **não entra** no resumo executivo automaticamente
-- **Baixar PDF** abre a **triagem**: um achado por vez, em português, com gráficos
-- o PDF e a prévia trazem cobertura **indicativa ISO 27001 / SOC 2** (não é certificação)
+- **Baixar PDF** abre a **triagem**: um achado por vez, em português claro (o que é, analogia, impacto, como decidir)
+- a **prévia** e o **PDF** são o mesmo relatório: KPIs, gráficos de barras, achados explicados e plano de correção
+- os dois trazem cobertura **indicativa ISO 27001 / SOC 2** (não é certificação)
 
 **Menos vergonha na frente do cliente. Mais confiança no PDF.**
 
@@ -153,15 +154,15 @@ Irresponsável? Não.
 
 ### 6. Feito para o dia a dia de quem pentesta de verdade
 
-- chat natural em português
-- painel de ferramentas
-- logs por conversa
-- **relatórios**: prévia HTML ao vivo + carteira dos alvos + PDFs salvos
-- triagem na hora do download (pendentes + suspeitos de FP)
+- chat natural em português (seletor de modelo no compositor)
+- onboarding na primeira visita + tour guiado (**F1**)
+- barra de status: Docker, Kali, LLM e privilégio (perfil B / full)
+- painel de ferramentas, logs, mapa e dashboard — tudo da **conversa ativa**
+- **relatórios**: prévia HTML ao vivo (= PDF) + carteira dos alvos + PDFs salvos
+- triagem na hora do download (pendentes + suspeitos de FP), em linguagem leiga
 - workspace por **cliente** (sidebar → CLIENTE) e agenda de reteste
-- mapa de ameaças e dashboard da conversa
-- tour guiado (**F1**) se você for novo
-- atalhos de teclado para fluir rápido
+- **PILOTO** com básico / intermediário / completo / personalizado; **PARAR** cancela a missão
+- atalhos de teclado (Alt+P, Alt+T, Alt+R, Alt+N…)
 
 Abre, pede, executa, revisa, entrega.
 
@@ -173,7 +174,7 @@ Abre, pede, executa, revisa, entrega.
 | **Quer repetir o mesmo tipo de scan** | Fixa a tool no painel ou roda o Piloto. |
 | **Precisa provar o que rolou ontem** | Abre **relatórios** — prévia, PDFs salvos e carteira dos alvos. |
 | **Entrega amanhã** | Clica **Baixar PDF**, valida o que ainda está pendente, gera o arquivo. |
-| **Dois clientes no mesmo PC** | Sidebar → **CLIENTE**: troca o workspace; o PDF sai com a marca da consultoria. |
+| **Dois clientes no mesmo PC** | Sidebar → **CLIENTE**: troca o workspace; conversas e relatórios não se misturam. |
 | **Reteste periódico** | No Piloto, marque **repetir** e informe os dias. A missão de agora roda na hora; a seguinte entra sozinha. |
 | **Quer fluir sem mouse** | Atalhos: Piloto, tools, relatório, novo chat. |
 
@@ -206,22 +207,20 @@ Você manda. O sistema trabalha.
 ## O que você consegue fazer (de verdade)
 
 - Pedir scans e enumerações em linguagem natural  
-- Rodar missão automática com o Piloto  
+- Rodar missão automática com o Piloto (e **PARAR** se precisar)  
 - Ver logs ao vivo e histórico completo  
-- Triar achados **antes** do PDF (é vulnerabilidade / FP / incerto / pular restantes)  
-- Baixar PDF executivo + técnico (white-label) com anexo de triagem e seção **ISO 27001 / SOC 2**  
-- Ver a **prévia ao vivo** do relatório na mesma aba dos PDFs  
+- Triar achados **antes** do PDF: *é um problema real* / *alarme falso* / *ainda não sei* (ou pular o resto)  
+- Ver a **prévia ao vivo** e baixar o **mesmo** PDF (8 seções, gráficos, correção detalhada, ISO/SOC 2 indicativo)  
 - Isolar workspaces por **cliente** (sidebar → CLIENTE: criar, trocar, excluir)  
-- Agendar **monitor** periódico (API: diário/semanal/mensal), ver **delta** vs baseline e importar Nessus CSV / Nuclei JSONL  
+- Agendar reteste no Piloto (a cada N dias) ou via API (`monitor` / `remind` / `full`)  
+- Ver **delta** vs baseline e importar Nessus CSV / Nuclei JSONL (API)  
 - Automatizar por **CLI** (`autonomous`, `chat`, `health`, `list-tools`) e **GitHub Actions** (só quando você disparar)  
 - Gerar saída **JSON** ou **SARIF** na CLI para CI  
 - Abrir o **workspace** da conversa (ferramentas, logs, relatórios, mapa, dashboard) — tudo filtrado pelo chat ativo  
 - Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
-- Abrir **wizard de remediação IA** (plano step-by-step + tracker)  
 - Persistir conversas, PDFs, intel e agenda no **SQLite local** ou Postgres (`DATABASE_URL`)  
-- Trocar de modelo de IA (ChatGPT, Claude, Gemini, Grok, DeepSeek…)  
-- Ligar modo offline com Ollama  
-- Desbloquear perfil avançado com master key  
+- Trocar de modelo de IA no compositor (nuvem) ou ligar **04 offline** com Ollama  
+- Desbloquear perfil avançado com master key + modo **03 offensive**  
 - Integrar com Cursor/Claude via MCP (para quem quer ir além)
 
 Se você é consultor solo, lab de estudo ou time pequeno: isso aqui foi feito para o seu fluxo.
@@ -238,9 +237,9 @@ As **5 etapas** da camada de consultoria/automação:
 2. **GitHub** — comentário em PR / issue / commit status, só quando você pedir  
 3. **Dashboard** — métricas e histórico da conversa  
 4. **Alertas** — Slack, Discord, Telegram, e-mail, Jira  
-5. **Remediação** — wizard IA com tracker  
+5. **Remediação** — plano no PDF/prévia; API de wizard IA opcional  
 
-No mesmo pacote: workspaces por cliente, agenda, delta, PDF white-label, import de scanner, papéis locais e persistência no banco.
+No mesmo pacote: workspaces por cliente, agenda, delta, PDF da conversa (= prévia) e PDF comercial white-label por alvo, import de scanner, papéis locais e persistência no banco.
 
 ### 1. CLI (pipelines e lab sem UI)
 
@@ -286,16 +285,22 @@ Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a 
 
 **Aba relatórios** (entrega do engajamento, num só lugar):
 
-1. **Prévia HTML ao vivo** — acompanha testes e achados do chat (KPIs: testes, achados, confirmados, FPs, risco residual).  
-2. **Baixar PDF** — se ainda houver o que validar, abre o **modal de triagem** (um achado por vez, linguagem simples, gráficos de severidade / risco / ISO·SOC 2).  
+1. **Prévia HTML ao vivo** — o mesmo documento do PDF, atualizado com o chat.  
+   KPIs (testes, achados, confirmados, FPs, risco) e gráficos de barras: risco residual, gravidade, triagem, ISO/SOC 2 indicativo, tipos de achado e ferramentas.  
+   Cada achado vem em linguagem simples (o que é, analogia, impacto) + evidência.  
+   **Como corrigir** traz quem faz, por quê, passo a passo e como validar.  
+2. **Baixar PDF** — se ainda houver o que validar, abre o **modal de triagem** (um achado por vez, sem jargão).  
    - Fila: pendentes (`candidate` / `inconclusive`) **e** confirmados com heurística de falso positivo ≥ 55 (segunda olhada).  
-   - **É vulnerabilidade** · **É falso positivo** · **Não tenho certeza** · **Pular restantes e gerar PDF** · Cancelar (não baixa).  
-   - Fila vazia → PDF imediato. “Não tenho certeza” vai para o **anexo**, fora do risco residual.  
-   - Marcar FP ensina o padrão para o próximo scan (`fp_learn`).  
+   - **É um problema real** · **É alarme falso** · **Ainda não sei** · **Pular o resto e gerar o PDF mesmo assim** · Cancelar (não baixa).  
+   - No fim da fila o “pular” some: só **Gerar o PDF agora**.  
+   - Fila vazia → PDF imediato. “Ainda não sei” vai para o **anexo**, fora do risco residual.  
+   - Marcar alarme falso ensina o padrão para o próximo scan (`fp_learn`).  
 3. **Carteira** — cards dos alvos desta conversa: risco, confirmados/pendentes/FPs, delta (“novos / corrigidos / ainda abertos”) e próximo scan.  
 4. **PDFs salvos** desta conversa.
 
-O PDF é **executivo + técnico**, com capa/rodapé white-label (`CONSULTING_NAME`, logo, cor), sumário executivo (LLM com fallback), anexo de triagem e conformidade **indicativa** ISO/IEC 27001 e SOC 2 (mapeamento por palavras-chave). **Não substitui** certificação ISO 27001 nem atestado SOC 2.
+O PDF da conversa **copia a prévia** (8 seções). Gravidade usa o tipo do achado e a tag do scanner (`[high]` XSS não vira “leve”).  
+O PDF **comercial por alvo** (`GET /api/engagements/{alvo}/report`) é o outro layout: capa/rodapé white-label (`CONSULTING_NAME`, logo, cor) e sumário executivo (LLM com fallback).  
+ISO/IEC 27001 e SOC 2 no relatório são mapeamento **indicativo** por palavras-chave. **Não substitui** certificação nem atestado SOC 2.
 
 Aba **dashboard**: tendência de severidade, top issues, histórico de scans e export JSON/CSV/PDF — só desta conversa.
 
@@ -315,10 +320,12 @@ A CLI `autonomous` também notifica se houver critical. API `/api/notifications/
 
 Detalhes: [`docs/NOTIFICATIONS.md`](docs/NOTIFICATIONS.md)
 
-### 5. Remediação inteligente (wizard)
+### 5. Remediação (no relatório + API)
 
-Botão **fix** no achado → overlay com plano gerado por IA (se a LLM falhar, usa o mapa estático do relatório).  
-Passos, before/after opcional, comando de verificação **só como texto** (não executa no host), progresso e “marcar resolvido” em `backend/data/remediation_track.json`.
+O PDF/prévia já traz o plano **Como corrigir** (mapa estático por tipo: XSS, SQLi, HSTS, CVE…).  
+Há também API de wizard IA (`POST /api/remediation/generate`) com tracker em `backend/data/remediation_track.json` — o overlay existe no shell, mas o workspace atual **não** tem um botão **fix** na lista de achados.
+
+O comando de verificação do wizard é **só texto** (não executa no host).
 
 Detalhes: [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
@@ -326,7 +333,7 @@ Detalhes: [`docs/REMEDIATION.md`](docs/REMEDIATION.md)
 
 Feito para quem atende **vários alvos no mesmo PC**, sem portal do cliente e sem multi-tenant na nuvem.
 
-- **CLIENTE** na sidebar — criar (modal + slug), trocar e excluir workspace. Cada um pode ter marca própria no PDF. **Conversas, relatórios e intel ficam separados por cliente.**  
+- **CLIENTE** na sidebar — criar (modal + slug), trocar e excluir workspace. Conversas, relatórios e intel ficam separados por cliente. A marca (`CONSULTING_*` / logo do cliente) vale no **PDF comercial por alvo**.  
 - **Backup/restore** do cliente (`tar.gz` via API).  
 - **Agenda** (`SCHEDULE_ENABLED`, ligada por padrão):  
   - **Piloto** — checkbox “Repetir este teste automaticamente” + intervalo em **dias**. A primeira rodada é agora; as seguintes executam o **mesmo** alvo e tipo de scan (`job_type: repeat`).  
@@ -366,8 +373,10 @@ start.bat
 
 Abra: **http://127.0.0.1:8000**
 
-Na primeira vez, o script prepara quase tudo sozinho.  
+Na primeira vez, o script prepara quase tudo sozinho e a Argus mostra um **guia de 3 passos**.  
 Coloque sua chave no arquivo `.env` (`OPENROUTER_API_KEY`) se for usar modo online.
+
+Sidebar (sistema): **01 workspace** · **02 master key** · **03 offensive** · **04 offline** · **05 som** · **06 ajuda**.
 
 ### Linux / macOS
 
@@ -385,7 +394,7 @@ start.bat servidor
 
 1. Instale o [Ollama](https://ollama.com) e baixe um modelo (`ollama pull llama3.1:8b`)  
 2. Abra o DarkStar  
-3. Ligue o switch **08 offline** na barra lateral  
+3. Ligue o switch **04 offline** na barra lateral  
 
 A partir daí: Argus + Kali **só no seu PC**.  
 Útil em lab sem internet, cliente restrito — ou qualquer lugar onde a nuvem não pode entrar.
@@ -399,12 +408,33 @@ A partir daí: Argus + Kali **só no seu PC**.
 3. Digite algo como:  
    *“faz um scan leve de portas em scanme.nmap.org”*  
 4. Ou clique **PILOTO** e deixe a missão rodar  
-5. Workspace → **relatórios**: veja a prévia, a carteira dos alvos e clique **Baixar PDF** (a triagem abre se ainda houver o que validar)  
-6. (Opcional) Aba **dashboard** / **logs** · botão **fix** na remediação  
-7. (Opcional) Sidebar → **CLIENTE** para um workspace com a marca da consultoria  
+5. Workspace → **relatórios**: veja a prévia (gráficos + achados) e clique **Baixar PDF** (a triagem abre se ainda houver o que validar)  
+6. (Opcional) Abas **dashboard** / **logs** / **mapa** · botão **PARAR** se a missão estiver rodando  
+7. (Opcional) Sidebar → **CLIENTE** para separar conversas por workspace  
 8. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
 
 Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
+
+---
+
+## Atalhos
+
+Use **Alt** + tecla (evita conflito com Ctrl+T / Ctrl+R do navegador).
+
+| Tecla | Ação |
+|-------|------|
+| **Alt+P** | Piloto |
+| **Alt+T** | Workspace · ferramentas |
+| **Alt+R** ou **Alt+F** | Workspace · relatórios |
+| **Alt+L** | Workspace · logs |
+| **Alt+C** | Workspace · mapa |
+| **Alt+N** | Novo chat |
+| **Alt+K** ou **Ctrl+K** | Focar o prompt |
+| **F1** / **Alt+H** / **?** | Tour guiado |
+| **M** | Recolher/expandir a sidebar |
+| **Esc** | Fechar painéis |
+
+Ctrl+Shift+T / P / E / N são alternativas. **Enter** envia; **↑** / **↓** no prompt percorre o histórico da sessão.
 
 ---
 
@@ -419,11 +449,13 @@ Se a mágica acontecer na sua tela… bem-vindo ao DarkStar.
 | `AI_PROVIDER=ollama` | Começa já em modo local |
 | `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
 | `DATABASE_URL` | Postgres (dashboard, conversas, intel, agenda, PDFs); sem isso → SQLite local |
-| `CONSULTING_NAME` / `CONSULTING_LOGO_PATH` | White-label da capa/rodapé do PDF |
+| `CONSULTING_NAME` / `CONSULTING_LOGO_PATH` | White-label da capa do PDF comercial por alvo |
 | `OPERATOR_ROLE` | `admin` (padrão) · `analyst` · `viewer` (só leitura) |
 | `SCHEDULE_ENABLED` | Agenda de reteste em background |
 | `RETENTION_DAYS` | Limpa artefatos antigos (0 = não limpa) |
 | `COMPLIANCE_ENABLED` | Mapper indicativo ISO 27001 / SOC 2 |
+| `MCP_ENABLED` | Servidor MCP em `/api/mcp/*` (Cursor/Claude) |
+| `INTELLIGENCE_ENABLED` | Hub local de padrões / próximas checagens |
 | `THREAT_INTEL_ENABLED` | Enriquece CVE com CISA KEV + EPSS |
 | `SLACK_WEBHOOK_URL` / `DISCORD_WEBHOOK_URL` | Alertas em canal |
 | `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` | Alertas Telegram |
@@ -449,7 +481,7 @@ Lista completa comentada: [`.env.example`](.env.example)
 | Dashboard / carteira vazios | Rode um scan **nesta** conversa; carteira lê alvos e achados do chat |
 | Alertas não chegam | Configure o canal no `.env` e teste `/api/notifications/test/{channel}` |
 | API recusa POST | `OPERATOR_ROLE=viewer` só lê; use `analyst` ou `admin` |
-| PDF sem a sua marca | Preencha `CONSULTING_*` ou o workspace do cliente |
+| PDF sem a sua marca | `CONSULTING_*` vale no PDF **comercial por alvo** (`/api/engagements/.../report`), não na prévia da conversa |
 
 ---
 
