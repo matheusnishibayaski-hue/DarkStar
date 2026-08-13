@@ -155,15 +155,21 @@ class TestJsonErrorPaths(unittest.TestCase):
             p = Path(tmp) / "a.txt"
             p.write_text("x")
             orig_stat = Path.stat
-            stat_counts: dict[str, int] = {}
+
+            class _BoomSize:
+                def __init__(self, inner):
+                    object.__setattr__(self, "_inner", inner)
+
+                def __getattr__(self, name):
+                    if name == "st_size":
+                        raise OSError("x")
+                    return getattr(object.__getattribute__(self, "_inner"), name)
 
             def _stat_fail_on_size(self, *a, **kw):
-                key = str(self)
-                n = stat_counts.get(key, 0)
-                stat_counts[key] = n + 1
-                if n >= 1:
-                    raise OSError("x")
-                return orig_stat(self, *a, **kw)
+                result = orig_stat(self, *a, **kw)
+                if self.suffix == ".txt":
+                    return _BoomSize(result)
+                return result
 
             with patch.object(Path, "stat", _stat_fail_on_size):
                 dc._dir_stats(Path(tmp), "*.txt") if hasattr(dc, "_dir_stats") else None

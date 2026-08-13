@@ -111,16 +111,21 @@ class TestLastMisses(unittest.TestCase):
             other = root / "other.bin"
             other.write_text("z", encoding="utf-8")
             orig = Path.stat
-            stat_counts: dict[str, int] = {}
+
+            class _BoomSize:
+                def __init__(self, inner):
+                    object.__setattr__(self, "_inner", inner)
+
+                def __getattr__(self, name):
+                    if name == "st_size":
+                        raise OSError("stat")
+                    return getattr(object.__getattribute__(self, "_inner"), name)
 
             def _stat(self, *a, **kw):
+                result = orig(self, *a, **kw)
                 if self.name == "other.bin":
-                    key = str(self)
-                    n = stat_counts.get(key, 0)
-                    stat_counts[key] = n + 1
-                    if n >= 1:
-                        raise OSError("stat")
-                return orig(self, *a, **kw)
+                    return _BoomSize(result)
+                return result
 
             with patch.object(dc, "OUTPUTS_DIR", root), patch.object(Path, "stat", _stat):
                 summary = dc.storage_summary()
