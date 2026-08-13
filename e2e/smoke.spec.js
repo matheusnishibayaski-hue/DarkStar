@@ -2,33 +2,40 @@ import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
+    localStorage.setItem("darkstar-onboarded", "1");
     localStorage.setItem("chat-ia-kali-onboarded", "1");
   });
 });
 
-test("boot — health e versão 1.1.0", async ({ page }) => {
+test("boot — health e versão 2.0.0", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#status-pill-docker")).toBeVisible();
   const healthRes = await page.request.get("/api/health");
   expect(healthRes.ok()).toBeTruthy();
   const health = await healthRes.json();
-  expect(health.version).toBe("1.1.0");
+  expect(health.version).toBe("2.0.0");
   expect(health).toHaveProperty("scope_warning");
 });
 
-test("intel — abre painel e abas recon/threats", async ({ page }) => {
+test("intel — abre workspace mapa e aba relatórios", async ({ page }) => {
   await page.goto("/");
-  await page.keyboard.press("Alt+i");
-  await expect(page.locator("#overlay-intel")).toBeVisible();
-  await expect(page.locator("#intel-tab-recon")).toHaveClass(/active/);
-  await page.click("#intel-tab-threats");
-  await expect(page.locator("#intel-pane-threats")).toBeVisible();
-  await expect(page.locator("#threat-frame")).toBeAttached();
+  await expect(page.locator("#status-pill-docker")).toBeVisible();
+  await page.keyboard.press("Alt+c");
+  await expect(page.locator("#view-workspace")).toBeVisible();
+  await expect(page.locator("#ws-panel-mapa")).toBeVisible();
+  await expect(page.locator("#workspace-map-body")).toBeAttached();
+  await page.click('[data-ws-tab="report"]');
+  await expect(page.locator("#ws-panel-report")).toBeVisible();
+  await expect(page.locator('[data-ws-tab="report"]')).toHaveClass(/active/);
 });
 
-test("files — abre painel e lista ou empty state", async ({ page }) => {
+test("files — abre Relatórios e lista ou empty state", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator("#status-pill-docker")).toBeVisible();
   await page.keyboard.press("Alt+f");
-  await expect(page.locator("#overlay-files")).toBeVisible();
-  await expect(page.locator("#files-list")).toContainText(/artefato|listando|arquivo/i);
+  await expect(page.locator("#view-workspace")).toBeVisible();
+  await expect(page.locator("#ws-panel-report")).toBeVisible();
+  await expect(page.locator("#files-list")).toContainText(
+    /relat[oó]rio|pdf|conversa|arquivo|artefato|listando|nenhum/i
+  );
 });
