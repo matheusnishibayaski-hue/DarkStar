@@ -541,15 +541,32 @@ def _pdf_from_session_model(
     )
     if not model["executions"]:
         story.append(Paragraph("Nenhum comando executado ainda.", body))
+    from backend.ai.exec_digest import digest_execution
+
     for i, ex in enumerate(model["executions"][:60], 1):
-        ok = "OK" if ex.get("success") else "FALHA"
-        cmd = _pdf_text(ex.get("command") or "—")[:500]
-        out = _pdf_text((ex.get("stdout") or ex.get("stderr") or "")[:2500])
+        d = digest_execution(ex)
         block = [
-            Paragraph(f"<b>{i}.</b> [{ok}] <font face='Courier' size='8'>{cmd}</font>", body),
+            Paragraph(
+                f"<b>{i}. {_pdf_text(d['tool'])}</b> · [{_pdf_text(d['status_label'])}]",
+                h3,
+            ),
+            Paragraph(_pdf_text(d.get("headline") or ""), body),
         ]
-        if out.strip():
-            block.append(Paragraph(f"<font face='Courier' size='7'>{out}</font>", small))
+        if d.get("failure"):
+            block.append(Paragraph(f"<b>Por que falhou:</b> {_pdf_text(d['failure'])}", body))
+        for b in d.get("bullets") or []:
+            block.append(Paragraph(f"• {_pdf_text(b)}", body))
+        cmd = d.get("command") or ""
+        if cmd:
+            block.append(
+                Paragraph(
+                    f"<font face='Courier' size='8'>{_pdf_text(cmd)}</font>",
+                    small,
+                )
+            )
+        log = d.get("log") or ""
+        if log.strip():
+            block.append(Paragraph(f"<font face='Courier' size='7'>{_pdf_text(log)}</font>", small))
         block.append(Spacer(1, 0.12 * cm))
         story.append(KeepTogether(block))
 

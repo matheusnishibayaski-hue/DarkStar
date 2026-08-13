@@ -502,6 +502,28 @@ def patch_session_finding(
     return {**finding, "surface_target": surface_target}
 
 
+def merge_session_finding_fields(
+    session_id: str, finding_id: str, fields: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Atualiza campos extras do achado (ex. ai_review) sem mudar o status."""
+    fid = str(finding_id or "")
+    if not fid or not fields:
+        return None
+    data = load_session(session_id) or {}
+    updated: dict[str, Any] | None = None
+    for f in data.get("session_findings") or []:
+        if str(f.get("id")) != fid:
+            continue
+        for key, value in fields.items():
+            f[key] = value
+        updated = dict(f)
+        break
+    if updated:
+        save_session(session_id, data)
+        return updated
+    return None
+
+
 def delete_session_intel(session_id: str) -> bool:
     """Remove índice da conversa e achados vinculados a ela."""
     from backend.database.db import ensure_dashboard_db, session_scope

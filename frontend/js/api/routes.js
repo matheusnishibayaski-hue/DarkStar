@@ -152,6 +152,18 @@ export function patchSessionFinding(sessionId, findingId, body) {
   );
 }
 
+export function fetchFindingAiReview(sessionId, findingId, signal) {
+  return apiFetch(
+    `/api/intel/sessions/${encodeURIComponent(sessionId)}/findings/${encodeURIComponent(findingId)}/ai-review`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+      signal,
+    }
+  );
+}
+
 export function getIntelSessionReportUrl(sessionId, format = "pdf") {
   return `/api/intel/sessions/${encodeURIComponent(sessionId)}/report?format=${format}`;
 }

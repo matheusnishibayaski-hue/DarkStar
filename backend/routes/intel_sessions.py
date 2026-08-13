@@ -14,6 +14,7 @@ from backend.executor.session_intel import (
     ingest_extracted_findings,
     list_session_summaries,
     load_session,
+    merge_session_finding_fields,
     patch_session_finding,
     session_summary,
     set_session_label,
@@ -158,6 +159,28 @@ def api_intel_session_finding_patch(
     if not finding:
         raise HTTPException(status_code=404, detail="Achado não encontrado.")
     return finding
+
+
+@router.post("/sessions/{session_id}/findings/{finding_id}/ai-review")
+def api_intel_finding_ai_review(session_id: str, finding_id: str):
+    """Segunda opinião LLM — não altera o status do achado."""
+    session_id = _validate_session_id(session_id)
+    fid = str(finding_id or "").strip()
+    if not fid or len(fid) > 160:
+        raise HTTPException(status_code=400, detail="Achado inválido.")
+    findings = aggregate_session_findings(session_id, sync=False)
+    finding = next((f for f in findings if str(f.get("id")) == fid), None)
+    if not finding:
+        raise HTTPException(status_code=404, detail="Achado não encontrado.")
+    cached = finding.get("ai_review")
+    if isinstance(cached, dict) and cached.get("source") == "llm":
+        return {"finding_id": fid, "ai_review": cached, "cached": True}
+    from backend.ai.fp_ai_review import review_finding
+
+    review = review_finding(finding)
+    if review.get("source") == "llm":
+        merge_session_finding_fields(session_id, fid, {"ai_review": review})
+    return {"finding_id": fid, "ai_review": review, "cached": False}
 
 
 @router.get("/sessions/{session_id}/triage-queue")

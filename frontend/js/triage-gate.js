@@ -1,6 +1,6 @@
 /** Modal de triagem antes do PDF — um achado por vez, linguagem simples. */
 
-import { patchSessionFinding, fetchIntelTriageQueue } from "./api/routes.js";
+import { patchSessionFinding, fetchIntelTriageQueue, fetchFindingAiReview } from "./api/routes.js";
 import { escapeHtml } from "./exec.js";
 import { openOverlay, closeOverlay } from "./ui.js";
 
@@ -13,6 +13,7 @@ let busy = false;
 let summaryData = {};
 let abortCtl = null;
 let loadGen = 0;
+let reviewGen = 0;
 
 export function initTriageGate({ toast } = {}) {
   toastFn = toast || toastFn;
@@ -132,6 +133,7 @@ function closeGate(proceed) {
   abortCtl?.abort();
   abortCtl = null;
   loadGen += 1;
+  reviewGen += 1;
   setSkipVisible(false);
   closeOverlay(document.getElementById("overlay-triage-gate"));
   const fn = resolveGate;
@@ -139,8 +141,84 @@ function closeGate(proceed) {
   fn?.(Boolean(proceed));
 }
 
-function itemsHtml(arr) {
-  return (arr || []).map((x) => `<li>${escapeHtml(String(x))}</li>`).join("");
+function verdictLabel(verdict) {
+  const v = String(verdict || "unsure");
+  if (v === "confirmed") return "Parece um problema real";
+  if (v === "false_positive") return "Parece alarme falso";
+  return "Ainda incerto";
+}
+
+function renderOpinionBlock(t) {
+  const sug = t.suggestion || "unsure";
+  const fp = Math.max(0, Math.min(100, Number(t.likely_fp) || 0));
+  const pro = itemsHtml(t.why_vulnerability);
+  const contra = itemsHtml([...(t.why_false_positive || []), ...(t.reasons || [])].slice(0, 5));
+  return `
+    <section class="triage-opinion triage-opinion--${escapeHtml(sug)}">
+      <h4>Opinião da Argus (automática)</h4>
+      <p class="triage-opinion-verdict">${escapeHtml(t.suggestion_label || verdictLabel(sug))}</p>
+      <p class="triage-opinion-meta">Chance de alarme falso: <strong>${fp}%</strong> — a decisão final é sua.</p>
+      ${pro ? `<p class="triage-block-lead">Por que pode ser real</p><ul>${pro}</ul>` : ""}
+      ${contra ? `<p class="triage-block-lead">Por que pode ser alarme falso</p><ul>${contra}</ul>` : ""}
+    </section>`;
+}
+
+function renderAiReviewHtml(review) {
+  if (!review) {
+    return `<p class="triage-ai-loading">Segunda leitura da IA…</p>`;
+  }
+  if (review.source === "unavailable" || review.error) {
+    return `<p class="triage-ai-miss">${escapeHtml(
+      review.error || "Segunda opinião indisponível. Use a opinião automática acima."
+    )}</p>`;
+  }
+  const reasons = itemsHtml(review.reasons);
+  const summary = review.summary ? `<p>${escapeHtml(review.summary)}</p>` : "";
+  return `
+    <p class="triage-opinion-verdict">${escapeHtml(verdictLabel(review.verdict))}</p>
+    <p class="triage-opinion-meta">Confiança da IA: <strong>${Number(review.confidence) || 0}%</strong></p>
+    ${summary}
+    ${reasons ? `<ul>${reasons}</ul>` : ""}
+    <p class="triage-opinion-note">Isto não marca o achado sozinho.</p>`;
+}
+
+function fillAiReview(review) {
+  const el = document.getElementById("triage-ai-review");
+  if (!el) return;
+  el.innerHTML = renderAiReviewHtml(review);
+}
+
+function requestAiReview(finding) {
+  const fid = String(finding?.id || "");
+  const cached = finding?.ai_review;
+  if (cached && cached.source === "llm") {
+    fillAiReview(cached);
+    return;
+  }
+  if (!sessionId || !fid) {
+    fillAiReview({ source: "unavailable", error: "Não foi possível pedir a segunda opinião agora." });
+    return;
+  }
+  const gen = ++reviewGen;
+  fillAiReview(null);
+  fetchFindingAiReview(sessionId, fid, abortCtl?.signal)
+    .then(async (res) => {
+      if (gen !== reviewGen) return;
+      if (!res.ok) throw new Error("falha");
+      const data = await res.json();
+      const review = data.ai_review || {};
+      if (queue[index] && String(queue[index].id) === fid) {
+        queue[index].ai_review = review;
+      }
+      fillAiReview(review);
+    })
+    .catch((e) => {
+      if (e?.name === "AbortError" || gen !== reviewGen) return;
+      fillAiReview({
+        source: "unavailable",
+        error: "Não foi possível pedir a segunda opinião agora.",
+      });
+    });
 }
 
 function sevTone(sev) {
@@ -271,9 +349,16 @@ function renderCard() {
       <ul>${whyFp || "<li>Scanners automáticos gritam fácil. Sem prova na evidência, não trate como ataque.</li>"}</ul>
     </section>
 
-    <section class="triage-block triage-block--steps">
+    <section class="triage-block">
       <h4>Como decidir (mesmo sem ser técnico)</h4>
       <ol>${steps || "<li>Se a evidência mostra o problema de forma clara no alvo autorizado, é real. Se não completou ou foi bloqueado, escolha incerto.</li>"}</ol>
+    </section>
+
+    ${renderOpinionBlock(t)}
+
+    <section class="triage-opinion triage-opinion--ai" id="triage-ai-box">
+      <h4>Segunda opinião (IA)</h4>
+      <div id="triage-ai-review">${renderAiReviewHtml(f.ai_review && f.ai_review.source === "llm" ? f.ai_review : null)}</div>
     </section>
 
     ${
@@ -302,6 +387,7 @@ function renderCard() {
       </button>
     </div>`;
   setSkipVisible(true);
+  requestAiReview(f);
 }
 
 async function applyStatus(status) {

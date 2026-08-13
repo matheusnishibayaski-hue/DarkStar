@@ -5,6 +5,7 @@ from __future__ import annotations
 import html
 from typing import Any
 
+from backend.ai.exec_digest import digest_execution
 from backend.ai.report_model import assemble_session_report
 from backend.deps import APP_VERSION
 
@@ -187,8 +188,11 @@ def generate_live_report_html(
   p, li {{ font-size:13px; line-height:1.55; }}
   .test {{ border:1px solid var(--line); padding:10px 12px; margin:0 0 10px; page-break-inside:avoid; }}
   .test .cmd {{ font-family:Consolas,monospace; font-size:11px; background:#f3f4f6; padding:6px 8px; overflow-x:auto; }}
+  .test ul {{ margin:6px 0 8px; padding-left:1.2rem; }}
+  .fail-why {{ color:var(--bad); font-size:12px; }}
   .out {{ font-family:Consolas,monospace; font-size:10.5px; white-space:pre-wrap; background:#0f172a; color:#e2e8f0;
-          padding:8px 10px; max-height:180px; overflow:auto; margin-top:8px; }}
+          padding:8px 10px; max-height:160px; overflow:auto; margin-top:8px; }}
+  details.test-log {{ margin-top:8px; font-size:12px; color:var(--muted); }}
   .ok {{ color:var(--ok); font-weight:700; }}
   .fail {{ color:var(--bad); font-weight:700; }}
   .finding {{ border-left:4px solid var(--accent); padding:8px 12px; margin:0 0 12px; background:#f8fafc; }}
@@ -307,18 +311,27 @@ def _render_tests(executions: list[dict[str, Any]]) -> str:
         return "<p>Nenhum comando executado ainda.</p>"
     parts: list[str] = []
     for i, ex in enumerate(executions[:60], 1):
-        ok = bool(ex.get("success"))
-        status = "OK" if ok else ("BLOQUEADO" if ex.get("blocked") else f"EXIT {ex.get('exit_code', '?')}")
-        cls = "ok" if ok else "fail"
-        cmd = _esc(ex.get("command") or "—")
-        reason = _esc(ex.get("reason") or "")
-        out = (ex.get("stdout") or ex.get("stderr") or "")[:4000]
-        tool = _esc(_tool_name(ex))
-        out_block = f"<div class='out'>{_esc(out)}</div>" if out.strip() else ""
+        d = digest_execution(ex)
+        cls = "ok" if d["status"] == "ok" else "fail"
+        bullets = "".join(f"<li>{_esc(b)}</li>" for b in d.get("bullets") or [])
+        fail = d.get("failure") or ""
+        reason = d.get("reason") or ""
+        log = d.get("log") or ""
+        log_block = (
+            f"<details class='test-log'><summary>Log limpo</summary>"
+            f"<div class='out'>{_esc(log)}</div></details>"
+            if log
+            else ""
+        )
         parts.append(
-            f"<div class='test'><h3>{i}. {tool} · <span class='{cls}'>{_esc(status)}</span></h3>"
-            f"{f'<p>{reason}</p>' if reason else ''}"
-            f"<div class='cmd'>{cmd}</div>{out_block}</div>"
+            f"<div class='test'><h3>{i}. {_esc(d['tool'])} · "
+            f"<span class='{cls}'>{_esc(d['status_label'])}</span></h3>"
+            f"<p>{_esc(d.get('headline') or '')}</p>"
+            f"{f'<p class=\"fail-why\">{_esc(fail)}</p>' if fail else ''}"
+            f"{f'<p class=\"note\">{_esc(reason)}</p>' if reason and reason != fail else ''}"
+            f"{f'<ul>{bullets}</ul>' if bullets else ''}"
+            f"<div class='cmd'>{_esc(d.get('command') or '—')}</div>"
+            f"{log_block}</div>"
         )
     return "".join(parts)
 

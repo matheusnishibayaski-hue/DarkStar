@@ -72,8 +72,9 @@ Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso po
 
 - candidato a vulnerabilidade passa por **verificação**
 - o que for fraco ou duvidoso **não entra** no resumo executivo automaticamente
-- **Baixar PDF** abre a **triagem**: um achado por vez, em português claro (o que é, analogia, impacto, como decidir)
-- a **prévia** e o **PDF** são o mesmo relatório: KPIs, gráficos de barras, achados explicados e plano de correção
+- **Baixar PDF** abre a **triagem**: um achado por vez, em português claro
+- em cada item: **opinião da Argus** (heurística imediata) + **segunda opinião da IA** (não marca sozinha)
+- a **prévia** e o **PDF** são o mesmo relatório: testes resumidos (sem ANSI), KPIs, gráficos, achados explicados e plano de correção
 - os dois trazem cobertura **indicativa ISO 27001 / SOC 2** (não é certificação)
 
 **Menos vergonha na frente do cliente. Mais confiança no PDF.**
@@ -82,7 +83,7 @@ Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso po
 
 | Situação | O que o DarkStar evita |
 |----------|------------------------|
-| **Scanner gritou “crítico!” e era bobagem** | O achado fica na fila para você olhar — não vai direto para o PDF executivo. |
+| **Scanner gritou “crítico!” e era bobagem** | O achado fica na fila; a Argus mostra chance de alarme falso e o motivo — você decide. |
 | **IA “achou” vulnerabilidade só no texto** | Sem evidência / PoC, não passa no filtro (gate). |
 | **Cliente pergunta “tem prova?”** | Você tem log, comando e classificação — não só opinião. |
 | **Retrabalho humilhante** | Menos “desculpa, era falso positivo” depois de enviar o relatório. |
@@ -158,8 +159,8 @@ Irresponsável? Não.
 - onboarding na primeira visita + tour guiado (**F1**)
 - barra de status: Docker, Kali, LLM e privilégio (perfil B / full)
 - painel de ferramentas, logs, mapa e dashboard — tudo da **conversa ativa**
-- **relatórios**: prévia HTML ao vivo (= PDF) + carteira dos alvos + PDFs salvos
-- triagem na hora do download (pendentes + suspeitos de FP), em linguagem leiga
+- **relatórios**: prévia HTML ao vivo (= PDF) — testes em linguagem clara, não dump de terminal
+- triagem na hora do download, com opinião automática + segunda leitura da IA
 - workspace por **cliente** (sidebar → CLIENTE) e agenda de reteste
 - **PILOTO** com básico / intermediário / completo / personalizado; **PARAR** cancela a missão
 - atalhos de teclado (Alt+P, Alt+T, Alt+R, Alt+N…)
@@ -173,7 +174,7 @@ Abre, pede, executa, revisa, entrega.
 | **Chegou agora e não conhece a tela** | Aperta **F1** — tour guiado. |
 | **Quer repetir o mesmo tipo de scan** | Fixa a tool no painel ou roda o Piloto. |
 | **Precisa provar o que rolou ontem** | Abre **relatórios** — prévia, PDFs salvos e carteira dos alvos. |
-| **Entrega amanhã** | Clica **Baixar PDF**, valida o que ainda está pendente, gera o arquivo. |
+| **Entrega amanhã** | Clica **Baixar PDF**, lê as duas opiniões, valida o que ainda está pendente, gera o arquivo. |
 | **Dois clientes no mesmo PC** | Sidebar → **CLIENTE**: troca o workspace; conversas e relatórios não se misturam. |
 | **Reteste periódico** | No Piloto, marque **repetir** e informe os dias. A missão de agora roda na hora; a seguinte entra sozinha. |
 | **Quer fluir sem mouse** | Atalhos: Piloto, tools, relatório, novo chat. |
@@ -209,8 +210,8 @@ Você manda. O sistema trabalha.
 - Pedir scans e enumerações em linguagem natural  
 - Rodar missão automática com o Piloto (e **PARAR** se precisar)  
 - Ver logs ao vivo e histórico completo  
-- Triar achados **antes** do PDF: *é um problema real* / *alarme falso* / *ainda não sei* (ou pular o resto)  
-- Ver a **prévia ao vivo** e baixar o **mesmo** PDF (8 seções, gráficos, correção detalhada, ISO/SOC 2 indicativo)  
+- Triar achados **antes** do PDF: *é um problema real* / *alarme falso* / *ainda não sei* (ou pular o resto), com opinião da Argus e segunda opinião da IA  
+- Ver a **prévia ao vivo** e baixar o **mesmo** PDF (testes resumidos, 8 seções, gráficos, correção, ISO/SOC 2 indicativo)  
 - Isolar workspaces por **cliente** (sidebar → CLIENTE: criar, trocar, excluir)  
 - Agendar reteste no Piloto (a cada N dias) ou via API (`monitor` / `remind` / `full`)  
 - Ver **delta** vs baseline e importar Nessus CSV / Nuclei JSONL (API)  
@@ -287,10 +288,13 @@ Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a 
 
 1. **Prévia HTML ao vivo** — o mesmo documento do PDF, atualizado com o chat.  
    KPIs (testes, achados, confirmados, FPs, risco) e gráficos de barras: risco residual, gravidade, triagem, ISO/SOC 2 indicativo, tipos de achado e ferramentas.  
+   **Testes realizados** vêm resumidos (ferramenta, OK/FALHA, uma frase, bullets). Sem código ANSI nem logo de scanner. Falha (wordlist ausente, alvo sem resposta, comando errado) aparece em português. O log limpo fica em detalhe.  
    Cada achado vem em linguagem simples (o que é, analogia, impacto) + evidência.  
    **Como corrigir** traz quem faz, por quê, passo a passo e como validar.  
 2. **Baixar PDF** — se ainda houver o que validar, abre o **modal de triagem** (um achado por vez, sem jargão).  
    - Fila: pendentes (`candidate` / `inconclusive`) **e** confirmados com heurística de falso positivo ≥ 55 (segunda olhada).  
+   - **Opinião da Argus (automática)** — veredito, chance de alarme falso (%) e motivos a favor/contra. Sai na hora; a decisão continua sendo sua.  
+   - **Segunda opinião (IA)** — pede no card visível (~8s), não atrasa a abertura da fila e **não marca** o achado sozinha. Se a IA falhar/offline, a heurística permanece.  
    - **É um problema real** · **É alarme falso** · **Ainda não sei** · **Pular o resto e gerar o PDF mesmo assim** · Cancelar (não baixa).  
    - No fim da fila o “pular” some: só **Gerar o PDF agora**.  
    - Fila vazia → PDF imediato. “Ainda não sei” vai para o **anexo**, fora do risco residual.  
@@ -408,7 +412,7 @@ A partir daí: Argus + Kali **só no seu PC**.
 3. Digite algo como:  
    *“faz um scan leve de portas em scanme.nmap.org”*  
 4. Ou clique **PILOTO** e deixe a missão rodar  
-5. Workspace → **relatórios**: veja a prévia (gráficos + achados) e clique **Baixar PDF** (a triagem abre se ainda houver o que validar)  
+5. Workspace → **relatórios**: veja a prévia (testes resumidos + gráficos) e clique **Baixar PDF** (a triagem mostra as duas opiniões se ainda houver o que validar)  
 6. (Opcional) Abas **dashboard** / **logs** / **mapa** · botão **PARAR** se a missão estiver rodando  
 7. (Opcional) Sidebar → **CLIENTE** para separar conversas por workspace  
 8. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
@@ -482,6 +486,8 @@ Lista completa comentada: [`.env.example`](.env.example)
 | Alertas não chegam | Configure o canal no `.env` e teste `/api/notifications/test/{channel}` |
 | API recusa POST | `OPERATOR_ROLE=viewer` só lê; use `analyst` ou `admin` |
 | PDF sem a sua marca | `CONSULTING_*` vale no PDF **comercial por alvo** (`/api/engagements/.../report`), não na prévia da conversa |
+| Segunda opinião da IA some | Chave OpenRouter / Ollama no **04 offline**; a opinião automática da Argus continua valendo |
+| PDF com códigos `[34m` / logo do nuclei | `Ctrl+F5` e gere o PDF de novo — testes agora saem resumidos e limpos |
 
 ---
 

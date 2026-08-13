@@ -2701,6 +2701,57 @@ html.mode-offensive .panel.crt-panel .panel-title-sub {
   transition: width 0.2s ease;
 }
 
+.triage-opinion {
+  margin: 0.85rem 0 1rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid rgba(127, 127, 127, 0.35);
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.triage-opinion h4 {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.triage-opinion-verdict {
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+.triage-opinion-meta,
+.triage-opinion-note {
+  font-size: 0.78rem;
+  opacity: 0.8;
+  margin: 0 0 0.45rem;
+}
+
+.triage-opinion ul {
+  margin: 0.2rem 0 0.55rem;
+  padding-left: 1.15rem;
+}
+
+.triage-opinion--confirmed {
+  border-color: rgba(74, 222, 128, 0.45);
+}
+
+.triage-opinion--false_positive {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+.triage-opinion--ai {
+  border-style: dashed;
+}
+
+.triage-ai-loading,
+.triage-ai-miss {
+  font-size: 0.82rem;
+  opacity: 0.8;
+  margin: 0;
+}
+
 .triage-gate-kicker {
   font-family: var(--mono);
   font-size: 0.72rem;
