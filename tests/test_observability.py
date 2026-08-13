@@ -99,7 +99,7 @@ class TestImportRegression(unittest.TestCase):
 
         self.assertTrue(hasattr(autopilot, "normalize_target"))
         self.assertTrue(hasattr(autopilot, "build_recon_context"))
-        self.assertTrue(hasattr(autopilot, "resolve_model"))
+        self.assertTrue(hasattr(autopilot, "get_llm_provider"))
         self.assertEqual(autopilot.normalize_target("Example.COM"), "example.com")
 
 

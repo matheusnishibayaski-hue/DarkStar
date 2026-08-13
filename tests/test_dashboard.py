@@ -36,6 +36,7 @@ class TestDashboardStore(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_save_history_metrics(self):
+        sid = "dash-sess-1"
         ok = db_mod.save_scan_result(
             {
                 "scan_id": "abc123",
@@ -47,6 +48,7 @@ class TestDashboardStore(unittest.TestCase):
                 "high": 1,
                 "medium": 0,
                 "low": 0,
+                "chat_session_id": sid,
                 "findings": [
                     {
                         "id": "1",
@@ -67,14 +69,14 @@ class TestDashboardStore(unittest.TestCase):
             }
         )
         self.assertTrue(ok)
-        hist = db_mod.get_scan_history(days=30)
+        hist = db_mod.get_scan_history(days=30, session_id=sid)
         self.assertGreaterEqual(len(hist), 1)
         self.assertEqual(hist[0]["target"], "lab.test")
-        metrics = db_mod.compute_metrics(days=30)
+        metrics = db_mod.compute_metrics(days=30, session_id=sid)
         self.assertGreaterEqual(metrics["total_scans"], 1)
-        tops = db_mod.get_top_issues(limit=5)
+        tops = db_mod.get_top_issues(limit=5, session_id=sid)
         self.assertTrue(any(t["title"] for t in tops))
-        trend = db_mod.vulnerability_trend(days=30)
+        trend = db_mod.vulnerability_trend(days=30, session_id=sid)
         self.assertTrue(isinstance(trend, list))
 
 
@@ -92,6 +94,7 @@ class TestDashboardRoutes(unittest.TestCase):
             ):
                 db_mod.reset_engine_for_tests()
                 db_mod.init_db()
+                sid = "dash-route-1"
                 db_mod.save_scan_result(
                     {
                         "scan_id": "route1",
@@ -104,17 +107,19 @@ class TestDashboardRoutes(unittest.TestCase):
                         "findings": [],
                         "status": "completed",
                         "scan_type": "test",
+                        "chat_session_id": sid,
                     }
                 )
                 from backend.main import app
 
                 client = TestClient(app)
-                r = client.get("/api/dashboard/metrics?days=30")
+                q = f"days=30&session_id={sid}"
+                r = client.get(f"/api/dashboard/metrics?{q}")
                 self.assertEqual(r.status_code, 200)
                 self.assertEqual(r.json()["status"], "ok")
-                r2 = client.get("/api/dashboard/scan-history?days=30")
+                r2 = client.get(f"/api/dashboard/scan-history?{q}")
                 self.assertEqual(r2.status_code, 200)
-                r3 = client.get("/api/dashboard/export?format=json&days=30")
+                r3 = client.get(f"/api/dashboard/export?format=json&{q}")
                 self.assertEqual(r3.status_code, 200)
             db_mod.reset_engine_for_tests()
 

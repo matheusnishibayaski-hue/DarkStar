@@ -1015,6 +1015,7 @@ class TestFinalCoveragePush(unittest.TestCase):
         from backend.executor import wifi_scan as ws
 
         with (
+            patch.object(ws.sys, "platform", "win32"),
             patch.object(
                 ws,
                 "_run_netsh",
@@ -1031,11 +1032,8 @@ class TestFinalCoveragePush(unittest.TestCase):
                 return_value=MagicMock(returncode=0, stdout="ok", stderr="e"),
             ),
             patch("backend.executor.wifi_scan.save_execution_log", return_value="id"),
-            patch("backend.executor.wifi_scan.sys.platform", "linux"),
+            patch.object(ws.sys, "platform", "linux"),
         ):
-            # call linux path if exists
-            if hasattr(ws, "execute_linux_wifi"):
-                pass
             r = ws.execute_host_wifi("wlan-scan", "r")
             self.assertTrue(hasattr(r, "stdout"))
 
@@ -1226,14 +1224,16 @@ class TestLastPercent(unittest.TestCase):
         boom_resource.getrusage = boom_getrusage  # type: ignore[attr-defined]
         boom_resource.RUSAGE_SELF = 0  # type: ignore[attr-defined]
 
+        fake_kernel32 = MagicMock()
+        fake_kernel32.GetCurrentProcess.return_value = 1
+        fake_psapi = MagicMock()
+        fake_psapi.GetProcessMemoryInfo.return_value = 1
+        fake_windll = MagicMock(kernel32=fake_kernel32, psapi=fake_psapi)
+
         with (
             patch.dict(sys.modules, {"psutil": boom_psutil, "resource": boom_resource}),
             patch("sys.platform", "win32"),
-            patch.object(
-                real_ctypes.windll.psapi,
-                "GetProcessMemoryInfo",
-                return_value=1,
-            ),
+            patch.object(real_ctypes, "windll", fake_windll, create=True),
         ):
             m = obs.get_metrics()
         self.assertIn("memory_mb", m)
