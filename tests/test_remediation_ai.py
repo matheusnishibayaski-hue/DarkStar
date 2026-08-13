@@ -33,7 +33,11 @@ class TestRemediationParseFallback(unittest.TestCase):
         plan = RemediationAdvisor().create_fallback_remediation(SAMPLE_FINDING)
         self.assertEqual(plan.source, "fallback")
         self.assertGreaterEqual(len(plan.steps), 2)
-        self.assertIn("HSTS", plan.steps[1].title + plan.steps[1].description)
+        blob = (plan.steps[1].title or "") + (plan.steps[1].description or "")
+        self.assertTrue(
+            "HSTS" in blob or "Strict-Transport-Security" in blob,
+            blob,
+        )
 
     def test_parse_json(self):
         raw = """

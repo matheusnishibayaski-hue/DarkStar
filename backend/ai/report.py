@@ -10,6 +10,13 @@ from backend.deps import APP_VERSION
 from backend.executor.files_store import list_output_files
 from backend.executor.recon_db import list_recon_summaries
 
+_PIPE_ESC = r"\|"
+
+
+def _md_cell(value: object, limit: int = 80) -> str:
+    """Escapa `|` fora de f-string (Python 3.11 não aceita backslash na expressão)."""
+    return str(value or "").replace("|", _PIPE_ESC).replace("\n", " ")[:limit]
+
 
 def _extract_vulnerabilities(tool_executions: list[dict]) -> list[dict]:
     vulns: list[dict] = []
@@ -249,8 +256,8 @@ def generate_report(
             if ex.get("success")
             else ("BLOQUEADO" if ex.get("blocked") else f"EXIT {ex.get('exit_code')}")
         )
-        cmd = ex.get("command", "").replace("|", "\\|")
-        reason = ex.get("reason", "").replace("|", "\\|")[:80]
+        cmd = _md_cell(ex.get("command", ""), 200)
+        reason = _md_cell(ex.get("reason", ""), 80)
         lines.append(f"| {i} | `{cmd}` | {status} | {reason} |")
 
     lines.extend(["", "---", "", "## 5. Achados Confirmados (executivo)", ""])
@@ -275,15 +282,15 @@ def generate_report(
                 ]
             )
             for f in executive[:40]:
-                ev = str(f.get("evidence") or "").replace("|", "\\|").replace("\n", " ")[:60]
+                ev = _md_cell(f.get("evidence"), 60)
                 epath = str(f.get("evidence_path") or "")[:40]
                 lines.append(
                     f"| {str(f.get('severity', '')).upper()} | "
-                    f"{str(f.get('title', '')).replace('|', '\\|')[:80]} | "
+                    f"{_md_cell(f.get('title'), 80)} | "
                     f"{f.get('cvss_score', '—')} | "
                     f"{f.get('confidence', '—')} | "
                     f"{f.get('effort', '—')} | "
-                    f"`{str(f.get('verify_command', '')).replace('|', '\\|')[:40]}` | "
+                    f"`{_md_cell(f.get('verify_command'), 40)}` | "
                     f"{epath or ev} |"
                 )
             lines.append("")
@@ -329,14 +336,13 @@ def generate_report(
                 ]
             )
             for f in human[:25]:
-                reason = (
-                    str(f.get("discard_reason") or f.get("evidence") or f.get("status") or "")
-                    .replace("|", "\\|")
-                    .replace("\n", " ")[:80]
+                reason = _md_cell(
+                    f.get("discard_reason") or f.get("evidence") or f.get("status") or "",
+                    80,
                 )
                 lines.append(
                     f"| {str(f.get('severity', '')).upper()} | "
-                    f"{str(f.get('title', '')).replace('|', '\\|')[:100]} | "
+                    f"{_md_cell(f.get('title'), 100)} | "
                     f"{f.get('status')} | {reason} |"
                 )
             lines.append("")
@@ -354,8 +360,8 @@ def generate_report(
             lines.extend(["| Severidade | Detalhe | Origem |", "|------------|---------|--------|"])
             for v in vulns[:50]:
                 lines.append(
-                    f"| {v['severity']} | {v['detail'].replace('|', '\\|')[:120]} | "
-                    f"`{v['source'].replace('|', '\\|')[:60]}` |"
+                    f"| {v['severity']} | {_md_cell(v['detail'], 120)} | "
+                    f"`{_md_cell(v['source'], 60)}` |"
                 )
         else:
             lines.append("*Nenhuma vulnerabilidade extraída dos logs.*")
@@ -395,14 +401,10 @@ def generate_report(
             if items:
                 lines.extend(["| Sev | Título | Motivo |", "|-----|--------|--------|"])
                 for f in items[:30]:
-                    reason = (
-                        str(f.get("discard_reason") or f.get("evidence") or "")
-                        .replace("|", "\\|")
-                        .replace("\n", " ")[:80]
-                    )
+                    reason = _md_cell(f.get("discard_reason") or f.get("evidence") or "", 80)
                     lines.append(
                         f"| {str(f.get('severity', '')).upper()} | "
-                        f"{str(f.get('title', '')).replace('|', '\\|')[:100]} | {reason} |"
+                        f"{_md_cell(f.get('title'), 100)} | {reason} |"
                     )
             else:
                 lines.append("*Nenhum.*")
@@ -520,7 +522,8 @@ def generate_report_html(
         elif line.startswith("- "):
             body_parts.append(f"<li>{_inline_md(line[2:])}</li>")
         elif re.match(r"^\d+\.\s", line):
-            body_parts.append(f"<li>{_inline_md(re.sub(r'^\d+\.\s', '', line))}</li>")
+            numbered = re.sub(r"^\d+\.\s", "", line)
+            body_parts.append(f"<li>{_inline_md(numbered)}</li>")
         elif line.strip() == "---":
             body_parts.append("<hr/>")
         elif line.strip() == "":
