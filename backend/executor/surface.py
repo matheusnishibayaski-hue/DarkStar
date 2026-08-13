@@ -306,7 +306,7 @@ def _canonical_finding_key(
 
 
 def _finding_id_from_key(key: str) -> str:
-    return hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+    return hashlib.sha256(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
 
 
 def _merge_finding(existing: dict[str, Any], incoming: dict[str, Any]) -> None:

@@ -92,13 +92,21 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="DarkStar", version=APP_VERSION, lifespan=lifespan)
 
-_cors_allow_all = "*" in CORS_ORIGINS
+_cors_origins = [origin for origin in CORS_ORIGINS if origin != "*"]
+if not _cors_origins:
+    _cors_origins = ["http://127.0.0.1:8000", "http://localhost:8000"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if _cors_allow_all else CORS_ORIGINS,
-    allow_credentials=not _cors_allow_all,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type",
+        "X-Chat-Token",
+        "X-Request-ID",
+        "X-DarkStar-Privilege",
+    ],
 )
 app.middleware("http")(request_context_guard)
 app.middleware("http")(privilege_guard)

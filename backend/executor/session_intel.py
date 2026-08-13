@@ -277,7 +277,7 @@ def backfill_session_findings_from_client(
         for t in targets:
             touch_session(session_id, t)
 
-        digest = hashlib.sha1(  # noqa: S324
+        digest = hashlib.sha256(
             f"{session_id}:{cmd}:{idx}".encode(), usedforsecurity=False
         ).hexdigest()[:12]
         fid = f"exec-client-{digest}"
