@@ -79,6 +79,25 @@ def normalize_severity(finding: dict[str, Any]) -> str:
     return inferred or "info"
 
 
+_KIND_REFS = {
+    "xss": ("CWE-79", "A03:2021 Injection"),
+    "sqli": ("CWE-89", "A03:2021 Injection"),
+    "rce": ("CWE-94", "A03:2021 Injection"),
+    "lfi": ("CWE-22", "A01:2021 Broken Access Control"),
+    "ssti": ("CWE-1336", "A03:2021 Injection"),
+    "cve": ("CWE-1395", "A06:2021 Vulnerable Components"),
+    "hsts": ("CWE-319", "A02:2021 Cryptographic Failures"),
+    "clickjack": ("CWE-1021", "A05:2021 Security Misconfiguration"),
+    "csp": ("CWE-693", "A05:2021 Security Misconfiguration"),
+    "nosniff": ("CWE-16", "A05:2021 Security Misconfiguration"),
+    "ssl": ("CWE-295", "A02:2021 Cryptographic Failures"),
+    "port": ("CWE-200", "A05:2021 Security Misconfiguration"),
+    "scan_summary": ("", ""),
+    "exposure": ("CWE-200", "A01:2021 Broken Access Control"),
+    "wordpress": ("CWE-1104", "A06:2021 Vulnerable Components"),
+    "generic": ("", ""),
+}
+
 _KIND_LABEL = {
     "xss": "XSS (script na página)",
     "sqli": "SQL injection",
@@ -101,6 +120,18 @@ _KIND_LABEL = {
 _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
 
 
+def finding_refs(finding: dict[str, Any]) -> dict[str, str]:
+    """CWE / OWASP a partir do kind (ou campos já presentes)."""
+    from backend.ai.fp_explain import detect_finding_kind
+
+    kind = str(finding.get("kind") or detect_finding_kind(finding) or "generic")
+    mapped_cwe, mapped_owasp = _KIND_REFS.get(kind, ("", ""))
+    return {
+        "cwe": str(finding.get("cwe") or mapped_cwe),
+        "owasp": str(finding.get("owasp") or mapped_owasp),
+    }
+
+
 def enrich_finding(finding: dict[str, Any]) -> dict[str, Any]:
     from backend.ai.fp_explain import _plain_title, detect_finding_kind, explain_false_positive
 
@@ -109,6 +140,9 @@ def enrich_finding(finding: dict[str, Any]) -> dict[str, Any]:
     sev = normalize_severity(row)
     row["kind"] = kind
     row["kind_label"] = _KIND_LABEL.get(kind, kind)
+    refs = finding_refs({**row, "kind": kind})
+    row["cwe"] = refs["cwe"]
+    row["owasp"] = refs["owasp"]
     row["severity"] = sev
     row["severity_label"] = _SEV_LABEL.get(sev, sev)
     row["plain_title"] = _plain_title(row, kind)

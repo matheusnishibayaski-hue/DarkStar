@@ -49,6 +49,7 @@
         <div class="client-workspace" id="client-workspace">
           <select id="client-workspace-select" class="client-workspace-select" title="Workspace do cliente" aria-label="Cliente ativo"></select>
           <button type="button" class="client-workspace-new" id="client-workspace-new" title="Novo cliente">+</button>
+          <button type="button" class="client-workspace-edit" id="client-workspace-edit" title="Editar escopo do cliente ativo">✎</button>
           <button type="button" class="client-workspace-del" id="client-workspace-del" title="Excluir cliente ativo">×</button>
         </div>
 
@@ -153,6 +154,7 @@
           <button type="button" class="workspace-tab" data-ws-tab="report">relatórios</button>
           <button type="button" class="workspace-tab" data-ws-tab="mapa">mapa</button>
           <button type="button" class="workspace-tab" data-ws-tab="dashboard">dashboard</button>
+          <button type="button" class="workspace-tab" data-ws-tab="triage">triagem</button>
         </nav>
         <div class="workspace-panels">
           <div class="workspace-panel active" data-ws-panel="tools" id="ws-panel-tools">
@@ -249,6 +251,12 @@
                 <button type="button" class="term-btn" data-export="pdf">Export PDF</button>
               </div>
             </div>
+          </div>
+          <div class="workspace-panel" data-ws-panel="triage" id="ws-panel-triage" hidden>
+            <div class="workspace-panel-toolbar">
+              <p class="panel-callout" id="workspace-triage-meta">achados desta conversa</p>
+            </div>
+            <div class="workspace-panel-body" id="workspace-triage-body"></div>
           </div>
         </div>
       </section>
@@ -426,16 +434,26 @@
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main" id="client-new-title">Novo cliente</span>
-          <span class="panel-title-sub">nome do workspace</span>
+          <span class="panel-title-sub" id="client-new-sub">nome, contrato e alvos do ROE</span>
         </div>
         <button type="button" class="panel-close" id="client-new-cancel" aria-label="Fechar">×</button>
       </div>
       <div class="panel-body autopilot-form">
         <form id="client-new-form" autocomplete="off">
+          <input type="hidden" id="client-edit-id" value="" />
           <div class="form-field">
             <label class="autopilot-label" for="client-new-name">NOME</label>
             <input type="text" id="client-new-name" class="panel-field autopilot-input" placeholder="Ex.: Empresa de Teste" spellcheck="true" maxlength="200" required />
           </div>
+          <div class="form-field">
+            <label class="autopilot-label" for="client-new-contract">CONTRATO (opcional)</label>
+            <input type="text" id="client-new-contract" class="panel-field autopilot-input" placeholder="Ex.: ROE-2026-014" spellcheck="false" maxlength="80" />
+          </div>
+          <div class="form-field">
+            <label class="autopilot-label" for="client-new-targets">ALVOS AUTORIZADOS (opcional)</label>
+            <input type="text" id="client-new-targets" class="panel-field autopilot-input" placeholder="scanme.nmap.org, 10.0.0.5" spellcheck="false" />
+          </div>
+          <p class="panel-callout" id="client-new-hint">Vazio = usa ALLOWED_TARGETS do .env. Preenchido = só estes alvos neste cliente.</p>
           <button type="submit" class="autopilot-start" id="client-new-submit">Criar</button>
         </form>
       </div>
@@ -486,6 +504,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/main.js?v=76"></script>
+  <script type="module" src="/static/js/main.js?v=77"></script>
 </body>
 </html>

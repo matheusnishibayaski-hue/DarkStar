@@ -124,15 +124,44 @@ async function activateClient(clientId) {
   }
 }
 
+function parseTargetsCsv(raw) {
+  return String(raw || "")
+    .split(/[,;\s]+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function fillClientForm(client) {
+  const name = document.getElementById("client-new-name");
+  const contract = document.getElementById("client-new-contract");
+  const targets = document.getElementById("client-new-targets");
+  const editId = document.getElementById("client-edit-id");
+  const title = document.getElementById("client-new-title");
+  const submit = document.getElementById("client-new-submit");
+  if (name) name.value = client?.display_name || "";
+  if (contract) contract.value = client?.contract_id || "";
+  if (targets) targets.value = (client?.allowed_targets || []).join(", ");
+  if (editId) editId.value = client?.client_id || "";
+  if (title) title.textContent = client?.client_id ? "Editar cliente" : "Novo cliente";
+  if (submit) submit.textContent = client?.client_id ? "Salvar" : "Criar";
+}
+
 function openCreateModal() {
   const overlay = document.getElementById("overlay-client-new");
-  const input = document.getElementById("client-new-name");
   if (!overlay) return;
+  fillClientForm(null);
   overlay.hidden = false;
-  if (input) {
-    input.value = "";
-    requestAnimationFrame(() => input.focus());
-  }
+  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
+}
+
+function openEditModal() {
+  const overlay = document.getElementById("overlay-client-new");
+  if (!overlay) return;
+  const current =
+    clientsCache.find((c) => c.client_id === activeClientId) || { client_id: activeClientId };
+  fillClientForm(current);
+  overlay.hidden = false;
+  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
 }
 
 function closeCreateModal() {
@@ -147,16 +176,36 @@ async function submitCreateClient(nameRaw) {
     toast("Informe o nome do cliente", "err");
     return;
   }
-  const id = uniqueSlug(nameToSlug(name));
+  const editId = (document.getElementById("client-edit-id")?.value || "").trim();
+  const contract = (document.getElementById("client-new-contract")?.value || "").trim();
+  const allowedTargets = parseTargetsCsv(document.getElementById("client-new-targets")?.value);
   createInFlight = true;
   const submitBtn = document.getElementById("client-new-submit");
   if (submitBtn) submitBtn.disabled = true;
   try {
+    if (editId) {
+      const res = await apiFetch(`/api/clients/${encodeURIComponent(editId)}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          display_name: name.slice(0, 200),
+          contract_id: contract.slice(0, 80),
+          allowed_targets: allowedTargets,
+        }),
+      });
+      await parseJson(res);
+      closeCreateModal();
+      toast("Cliente atualizado", "ok");
+      await loadClients();
+      return;
+    }
+    const id = uniqueSlug(nameToSlug(name));
     const res = await apiFetch("/api/clients", {
       method: "POST",
       body: JSON.stringify({
         client_id: id,
         display_name: name.slice(0, 200),
+        contract_id: contract.slice(0, 80),
+        allowed_targets: allowedTargets,
       }),
     });
     if (res.status === 409) {
@@ -172,7 +221,7 @@ async function submitCreateClient(nameRaw) {
     await loadClients();
     await activateClient(id);
   } catch (err) {
-    toast(err.message || "Falha ao criar cliente", "err");
+    toast(err.message || "Falha ao salvar cliente", "err");
   } finally {
     createInFlight = false;
     if (submitBtn) submitBtn.disabled = false;
@@ -189,12 +238,12 @@ async function deleteClient() {
   const label =
     clientsCache.find((c) => c.client_id === id)?.display_name || id;
   const purge = confirm(
-    `Excluir o cliente "${label}"?\n\nOK = apaga workspace e engajamentos\nCancelar = aborta`
+    `Excluir o cliente "${label}"?\n\nOK = apaga workspace, recon, chats, PDFs, agenda e auditoria com este cliente.\nEventos antigos sem client_id no audit não são apagados.\nCancelar = aborta`
   );
   if (!purge) return;
   try {
     const res = await apiFetch(
-      `/api/clients/${encodeURIComponent(id)}?purge_surfaces=true`,
+      `/api/clients/${encodeURIComponent(id)}?erase=all`,
       { method: "DELETE" }
     );
     // 404 = já não existe — limpa UI do mesmo jeito
@@ -220,6 +269,7 @@ async function deleteClient() {
 export function initClientWorkspace() {
   const sel = document.getElementById("client-workspace-select");
   const btn = document.getElementById("client-workspace-new");
+  const edit = document.getElementById("client-workspace-edit");
   const del = document.getElementById("client-workspace-del");
   const overlay = document.getElementById("overlay-client-new");
   const form = document.getElementById("client-new-form");
@@ -230,6 +280,9 @@ export function initClientWorkspace() {
   }
   if (btn) {
     btn.addEventListener("click", () => openCreateModal());
+  }
+  if (edit) {
+    edit.addEventListener("click", () => openEditModal());
   }
   if (del) {
     del.addEventListener("click", () => deleteClient());

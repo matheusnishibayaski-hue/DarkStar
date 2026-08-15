@@ -21,8 +21,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from backend.config import ALLOWED_TARGETS, ALLOWED_TOOLS, MCP_ENABLED, TOOL_CATEGORIES
+from backend.config import ALLOWED_TOOLS, MCP_ENABLED, TOOL_CATEGORIES
 from backend.deps import APP_VERSION
+from backend.security.scope import scope_lock_enabled
 
 MCP_PROTOCOL_VERSION = "2024-11-05"
 SERVER_NAME = "chat-ia-kali-mcp"
@@ -37,7 +38,7 @@ def server_info() -> dict[str, Any]:
         "version": APP_VERSION,
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "enabled": MCP_ENABLED,
-        "scope_lock_enabled": bool(ALLOWED_TARGETS),
+        "scope_lock_enabled": scope_lock_enabled(),
         "capabilities": {"tools": {}, "resources": {}},
     }
 

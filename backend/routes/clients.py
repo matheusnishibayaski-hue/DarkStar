@@ -29,6 +29,8 @@ class ClientCreateRequest(BaseModel):
     consulting_logo_path: str = Field(default="", max_length=500)
     consulting_color: str = Field(default="", max_length=32)
     consulting_footer: str = Field(default="", max_length=500)
+    allowed_targets: list[str] = Field(default_factory=list)
+    contract_id: str = Field(default="", max_length=80)
 
 
 class ClientPatchRequest(BaseModel):
@@ -37,6 +39,8 @@ class ClientPatchRequest(BaseModel):
     consulting_logo_path: str | None = Field(default=None, max_length=500)
     consulting_color: str | None = Field(default=None, max_length=32)
     consulting_footer: str | None = Field(default=None, max_length=500)
+    allowed_targets: list[str] | None = None
+    contract_id: str | None = Field(default=None, max_length=80)
 
 
 @router.get("/clients")
@@ -80,6 +84,8 @@ def api_clients_create(req: ClientCreateRequest):
             consulting_logo_path=req.consulting_logo_path,
             consulting_color=req.consulting_color,
             consulting_footer=req.consulting_footer,
+            allowed_targets=req.allowed_targets,
+            contract_id=req.contract_id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -108,6 +114,8 @@ def api_clients_patch(client_id: str, req: ClientPatchRequest):
             consulting_logo_path=req.consulting_logo_path,
             consulting_color=req.consulting_color,
             consulting_footer=req.consulting_footer,
+            allowed_targets=req.allowed_targets,
+            contract_id=req.contract_id,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -131,10 +139,19 @@ def api_clients_delete(
         default=False,
         description="Se true, apaga também os engajamentos/surfaces do cliente.",
     ),
+    erase: str | None = Query(
+        default=None,
+        description="Use erase=all para wipe LGPD (surfaces, recon, chats, PDFs, agenda, audit).",
+    ),
 ):
     """Exclui workspace do cliente (não permite apagar `default`)."""
+    erase_all = (erase or "").strip().lower() == "all"
     try:
-        return delete_client(client_id, purge_surfaces=purge_surfaces)
+        return delete_client(
+            client_id,
+            purge_surfaces=purge_surfaces or erase_all,
+            erase_all=erase_all,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except FileNotFoundError as exc:

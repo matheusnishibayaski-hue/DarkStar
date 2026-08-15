@@ -33,7 +33,11 @@ from backend.config import (
     TOOL_CATEGORIES,
 )
 from backend.deps import APP_VERSION
-from backend.security.scope import scope_lock_enabled, validate_autonomous_target
+from backend.security.scope import (
+    effective_allowed_targets,
+    scope_lock_enabled,
+    validate_autonomous_target,
+)
 
 
 class CLIConfig:
@@ -474,10 +478,12 @@ def _check_ai() -> dict[str, Any]:
 
 
 def _check_config() -> dict[str, Any]:
+    allowed = effective_allowed_targets()
+    env_n = len(ALLOWED_TARGETS)
     if scope_lock_enabled():
-        msg = f"Scope lock ON ({len(ALLOWED_TARGETS)} target(s))"
+        msg = f"Scope lock ON ({len(allowed)} target(s))"
     else:
-        msg = "Scope: unrestricted (ALLOWED_TARGETS empty)"
+        msg = f"Scope: unrestricted (cliente e ALLOWED_TARGETS vazios, env={env_n})"
     return {"status": "ok", "message": msg}
 
 

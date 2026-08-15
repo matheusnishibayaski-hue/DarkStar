@@ -288,6 +288,7 @@ html.mode-offensive .spine-meta {
 }
 
 .client-workspace-new,
+.client-workspace-edit,
 .client-workspace-del {
   flex: 0 0 2rem;
   border: 1px solid var(--paper);
@@ -305,6 +306,7 @@ html.mode-offensive .spine-meta {
 }
 
 .client-workspace-new:hover,
+.client-workspace-edit:hover,
 .client-workspace-del:hover:not(:disabled),
 .client-workspace-select:hover {
   background: var(--paper);
@@ -521,6 +523,44 @@ html.mode-offensive .spine-meta {
   color: #000000;
   border-color: #ffffff;
   background: #ffffff;
+}
+
+.ws-triage-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 0.65rem;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.ws-triage-title {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.ws-triage-meta-line {
+  margin: 0 0 0.55rem;
+  font-size: 0.82rem;
+  opacity: 0.75;
+}
+
+.ws-triage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ws-triage-status {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.ws-triage-status.active {
+  background: #ffffff;
+  color: #000000;
 }
 
 .workspace-panels {

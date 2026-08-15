@@ -6,5 +6,7 @@
   "consulting_color": "#1E90FF",
   "consulting_footer": "",
   "created_at": "2026-08-12T20:27:20.962034+00:00",
-  "updated_at": "2026-08-12T20:27:20.962079+00:00"
+  "updated_at": "2026-08-12T20:27:20.962079+00:00",
+  "allowed_targets": [],
+  "contract_id": ""
 }

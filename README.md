@@ -449,7 +449,7 @@ Ctrl+Shift+T / P / E / N são alternativas. **Enter** envia; **↑** / **↓** n
 | O que | Para quê |
 |-------|----------|
 | `OPENROUTER_API_KEY` | IA na nuvem (modo online) |
-| `ALLOWED_TARGETS` | Só esses alvos podem ser testados |
+| `ALLOWED_TARGETS` | Trava global de alvos; se o cliente ativo tiver `allowed_targets`, essa lista prevalece |
 | `CHAT_API_TOKEN` | Protege a API local |
 | `MASTER_KEY` | Libera perfil completo / offensive |
 | `AI_PROVIDER=ollama` | Começa já em modo local |

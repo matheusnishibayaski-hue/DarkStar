@@ -316,6 +316,85 @@ def _append_triage_annex(story, fp, pending, h2, body) -> None:
     story.append(Spacer(1, 0.25 * cm))
 
 
+def _roe_context(surface: dict[str, Any] | None) -> dict[str, Any]:
+    cid = ""
+    if surface:
+        cid = str(surface.get("client_id") or "")
+    if not cid:
+        try:
+            from backend.clients.runtime import get_active_client_id
+
+            cid = get_active_client_id()
+        except Exception:  # noqa: BLE001
+            cid = ""
+    meta: dict[str, Any] = {}
+    if cid:
+        try:
+            from backend.clients.store import get_client
+
+            meta = get_client(cid) or {}
+        except Exception:  # noqa: BLE001
+            meta = {}
+    try:
+        from backend.security.scope import effective_allowed_targets, scope_source
+
+        allowed = sorted(effective_allowed_targets(cid or None))
+        source = scope_source(cid or None)
+    except Exception:  # noqa: BLE001
+        allowed = []
+        source = ""
+    return {
+        "client_id": cid,
+        "display_name": str(meta.get("display_name") or cid or "—"),
+        "contract_id": str(meta.get("contract_id") or ""),
+        "allowed": allowed,
+        "source": source,
+    }
+
+
+def _append_roe_page(
+    story, roe: dict[str, Any], primary, header_bg, styles_extra, h2, body
+) -> None:
+    from reportlab.lib.units import cm
+    from reportlab.platypus import PageBreak, Paragraph, Spacer
+
+    story.extend(
+        _section_banner(
+            "00  ·  Regras de Engajamento (ROE)",
+            "Alvos autorizados e contrato deste workspace",
+            primary,
+            header_bg,
+            styles_extra,
+        )
+    )
+    story.append(Paragraph("Escopo autorizado", h2))
+    allowed = roe.get("allowed") or []
+    source = str(roe.get("source") or "")
+    source_label = (
+        "cliente ativo"
+        if source == "cliente"
+        else (".env (ALLOWED_TARGETS)" if source == "ALLOWED_TARGETS" else "sem trava (lab)")
+    )
+    rows = [
+        ["Cliente", str(roe.get("display_name") or "—")],
+        ["Workspace", str(roe.get("client_id") or "—")],
+        ["Contrato", str(roe.get("contract_id") or "—")],
+        ["Fonte do escopo", source_label],
+        ["Alvos autorizados", ", ".join(allowed[:20]) if allowed else "sem lista — lab"],
+    ]
+    story.append(_meta_table(rows, primary, header_bg))
+    story.append(Spacer(1, 0.35 * cm))
+    story.append(
+        Paragraph(
+            "Este relatório cobre apenas os alvos autorizados no ROE do cliente ou, "
+            "na ausência de lista no workspace, a trava ALLOWED_TARGETS do ambiente. "
+            "Distribuição restrita às partes autorizadas do engajamento.",
+            body,
+        )
+    )
+    story.append(PageBreak())
+
+
 def _bar_drawing(
     rows: list[tuple[str, int, str]],
     width: float = 460,
@@ -592,6 +671,7 @@ def _pdf_from_session_model(
             Paragraph(
                 f"{_pdf_text(sev_l)} · {_pdf_text(status)} · "
                 f"{_pdf_text(f.get('kind_label') or '—')} · "
+                f"{_pdf_text(f.get('cwe') or '—')} · {_pdf_text(f.get('owasp') or '—')} · "
                 f"{_pdf_text(f.get('tool') or '—')} · {_pdf_text(host)}",
                 small,
             ),
@@ -1000,6 +1080,15 @@ def generate_report_pdf(
         )
     )
     story.append(PageBreak())
+    _append_roe_page(
+        story,
+        _roe_context(surface),
+        primary,
+        header_bg,
+        styles_extra,
+        h2,
+        body,
+    )
 
     # ========== PARTE A — SUMÁRIO EXECUTIVO ==========
     story.extend(
@@ -1229,16 +1318,22 @@ def generate_report_pdf(
             story.append(Paragraph("<i>Nenhum achado nesta faixa.</i>", body))
             story.append(Spacer(1, 0.2 * cm))
             continue
-        rows = [["Título", "Classificação", "CVE / Tool", "Alvo"]]
+        rows = [["Título", "Classificação", "CWE / OWASP", "Alvo"]]
         for f in items:
+            from backend.ai.report_model import finding_refs
+
             status = _STATUS_LABELS.get(str(f.get("status") or ""), "Pendente")
             host = str(f.get("surface_target") or f.get("host") or "—")[:40]
-            cve_tool = str(f.get("cve") or f.get("tool") or "—")[:40]
+            refs = finding_refs(f)
+            cwe_owasp = (
+                " · ".join(x for x in (refs.get("cwe"), refs.get("owasp")) if x)
+                or (str(f.get("cve") or f.get("tool") or "—")[:40])
+            )
             rows.append(
                 [
                     _pdf_text(f.get("title") or "—")[:120],
                     status,
-                    _pdf_text(cve_tool),
+                    _pdf_text(cwe_owasp)[:48],
                     _pdf_text(host)[:40],
                 ]
             )

@@ -1,0 +1,16 @@
+{
+  "id": "rep1",
+  "target": "t.test",
+  "scan_profile": "basic",
+  "custom_tools": [
+    "nmap"
+  ],
+  "chat_session_id": "s",
+  "risk_profile": "passive",
+  "job_type": "repeat",
+  "last_status": "running",
+  "last_error": "",
+  "client_id": "default",
+  "next_run_at": "",
+  "updated_at": "2026-08-15T02:19:13.247002+00:00"
+}

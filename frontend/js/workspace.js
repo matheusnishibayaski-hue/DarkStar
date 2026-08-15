@@ -10,12 +10,13 @@ import { openSessionReportModal } from "./session-report-modal.js";
 import { refreshPortfolio } from "./portfolio.js";
 import { refreshDashboard } from "./dashboard.js";
 import { refreshSessionMap } from "./threatmap.js";
+import { initWorkspaceTriage, refreshWorkspaceTriage } from "./workspace-triage.js";
 import { dismissSidebarDrawer } from "./ui.js";
 
 let open = false;
 let activeTab = "tools";
 
-const TABS = ["tools", "logs", "report", "mapa", "dashboard"];
+const TABS = ["tools", "logs", "report", "mapa", "dashboard", "triage"];
 const TAB_ALIAS = { carteira: "report" };
 
 export function isWorkspaceOpen() {
@@ -28,6 +29,7 @@ export function initWorkspace() {
     dismissSidebarDrawer();
   });
   document.getElementById("workspace-back")?.addEventListener("click", () => closeWorkspace());
+  initWorkspaceTriage();
   document.getElementById("workspace-tabs")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-ws-tab]");
     if (!btn) return;
@@ -111,6 +113,9 @@ async function loadTab(tab) {
       break;
     case "dashboard":
       await refreshDashboard();
+      break;
+    case "triage":
+      await refreshWorkspaceTriage();
       break;
     default:
       break;

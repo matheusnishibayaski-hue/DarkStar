@@ -241,7 +241,7 @@ function updateScopeBanner() {
     banner.innerHTML = `
       <div class="health-banner-body">
         <strong class="health-banner-title">// AVISO: escopo aberto</strong>
-        <p class="health-banner-text">Defina <code>ALLOWED_TARGETS</code> no <code>.env</code> para restringir scans a alvos autorizados. Sem isso, qualquer alvo pode ser usado — apenas em lab com permissão.</p>
+        <p class="health-banner-text">Defina alvos no cliente ativo (sidebar) ou <code>ALLOWED_TARGETS</code> no <code>.env</code>. Sem lista, qualquer alvo pode ser usado — apenas em lab com permissão.</p>
       </div>
     `;
   } else {

@@ -41,12 +41,33 @@ def _audit_path(date: datetime | None = None) -> Path:
     return AUDIT_DIR / f"events-{dt.strftime('%Y-%m-%d')}.jsonl"
 
 
+def _client_audit_stamp() -> dict[str, str]:
+    try:
+        from backend.clients.runtime import get_active_client_id
+        from backend.clients.store import get_client
+
+        cid = get_active_client_id()
+        meta = get_client(cid) or {}
+        return {
+            "client_id": cid or "",
+            "contract_id": str(meta.get("contract_id") or "")[:80],
+        }
+    except Exception:  # noqa: BLE001
+        return {"client_id": "", "contract_id": ""}
+
+
 def record_event(event_type: str, payload: dict[str, Any]) -> None:
+    stamp = _client_audit_stamp()
+    merged = dict(payload)
+    if not merged.get("client_id"):
+        merged["client_id"] = stamp["client_id"]
+    if "contract_id" not in merged:
+        merged["contract_id"] = stamp["contract_id"]
     entry = _redact(
         {
             "ts": datetime.now(timezone.utc).isoformat(),
             "event": event_type,
-            **payload,
+            **merged,
         }
     )
     path = _audit_path()
@@ -66,6 +87,9 @@ def record_tool_execution(
     mission_id: str | None = None,
     reason: str = "",
     client_ip: str | None = None,
+    client_id: str = "",
+    contract_id: str = "",
+    session_id: str = "",
 ) -> None:
     record_event(
         "tool_execution",
@@ -80,6 +104,9 @@ def record_tool_execution(
             "log_file_id": log_file_id,
             "reason": reason[:200] if reason else "",
             "client_ip": client_ip or "",
+            "client_id": client_id or "",
+            "contract_id": contract_id or "",
+            "session_id": session_id or "",
         },
     )
 
@@ -138,6 +165,39 @@ def remove_entries_by_log_id(log_id: str) -> int:
                 kept.append(raw)
                 continue
             if str(obj.get("log_file_id") or "") == log_id:
+                file_removed += 1
+            else:
+                kept.append(raw)
+        if file_removed:
+            path.write_text(
+                ("\n".join(kept) + "\n") if kept else "",
+                encoding="utf-8",
+            )
+            removed += file_removed
+    return removed
+
+
+def remove_entries_by_client_id(client_id: str) -> int:
+    """Remove linhas de auditoria com este client_id (LGPD). Eventos sem o campo ficam."""
+    cid = (client_id or "").strip()
+    if not cid or cid == "default":
+        return 0
+    removed = 0
+    for path in sorted(AUDIT_DIR.glob("events-*.jsonl")):
+        if not path.is_file():
+            continue
+        kept: list[str] = []
+        file_removed = 0
+        for line in path.read_text(encoding="utf-8").splitlines():
+            raw = line.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+            except json.JSONDecodeError:
+                kept.append(raw)
+                continue
+            if str(obj.get("client_id") or "") == cid:
                 file_removed += 1
             else:
                 kept.append(raw)

@@ -101,8 +101,20 @@ def _audit_result(
     args: list[str],
     reason: str,
     mission_id: str | None = None,
+    session_id: str | None = None,
 ) -> None:
     targets = extract_targets(" ".join(args)) if args else []
+    client_id = ""
+    contract_id = ""
+    try:
+        from backend.clients.runtime import get_active_client_id
+        from backend.clients.store import get_client
+
+        client_id = get_active_client_id()
+        contract_id = str((get_client(client_id) or {}).get("contract_id") or "")
+    except Exception:  # noqa: BLE001
+        client_id = ""
+        contract_id = ""
     record_tool_execution(
         command=result.command,
         tool=result.tool,
@@ -114,6 +126,9 @@ def _audit_result(
         mission_id=mission_id,
         reason=reason,
         client_ip=get_client_ip() or None,
+        client_id=client_id,
+        contract_id=contract_id,
+        session_id=session_id or "",
     )
 
 
@@ -146,7 +161,7 @@ def _finalize_stream_result(
             blocked=result.blocked,
         )
         hub.cleanup(execution_id)
-    _audit_result(result, args, reason, mission_id)
+    _audit_result(result, args, reason, mission_id, session_id=chat_session_id)
     return {"type": "done", "result": result}
 
 

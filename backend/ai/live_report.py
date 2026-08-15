@@ -382,6 +382,13 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
         decide = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("how_to_decide") or [])[:4])
         kind = _esc(f.get("kind_label") or "")
         kind_html = f"<span class='tag'>{kind}</span>" if kind else ""
+        cwe = _esc(f.get("cwe") or "")
+        owasp = _esc(f.get("owasp") or "")
+        refs_html = ""
+        if cwe:
+            refs_html += f"<span class='tag'>{cwe}</span>"
+        if owasp:
+            refs_html += f"<span class='tag'>{owasp}</span>"
         what_html = f"<p>{_esc(what)}</p>" if what else ""
         everyday_html = f"<p><i>{_esc(everyday)}</i></p>" if everyday else ""
         why_html = f"<p><b>Por que importa:</b> {_esc(why)}</p>" if why else ""
@@ -396,7 +403,7 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
             f"<p><b>{i}. {_esc(headline)}</b></p>"
             f"{tech_line}"
             f"<p><span class='tag'>{_esc(sev_label)}</span><span class='tag'>{_esc(status)}</span>"
-            f"{kind_html}"
+            f"{kind_html}{refs_html}"
             f"<span class='tag'>{_esc(f.get('tool') or '—')}</span>"
             f"<span class='tag'>{_esc(host)}</span></p>"
             f"{what_html}"

@@ -70,9 +70,9 @@ function renderStep() {
     {
       title: "2/3 — Escopo de alvos",
       html: `
-        <p>Defina <code>ALLOWED_TARGETS</code> no arquivo <code>.env</code> para restringir scans a alvos autorizados.</p>
+        <p>Restrinja scans no <strong>cliente ativo</strong> (alvos do ROE) ou em <code>ALLOWED_TARGETS</code> no <code>.env</code>.</p>
         <pre class="onboarding-code">ALLOWED_TARGETS=scanme.nmap.org,10.0.0.5</pre>
-        <p class="onboarding-note">Vazio = sem restrição (modo aviso). Reinicie o servidor após editar o .env.</p>
+        <p class="onboarding-note">Lista do cliente prevalece se preenchida. Ambos vazios = sem restrição (aviso no health).</p>
       `,
       next: "continuar",
     },
@@ -85,7 +85,7 @@ function renderStep() {
           <li>Aguarde <code>[ok]</code> e o dashboard</li>
           <li>Abra <strong>Relatórios</strong> (<kbd>Alt+R</kbd>) → <strong>Baixar PDF</strong> (a triagem abre se precisar)</li>
         </ol>
-        <p class="onboarding-note">Se aparecer <code>[blocked]</code>: confira whitelist e <code>ALLOWED_TARGETS</code>.</p>
+        <p class="onboarding-note">Se aparecer <code>[blocked]</code>: confira whitelist e o escopo do cliente / <code>ALLOWED_TARGETS</code>.</p>
       `,
       next: "começar",
     },
