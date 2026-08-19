@@ -602,6 +602,7 @@ class TestScanLiveMiscCov(unittest.TestCase):
             "confirmed": [],
             "pending": [],
             "findings": [],
+            "report_findings": [],
             "remediations": [],
         }
         html = lr._simple_summary_html(empty)
@@ -614,6 +615,8 @@ class TestScanLiveMiscCov(unittest.TestCase):
                 "confirmed": [{"t": 1}],
                 "pending": [{"t": 2}],
                 "findings": [{}, {}],
+                "report_findings": [{"t": 1}],
+                "client_cards": [],
                 "remediations": [
                     {"remediation_title": "A"},
                     {"remediation_title": "B"},
@@ -630,10 +633,12 @@ class TestScanLiveMiscCov(unittest.TestCase):
                 "confirmed": [],
                 "pending": [{"t": 1}],
                 "findings": [{}],
+                "report_findings": [],
+                "client_cards": [],
                 "remediations": [],
             }
         )
-        self.assertIn("Triagem", html3)
+        self.assertIn("não encontramos", html3.lower())
         html4 = lr._simple_summary_html(
             {
                 "empty": False,
@@ -641,10 +646,12 @@ class TestScanLiveMiscCov(unittest.TestCase):
                 "confirmed": [],
                 "pending": [],
                 "findings": [],
+                "report_findings": [],
+                "client_cards": [],
                 "remediations": [],
             }
         )
-        self.assertIn("não há achados", html4.lower() + "achados")
+        self.assertIn("não encontramos", html4.lower())
 
 
 class TestStoreDbGithubIngestCov(unittest.TestCase):

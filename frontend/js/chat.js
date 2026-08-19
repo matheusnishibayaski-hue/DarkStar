@@ -40,6 +40,8 @@ import { toast, showToastError } from "./ui.js";
 import { playSound } from "./audio.js";
 import { startRun, isSessionBusy } from "./session-runs.js";
 import { getChatMode, getAttachments, clearAttachments } from "./composer-extras.js";
+import { isOffensiveModeEnabled } from "./offensive-mode.js";
+import { isOfflineModeEnabled } from "./offline-mode.js";
 
 let ctx = {};
 
@@ -187,6 +189,8 @@ export async function sendMessage(text, opts = {}) {
         mission_id: missionId,
         chat_session_id: sessionId,
         chat_mode: chatMode,
+        offensive: isOffensiveModeEnabled(),
+        offline: isOfflineModeEnabled(),
         attachments,
         ...getModelPayload(),
       }),

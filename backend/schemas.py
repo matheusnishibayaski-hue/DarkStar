@@ -22,6 +22,8 @@ class ChatRequest(BaseModel):
     mission_id: str = Field(default="", max_length=64)
     chat_session_id: str = Field(default="", max_length=128)
     chat_mode: str = Field(default="agent", max_length=16)
+    offensive: bool = False
+    offline: bool = False
     attachments: list[ChatAttachment] = Field(default_factory=list)
 
 

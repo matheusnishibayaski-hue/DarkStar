@@ -30,6 +30,8 @@ def api_chat_stream(req: ChatRequest):
                 mission_id=req.mission_id or None,
                 chat_session_id=req.chat_session_id or None,
                 chat_mode=req.chat_mode or "agent",
+                offensive=bool(req.offensive),
+                offline=bool(req.offline),
                 attachments=[a.model_dump() for a in req.attachments],
             )
         except Exception as e:
@@ -59,6 +61,8 @@ def api_chat(req: ChatRequest):
             mission_id=req.mission_id or None,
             chat_session_id=req.chat_session_id or None,
             chat_mode=req.chat_mode or "agent",
+            offensive=bool(req.offensive),
+            offline=bool(req.offline),
             attachments=[a.model_dump() for a in req.attachments],
         )
         return ChatResponseModel(

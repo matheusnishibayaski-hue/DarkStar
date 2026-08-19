@@ -962,34 +962,88 @@ def build_triage_queue(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def residual_risk_score(findings: list[dict[str, Any]]) -> dict[str, Any]:
-    """Score 0–100 só com confirmados (pós-triagem)."""
-    weights = {
-        "critical": 25,
-        "high": 18,
-        "alto": 18,
-        "medium": 10,
-        "medio": 10,
-        "low": 4,
-        "baixo": 4,
-        "info": 1,
+    """Nível de perigo 0–100 só com confirmados (pós-triagem).
+
+    Faixas: Baixo · Médio · Médio alto · Alto.
+    A nota vem do pior achado confirmado (piso por gravidade) e sobe com outros.
+    """
+    # Piso: um único achado já comunica o perigo daquela gravidade
+    floor = {
+        "critical": 82,
+        "high": 62,
+        "alto": 62,
+        "medium": 38,
+        "medio": 38,
+        "média": 38,
+        "low": 18,
+        "baixo": 18,
+        "info": 8,
+        "informational": 8,
     }
+    # Cada confirmado extra empurra em direção a 100 (retornos decrescentes)
+    extra = {
+        "critical": 10,
+        "high": 8,
+        "alto": 8,
+        "medium": 5,
+        "medio": 5,
+        "média": 5,
+        "low": 3,
+        "baixo": 3,
+        "info": 1,
+        "informational": 1,
+    }
+    order = {
+        "critical": 0,
+        "high": 1,
+        "alto": 1,
+        "medium": 2,
+        "medio": 2,
+        "média": 2,
+        "low": 3,
+        "baixo": 3,
+        "info": 4,
+        "informational": 4,
+    }
+
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
-    raw = 0
+    if not confirmed:
+        return {
+            "score": 0,
+            "label": "Baixo",
+            "confirmed": 0,
+            "scale": "danger_0_100",
+        }
+
+    sevs: list[str] = []
     for f in confirmed:
-        sev = str(f.get("severity") or "").lower()
-        raw += weights.get(sev, 6)
-    score = min(100, raw)
-    if score >= 70:
-        label = "Crítico"
-    elif score >= 45:
+        s = str(f.get("severity") or "info").lower()
+        sevs.append(s if s in floor else "info")
+    sevs.sort(key=lambda s: order.get(s, 9))
+
+    worst = sevs[0]
+    score = int(floor.get(worst, 8))
+    for s in sevs[1:]:
+        score += int(extra.get(s, 2))
+    score = min(100, score)
+
+    if score >= 75:
         label = "Alto"
-    elif score >= 20:
+    elif score >= 50:
+        label = "Médio alto"
+    elif score >= 30:
         label = "Médio"
     elif score > 0:
         label = "Baixo"
     else:
-        label = "Residual baixo / sem confirmados"
-    return {"score": score, "label": label, "confirmed": len(confirmed)}
+        label = "Baixo"
+
+    return {
+        "score": score,
+        "label": label,
+        "confirmed": len(confirmed),
+        "scale": "danger_0_100",
+    }
 
 
 def severity_counts(findings: list[dict[str, Any]]) -> dict[str, int]:

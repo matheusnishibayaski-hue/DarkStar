@@ -38,12 +38,13 @@ from backend.ai.scan_profiles import (
 from backend.ai.sse import format_sse
 from backend.ai.verify import run_verification_pipeline
 from backend.config import (
-    AUTONOMOUS_SYSTEM_PROMPT,
     MAX_AUTONOMOUS_ROUNDS,
     MAX_AUTONOMOUS_TOOLS,
     MAX_TOOL_ITERATIONS,
+    MAX_TOOL_ITERATIONS_OFFENSIVE,
     RISK_PROFILE,
 )
+from backend.config_prompts import resolve_autonomous_system
 from backend.executor.recon_db import build_recon_context, normalize_target
 from backend.executor.surface import (
     build_surface_context,
@@ -382,10 +383,19 @@ def _run_autonomous_body(
     )
     recon_context = build_recon_context([recon_target])
     surface_context = build_surface_context(recon_target)
-    system = AUTONOMOUS_SYSTEM_PROMPT.format(
+    offensive = profile == "full"
+    try:
+        from backend.ai.providers import get_active_provider_name
+
+        offline = get_active_provider_name() == "ollama"
+    except Exception:
+        offline = False
+    system = resolve_autonomous_system(
         target=target,
         objective=objective,
         risk_profile=profile,
+        offensive=offensive,
+        offline=offline,
     )
     system = f"{system}\n\n{phase_prompt_block(surface.get('phase') or 'recon', surface_summary(surface))}"
     if recon_context:
@@ -395,6 +405,13 @@ def _run_autonomous_body(
     scan_block = scan_profile_prompt_block(scan_prof, scan_tools, target=target)
     if scan_block:
         system = f"{system}\n\n{scan_block}"
+
+    from backend.ai.tool_playbook import compact_playbook_block
+
+    system = (
+        f"{system}\n\n"
+        f"{compact_playbook_block(surface, phase=surface.get('phase'), offensive=offensive, offline=offline)}"
+    )
 
     # White-box: mapa/arquivos da Pasta/GitHub (mesmo pipeline do chat)
     if attachments:
@@ -462,7 +479,10 @@ def _run_autonomous_body(
         surface = load_surface(recon_target) or surface
         current_phase = surface.get("phase") or "recon"
         summary = surface_summary(surface)
-        per_round = min(MAX_TOOL_ITERATIONS, remaining_tools)
+        iter_cap = MAX_TOOL_ITERATIONS_OFFENSIVE if offensive else (
+            max(MAX_TOOL_ITERATIONS, 8) if scan_prof in {"intermediate", "full"} else MAX_TOOL_ITERATIONS
+        )
+        per_round = min(iter_cap, remaining_tools)
 
         used = list(surface.get("tools_run") or [])
         pending = pending_scan_tools(scan_tools, used)
@@ -480,6 +500,9 @@ def _run_autonomous_body(
             max_rounds=max_rounds,
             tools_executed=len(executions),
             surface_summary_data=summary,
+            surface=surface,
+            offensive=offensive,
+            offline=offline,
         )
         if pending_phase and current_phase != "report":
             sample = ", ".join(pending_phase[:8])
@@ -570,34 +593,55 @@ def _run_autonomous_body(
             )
 
         if finished:
-            # Soft-block: ainda há pendentes e budget — peça mais uma tool
-            # Não anula objective_met=true; só adia finished_early se ainda houver rodada.
-            pend_now = pending_scan_tools(
-                scan_tools, (load_surface(recon_target) or {}).get("tools_run") or []
-            )
+            # Soft-block: pendências de alto valor ou high/critical sem verify
+            # — mesmo com objective_met=true, até waive / última rodada.
+            surf_now = load_surface(recon_target) or surface
+            pend_now = pending_scan_tools(scan_tools, surf_now.get("tools_run") or [])
             rounds_left = max_rounds - (round_idx + 1)
-            if (
-                not met
-                and pend_now
+            findings_now = surf_now.get("findings") or []
+            high_unverified = [
+                f
+                for f in findings_now
+                if f.get("status") in {"candidate", "inconclusive"}
+                and str(f.get("severity") or "").lower() in {"high", "critical"}
+                and not f.get("verified_at")
+            ]
+            coverage_waived = bool(surf_now.get("coverage_waived"))
+            last_round = rounds_left <= 0
+            should_block = (
+                not coverage_waived
+                and not last_round
                 and remaining_tools > 0
-                and len(pend_now) > 3
                 and current_phase != "report"
-                and rounds_left > 0
-            ):
-                sample = ", ".join(pend_now[:8])
+                and (
+                    high_unverified
+                    or (pend_now and len(pend_now) > 3)
+                )
+            )
+            if should_block:
+                sample = ", ".join(pend_now[:8]) if pend_now else "verify high/critical"
+                reason_bits = []
+                if high_unverified:
+                    reason_bits.append(
+                        f"{len(high_unverified)} high/critical sem verify"
+                    )
+                if pend_now and len(pend_now) > 3:
+                    reason_bits.append(f"{len(pend_now)} tools do perfil pendentes")
                 messages.append(
                     {
                         "role": "user",
                         "content": (
-                            f"[Cobertura] Ainda faltam {len(pend_now)} ferramentas do perfil "
-                            f"e há orçamento ({remaining_tools}). "
-                            f"Não finalize ainda — rode UMA de: {sample}. "
-                            "Só chame finish_mission depois ou na fase report."
+                            f"[Cobertura] Não finalize ainda — {'; '.join(reason_bits)}. "
+                            f"Orçamento: {remaining_tools} comando(s). "
+                            f"Rode UMA ação de alto valor"
+                            + (f" (ex.: {sample})" if sample else "")
+                            + ". Só chame finish_mission na fase report, última rodada "
+                            "ou com coverage_waived."
                         ),
                     }
                 )
                 finished = False
-                objective_met = False
+                # Mantém met em memória só se realmente aceitar finish depois
             else:
                 final_message = text
                 objective_met = met

@@ -61,7 +61,8 @@ CORS_ORIGINS = [o.strip() for o in _cors_raw.split(",") if o.strip()]
 KALI_CONTAINER = os.getenv("KALI_CONTAINER", "kali-tools")
 COMMAND_TIMEOUT = int(os.getenv("COMMAND_TIMEOUT", "180"))
 WIFI_COMMAND_TIMEOUT = int(os.getenv("WIFI_COMMAND_TIMEOUT", "600"))
-MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "5"))
+MAX_TOOL_ITERATIONS = int(os.getenv("MAX_TOOL_ITERATIONS", "10"))
+MAX_TOOL_ITERATIONS_OFFENSIVE = int(os.getenv("MAX_TOOL_ITERATIONS_OFFENSIVE", "14"))
 MAX_HEALING_ATTEMPTS = int(os.getenv("MAX_HEALING_ATTEMPTS", "2"))
 MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "10"))
 MAX_AUTONOMOUS_ROUNDS = int(os.getenv("MAX_AUTONOMOUS_ROUNDS", "10"))
@@ -223,7 +224,16 @@ COMPLIANCE_ENABLED = os.getenv("COMPLIANCE_ENABLED", "true").strip().lower() in 
 # Gere com: python -c "import secrets; print(secrets.token_urlsafe(64))"
 MASTER_KEY = os.getenv("MASTER_KEY", "").strip()
 
-from backend.config_prompts import AUTONOMOUS_SYSTEM_PROMPT, SYSTEM_PROMPT
+from backend.config_prompts import (
+    AUTONOMOUS_OFFENSIVE_OVERLAY,
+    AUTONOMOUS_OFFLINE_OVERLAY,
+    AUTONOMOUS_SYSTEM_PROMPT,
+    OFFENSIVE_SYSTEM_PROMPT,
+    OFFLINE_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    resolve_autonomous_system,
+    resolve_chat_prompts,
+)
 from backend.config_tools import (
     ALLOWED_TOOLS,
     HOST_WIFI_TOOLS,
@@ -256,6 +266,7 @@ __all__ = [
     "COMMAND_TIMEOUT",
     "WIFI_COMMAND_TIMEOUT",
     "MAX_TOOL_ITERATIONS",
+    "MAX_TOOL_ITERATIONS_OFFENSIVE",
     "MAX_HEALING_ATTEMPTS",
     "MAX_HISTORY_MESSAGES",
     "MAX_AUTONOMOUS_ROUNDS",
@@ -322,6 +333,12 @@ __all__ = [
     "WIFI_TOOLS",
     "ALLOWED_TOOLS",
     "SYSTEM_PROMPT",
+    "OFFENSIVE_SYSTEM_PROMPT",
+    "OFFLINE_SYSTEM_PROMPT",
     "AUTONOMOUS_SYSTEM_PROMPT",
+    "AUTONOMOUS_OFFENSIVE_OVERLAY",
+    "AUTONOMOUS_OFFLINE_OVERLAY",
+    "resolve_chat_prompts",
+    "resolve_autonomous_system",
     "TOOL_CATEGORIES",
 ]

@@ -530,7 +530,19 @@ class TestSessionReportPack(unittest.TestCase):
         ]
         with (
             patch("backend.executor.session_intel.load_session", return_value={}),
-            patch("backend.executor.session_intel.aggregate_session_findings", return_value=[]),
+            patch(
+                "backend.executor.session_intel.aggregate_session_findings",
+                return_value=[
+                    {
+                        "id": "xss1",
+                        "title": "[high] Reflected XSS in search",
+                        "severity": "high",
+                        "status": "confirmed",
+                        "evidence": "<script>alert(1)</script>",
+                        "host": "shop.test",
+                    }
+                ],
+            ),
         ):
             model = assemble_session_report(
                 history=history,
@@ -559,10 +571,79 @@ class TestSessionReportPack(unittest.TestCase):
         self.assertTrue(model["executive"])
         self.assertTrue(model["remediations"])
         self.assertEqual(model["remediations"][0].get("key"), "xss")
-        self.assertIn("charts", html)
-        self.assertTrue("Risco geral" in html or "Resumo executivo" in html)
-        self.assertTrue("O que encontramos" in html or "Risco residual" in html)
-        self.assertTrue("O que fazer agora" in html or "Como corrigir" in html)
-        self.assertIn("script na página", html.lower())
+        self.assertEqual(len(model["client_cards"]), 1)
+        self.assertIn("O que pode causar", html)
+        self.assertIn("Como corrigir", html)
+        self.assertIn("Problemas encontrados", html)
+        self.assertIn("Prompt para IA", html)
+        self.assertIn("nível de perigo", html.lower())
+        self.assertIn("Você é um especialista", model.get("ai_prompt") or "")
         self.assertTrue(raw.startswith(b"%PDF"))
         self.assertGreater(len(raw), 2000)
+        self.assertLess(len(raw), 200_000)
+
+    def test_danger_score_one_high_idor(self):
+        from backend.ai.fp_explain import residual_risk_score
+
+        one = residual_risk_score(
+            [{"status": "confirmed", "severity": "high", "title": "IDOR"}]
+        )
+        self.assertEqual(one["score"], 62)
+        self.assertEqual(one["label"], "Médio alto")
+        crit = residual_risk_score(
+            [{"status": "confirmed", "severity": "critical"} for _ in range(3)]
+        )
+        self.assertGreaterEqual(crit["score"], 90)
+        self.assertEqual(crit["label"], "Alto")
+        empty = residual_risk_score([])
+        self.assertEqual(empty["score"], 0)
+        self.assertEqual(empty["label"], "Baixo")
+        mid = residual_risk_score(
+            [{"status": "confirmed", "severity": "medium"}]
+        )
+        self.assertEqual(mid["label"], "Médio")
+        low = residual_risk_score([{"status": "confirmed", "severity": "low"}])
+        self.assertEqual(low["label"], "Baixo")
+
+    def test_discarded_receipts_out_of_body(self):
+        from backend.ai.report_model import assemble_session_report
+
+        findings = [
+            {
+                "id": "1",
+                "title": "IDOR /users/{id}",
+                "severity": "high",
+                "status": "confirmed",
+                "evidence": "users/1 vs users/2",
+            },
+            {
+                "id": "2",
+                "title": "OK — nmap",
+                "severity": "info",
+                "status": "discarded",
+                "kind": "scan_summary",
+                "evidence": "triage-auto:false_positive",
+            },
+        ]
+        with (
+            patch("backend.executor.session_intel.load_session", return_value={}),
+            patch(
+                "backend.executor.session_intel.aggregate_session_findings",
+                return_value=findings,
+            ),
+        ):
+            model = assemble_session_report(
+                history=[{"role": "user", "content": "Teste em shop.example.com"}],
+                tool_executions=[],
+                session_id="sess-disc-body",
+                title="T",
+            )
+        self.assertEqual(len(model["report_findings"]), 1)
+        self.assertEqual(model["report_findings"][0]["status"], "confirmed")
+        self.assertEqual(len(model["client_cards"]), 1)
+        self.assertEqual(len(model["discarded"]), 1)
+        self.assertIn(
+            "perigo",
+            (model["executive"] + model["simple_summary"]["found"]).lower(),
+        )
+        self.assertNotIn("process.cwd", ",".join(model["targets"]))

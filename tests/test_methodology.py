@@ -83,6 +83,7 @@ class TestPhases(unittest.TestCase):
         )
         self.assertIn("FASE ATUAL", text)
         self.assertIn("recon", text)
+        self.assertIn("finding-driven", text)
 
 
 class TestSurface(unittest.TestCase):

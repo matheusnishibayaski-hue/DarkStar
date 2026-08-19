@@ -180,6 +180,45 @@ class TestPdfGenerate(unittest.TestCase):
                     "evidence": "sem hsts",
                 }
             ],
+            "report_findings": [
+                {
+                    "title": "Missing HSTS",
+                    "plain_title": "HSTS ausente",
+                    "status": "confirmed",
+                    "severity": "medium",
+                    "severity_label": "Atencao",
+                    "what_it_is": "header",
+                    "everyday": "https",
+                    "why_it_matters": "mitm",
+                    "could_happen": ["roubo"],
+                    "how_to_decide": ["curl"],
+                    "command": "curl -I",
+                    "evidence": "sem hsts",
+                }
+            ],
+            "client_cards": [
+                {
+                    "title": "HSTS ausente",
+                    "severity": "medium",
+                    "severity_label": "Atencao",
+                    "kind_label": "HSTS",
+                    "host": "a.test",
+                    "what": "header",
+                    "impact": "mitm",
+                    "could_happen": ["roubo"],
+                    "fix_title": "Corrigir HSTS",
+                    "fix_action": "Adicionar Strict-Transport-Security",
+                    "fix_steps": ["Ativar HSTS"],
+                    "fix_verify": "curl -I",
+                    "fix_who": "ops",
+                }
+            ],
+            "ai_prompt": "Voce e um especialista...\nProblemas: HSTS",
+            "simple_summary": {
+                "risk_line": "12/100 — baixo",
+                "found": "Ha 1 confirmado.",
+                "now": "Comece por HSTS.",
+            },
             "confirmed": [{"title": "Missing HSTS"}],
             "fps": [],
             "pending": [],

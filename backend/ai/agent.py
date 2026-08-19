@@ -17,9 +17,9 @@ from backend.ai.sse import format_sse
 from backend.config import (
     MAX_HISTORY_MESSAGES,
     MAX_TOOL_ITERATIONS,
-    SYSTEM_PROMPT,
+    MAX_TOOL_ITERATIONS_OFFENSIVE,
 )
-from backend.config_prompts import CHAT_FINALIZE_NUDGE, CHAT_POST_TOOL_NUDGE
+from backend.config_prompts import resolve_chat_prompts
 from backend.executor.kali import execute_in_kali
 from backend.executor.logs import new_log_id
 from backend.executor.recon_db import (
@@ -223,6 +223,64 @@ _CHAT_MODE_PREFIX = {
 }
 
 
+def _resolve_offensive(client_flag: bool | None) -> bool:
+    """Offensive só com master key elevada + flag do cliente."""
+    if not client_flag:
+        return False
+    try:
+        from backend.security.privileges import is_elevated
+
+        return bool(is_elevated())
+    except Exception:
+        return False
+
+
+def _resolve_offline(client_flag: bool | None) -> bool:
+    """Offline via flag UI ou provider ativo ollama (air-gapped)."""
+    if client_flag:
+        return True
+    try:
+        from backend.ai.providers import get_active_provider_name
+
+        return get_active_provider_name() == "ollama"
+    except Exception:
+        return False
+
+
+def _chat_modes_skip_playbook(chat_mode: str | None) -> bool:
+    return (chat_mode or "agent").strip().lower() in {"ask", "plan"}
+
+
+def _build_system_prompt(
+    *,
+    offensive: bool,
+    offline: bool,
+    chat_mode: str | None,
+    recon_targets: list[str] | None,
+) -> str:
+    system, _, _ = resolve_chat_prompts(offensive=offensive, offline=offline)
+    if _chat_modes_skip_playbook(chat_mode):
+        return system
+    from backend.ai.tool_playbook import compact_playbook_block
+    from backend.executor.surface import load_surface
+
+    surface_data = None
+    phase = None
+    for t in recon_targets or []:
+        data = load_surface(t)
+        if data:
+            surface_data = data
+            phase = data.get("phase")
+            break
+    playbook = compact_playbook_block(
+        surface_data,
+        phase=phase,
+        offensive=offensive,
+        offline=offline,
+    )
+    return f"{system}\n\n{playbook}"
+
+
 def _apply_chat_mode(user_message: str, chat_mode: str | None) -> str:
     mode = (chat_mode or "agent").strip().lower()
     prefix = _CHAT_MODE_PREFIX.get(mode)
@@ -357,6 +415,9 @@ def _run_openrouter(
     chat_session_id: str | None = None,
     *,
     force_tool_use: bool = False,
+    offensive: bool = False,
+    offline: bool = False,
+    chat_mode: str | None = None,
 ) -> ChatResponse:
     provider = get_llm_provider()
     if not provider.is_configured():
@@ -377,6 +438,9 @@ def _run_openrouter(
             mission_id,
             chat_session_id,
             force_tool_use=force_tool_use,
+            offensive=offensive,
+            offline=offline,
+            chat_mode=chat_mode,
         )
     finally:
         if mission_id:
@@ -394,10 +458,29 @@ def _run_openrouter_body(
     chat_session_id: str | None = None,
     *,
     force_tool_use: bool = False,
+    offensive: bool = False,
+    offline: bool = False,
+    chat_mode: str | None = None,
 ) -> ChatResponse:
     provider = get_llm_provider()
 
-    messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
+    system = _build_system_prompt(
+        offensive=offensive,
+        offline=offline,
+        chat_mode=chat_mode,
+        recon_targets=recon_targets,
+    )
+    _, post_nudge, finalize_nudge = resolve_chat_prompts(
+        offensive=offensive, offline=offline
+    )
+    # Offline usa orçamento safe; offensive só quando não offline
+    max_iters = (
+        MAX_TOOL_ITERATIONS_OFFENSIVE
+        if offensive and not offline
+        else MAX_TOOL_ITERATIONS
+    )
+
+    messages: list[dict] = [{"role": "system", "content": system}]
     messages.extend(_convert_history(history))
     messages.append({"role": "user", "content": user_message})
 
@@ -407,7 +490,7 @@ def _run_openrouter_body(
     healing_attempts = 0
     final_text = ""
 
-    for _ in range(MAX_TOOL_ITERATIONS):
+    for _ in range(max_iters):
         if get_mission_registry().is_cancelled(mission_id):
             return ChatResponse(
                 message="Operação cancelada pelo usuário.",
@@ -507,14 +590,14 @@ def _run_openrouter_body(
             messages.append(
                 {
                     "role": "user",
-                    "content": CHAT_POST_TOOL_NUDGE,
+                    "content": post_nudge,
                 }
             )
 
     messages.append(
         {
             "role": "user",
-            "content": CHAT_FINALIZE_NUDGE,
+            "content": finalize_nudge,
         }
     )
 
@@ -545,7 +628,11 @@ def chat(
     chat_session_id: str | None = None,
     chat_mode: str | None = None,
     attachments: list | None = None,
+    offensive: bool = False,
+    offline: bool = False,
 ) -> ChatResponse:
+    offline = _resolve_offline(offline)
+    offensive = _resolve_offensive(offensive) and not offline
     user_message = _apply_chat_mode(user_message, chat_mode)
     user_message = _apply_auto_whitebox_mission(user_message)
     user_message = _apply_attachments(user_message, attachments)
@@ -562,6 +649,9 @@ def chat(
         mission_id=mission_id,
         chat_session_id=chat_session_id,
         force_tool_use=force_tool_use,
+        offensive=offensive,
+        offline=offline,
+        chat_mode=chat_mode,
     )
 
 
@@ -575,6 +665,8 @@ def chat_stream(
     chat_session_id: str | None = None,
     chat_mode: str | None = None,
     attachments: list | None = None,
+    offensive: bool = False,
+    offline: bool = False,
 ) -> Generator[str, None, None]:
     """Gera eventos SSE durante o processamento do chat."""
     event_queue: Queue[str | None] = Queue()
@@ -595,6 +687,8 @@ def chat_stream(
                 chat_session_id=chat_session_id,
                 chat_mode=chat_mode,
                 attachments=attachments,
+                offensive=offensive,
+                offline=offline,
             )
             event_queue.put(
                 format_sse(

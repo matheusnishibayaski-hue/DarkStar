@@ -512,6 +512,26 @@ def _pdf_from_session_model(
 
     story: list[Any] = []
     alvos = ", ".join(str(t) for t in (model["targets"] or [])) or "—"
+    risk = model["risk"] or {}
+    score = int(risk.get("score") or 0)
+    label = str(risk.get("label") or "—")
+    cards = list(model.get("client_cards") or [])
+    if not cards and model.get("confirmed"):
+        from backend.ai.report_model import build_client_cards
+
+        cards = build_client_cards(model.get("confirmed") or [], model.get("remediations") or [])
+    simple = model.get("simple_summary") or {}
+    if not simple:
+        from backend.ai.report_model import build_simple_summary
+
+        simple = build_simple_summary({**model, "client_cards": cards})
+    ai_prompt = str(model.get("ai_prompt") or "").strip()
+    if not ai_prompt:
+        from backend.ai.report_model import build_client_ai_prompt
+
+        ai_prompt = build_client_ai_prompt({**model, "client_cards": cards})
+
+    # —— Capa simples ——
     story.append(Paragraph(f"DARKSTAR · ARGUS v{_pdf_text(APP_VERSION)}", brand))
     story.append(Paragraph(_pdf_text(model["title"]), h1))
     story.append(
@@ -520,266 +540,127 @@ def _pdf_from_session_model(
             small,
         )
     )
-    story.append(Spacer(1, 0.25 * cm))
-    risk = model["risk"] or {}
-    kpi = Table(
+    story.append(Spacer(1, 0.35 * cm))
+
+    # Destaque do nível de perigo
+    danger = Table(
         [
             [
-                f"{len(model['executions'])}\ntestes",
-                f"{len(model['findings'])}\nachados",
-                f"{len(model['confirmed'])}\nconfirmados",
-                f"{len(model['fps'])}\nfalsos +",
-                f"{risk.get('score', 0)}\nrisco",
+                Paragraph(
+                    f"<b>{score}/100</b><br/><font size='9'>nível de perigo</font>",
+                    ParagraphStyle("D1", parent=body, alignment=1, fontSize=22, leading=26),
+                ),
+                Paragraph(
+                    f"<b>{_pdf_text(label)}</b><br/>"
+                    f"<font size='8' color='#6B7280'>Baixo · Médio · Médio alto · Alto</font><br/><br/>"
+                    f"{_pdf_text(simple.get('found') or '')}",
+                    body,
+                ),
             ]
         ],
-        colWidths=[3.2 * cm] * 5,
+        colWidths=[4.2 * cm, 12.2 * cm],
     )
-    kpi.setStyle(
+    danger.setStyle(
         TableStyle(
             [
-                ("FONTNAME", (0, 0), (-1, -1), "Helvetica-Bold"),
-                ("FONTSIZE", (0, 0), (-1, -1), 9),
-                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#E5E7EB")),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#E5E7EB")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+                ("BACKGROUND", (0, 0), (0, 0), colors.HexColor("#EEF6FF")),
+            ]
+        )
+    )
+    story.append(danger)
+    story.append(Spacer(1, 0.2 * cm))
+    story.append(Paragraph(_pdf_text(simple.get("now") or ""), body))
+    if model.get("scope"):
+        story.append(Spacer(1, 0.12 * cm))
+        story.append(Paragraph(f"<b>Escopo:</b> {_pdf_text(model['scope'])}", small))
+
+    # —— Problemas confirmados ——
+    story.append(Paragraph("Problemas encontrados", h2))
+    if not cards:
+        story.append(
+            Paragraph(
+                "Nenhuma vulnerabilidade confirmada neste teste. "
+                "Itens que não são erro real (logs de ferramenta, alarmes falsos) "
+                "foram omitidos de propósito.",
+                body,
+            )
+        )
+    for i, c in enumerate(cards, 1):
+        sev = c.get("severity_label") or "—"
+        host = c.get("host") or ""
+        meta = f"{_pdf_text(sev)}"
+        if c.get("kind_label"):
+            meta += f" · {_pdf_text(c['kind_label'])}"
+        if host:
+            meta += f" · {_pdf_text(host)}"
+        block: list[Any] = [
+            Paragraph(f"<b>{i}. {_pdf_text(c.get('title') or 'Problema')}</b>", h3),
+            Paragraph(meta, small),
+        ]
+        if c.get("what"):
+            block.append(Paragraph(f"<b>O que é:</b> {_pdf_text(c['what'])}", body))
+        block.append(
+            Paragraph(f"<b>O que pode causar:</b> {_pdf_text(c.get('impact') or '—')}", body)
+        )
+        for hap in c.get("could_happen") or []:
+            block.append(Paragraph(f"• {_pdf_text(hap)}", body))
+        fix_head = c.get("fix_title") or "Como corrigir"
+        block.append(Paragraph(f"<b>Como corrigir — {_pdf_text(fix_head)}</b>", body))
+        if c.get("fix_who"):
+            block.append(Paragraph(f"Quem faz: {_pdf_text(c['fix_who'])}", small))
+        if c.get("fix_action"):
+            block.append(Paragraph(_pdf_text(c["fix_action"]), body))
+        for n, step in enumerate(c.get("fix_steps") or [], 1):
+            block.append(Paragraph(f"{n}. {_pdf_text(step)}", body))
+        if c.get("fix_verify"):
+            block.append(
+                Paragraph(
+                    f"<b>Como saber que corrigiu:</b> {_pdf_text(c['fix_verify'])}",
+                    body,
+                )
+            )
+        block.append(Spacer(1, 0.2 * cm))
+        story.append(KeepTogether(block))
+
+    # —— Prompt de IA ——
+    story.append(Paragraph("Prompt para IA (copie e cole)", h2))
+    story.append(
+        Paragraph(
+            "Cole o texto abaixo em ChatGPT, Claude ou outra IA para receber um plano "
+            "de correção em português, priorizado e passo a passo.",
+            small,
+        )
+    )
+    story.append(Spacer(1, 0.12 * cm))
+    prompt_box = Table(
+        [[Paragraph(f"<font face='Courier' size='7'>{_pdf_text(ai_prompt)}</font>", small)]],
+        colWidths=[16.4 * cm],
+    )
+    prompt_box.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F3F4F6")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
                 ("TOPPADDING", (0, 0), (-1, -1), 8),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
             ]
         )
     )
-    story.append(kpi)
+    story.append(prompt_box)
+    story.append(Spacer(1, 0.35 * cm))
     story.append(
         Paragraph(
-            f"Risco residual: <b>{_pdf_text(risk.get('label'))}</b> (somente confirmados).", body
-        )
-    )
-
-    sev = model.get("severity") or {}
-    score = max(0, min(100, int(risk.get("score") or 0)))
-    risk_color = "#166534" if score < 20 else "#d97706" if score < 45 else "#dc2626"
-    story.append(Paragraph("Indicadores", h2))
-    story.append(Paragraph("Risco residual (somente confirmados)", h3))
-    story.append(_bar_drawing([("Risco /100", score, risk_color)], max_value=100))
-    story.append(Paragraph("Gravidade (achados ativos)", h3))
-    story.append(
-        _bar_drawing(
-            [
-                ("Crítico", int(sev.get("critical") or 0), "#7f1d1d"),
-                ("Grave", int(sev.get("high") or 0), "#dc2626"),
-                ("Atenção", int(sev.get("medium") or 0), "#d97706"),
-                ("Leve", int(sev.get("low") or 0), "#2563eb"),
-                ("Informação", int(sev.get("info") or 0), "#6b7280"),
-            ]
-        )
-    )
-    story.append(Spacer(1, 0.15 * cm))
-    story.append(Paragraph("Triagem", h3))
-    story.append(
-        _bar_drawing(
-            [
-                ("Confirmados", len(model["confirmed"]), "#166534"),
-                ("Alarme falso", len(model["fps"]), "#d97706"),
-                ("Pendentes", len(model["pending"]), "#2563eb"),
-                ("Descartados", len(model.get("discarded") or []), "#9ca3af"),
-            ]
-        )
-    )
-    story.append(Spacer(1, 0.15 * cm))
-    story.append(Paragraph("ISO 27001 / SOC 2 (indicativo %)", h3))
-    story.append(
-        _bar_drawing(
-            [
-                ("ISO 27001", int(model.get("iso_cov") or 0), "#166534"),
-                ("SOC 2", int(model.get("soc_cov") or 0), "#1e90ff"),
-            ],
-            max_value=100,
-        )
-    )
-    kinds = list((model.get("kinds") or {}).items())[:8]
-    if kinds:
-        story.append(Spacer(1, 0.12 * cm))
-        story.append(Paragraph("Tipos de achado", h3))
-        story.append(_bar_drawing([(k, int(v), "#1e90ff") for k, v in kinds]))
-    tools = list((model.get("tools") or {}).items())[:8]
-    if tools:
-        story.append(Paragraph("Ferramentas usadas", h3))
-        story.append(_bar_drawing([(k, int(v), "#111827") for k, v in tools]))
-
-    story.append(Paragraph("1. Resumo executivo", h2))
-    story.append(Paragraph(_pdf_text(model.get("executive") or ""), body))
-
-    story.append(Paragraph("2. Escopo", h2))
-    story.append(Paragraph(_pdf_text(model["scope"]), body))
-    story.append(
-        Paragraph(
-            "Engajamento assistido (reconhecimento → enumeração → varredura → verificação). "
-            "Testes em container Kali isolado.",
-            body,
-        )
-    )
-
-    story.append(Paragraph("3. Testes realizados", h2))
-    story.append(
-        Paragraph(
-            f"{model['ok_exec']} execução(ões) com sucesso · {model['fail_exec']} falha(s)/bloqueio(s).",
-            body,
-        )
-    )
-    if not model["executions"]:
-        story.append(Paragraph("Nenhum comando executado ainda.", body))
-    from backend.ai.exec_digest import digest_execution
-
-    for i, ex in enumerate(model["executions"][:60], 1):
-        d = digest_execution(ex)
-        block = [
-            Paragraph(
-                f"<b>{i}. {_pdf_text(d['tool'])}</b> · [{_pdf_text(d['status_label'])}]",
-                h3,
-            ),
-            Paragraph(_pdf_text(d.get("headline") or ""), body),
-        ]
-        if d.get("failure"):
-            block.append(Paragraph(f"<b>Por que falhou:</b> {_pdf_text(d['failure'])}", body))
-        for b in d.get("bullets") or []:
-            block.append(Paragraph(f"• {_pdf_text(b)}", body))
-        cmd = d.get("command") or ""
-        if cmd:
-            block.append(
-                Paragraph(
-                    f"<font face='Courier' size='8'>{_pdf_text(cmd)}</font>",
-                    small,
-                )
-            )
-        log = d.get("log") or ""
-        if log.strip():
-            block.append(Paragraph(f"<font face='Courier' size='7'>{_pdf_text(log)}</font>", small))
-        block.append(Spacer(1, 0.12 * cm))
-        story.append(KeepTogether(block))
-
-    story.append(Paragraph("4. O que foi encontrado", h2))
-    if not model["findings"]:
-        story.append(Paragraph("Nenhum achado estruturado ainda.", body))
-    for i, f in enumerate(model["findings"][:120], 1):
-        status = _STATUS_LABELS.get(str(f.get("status") or ""), str(f.get("status") or "Pendente"))
-        sev_l = f.get("severity_label") or f.get("severity") or "—"
-        headline = f.get("plain_title") or f.get("title") or "Achado"
-        host = f.get("surface_target") or f.get("host") or "—"
-        cmd = str(f.get("command") or "")[:500]
-        evidence = str(f.get("evidence") or "")[:1600]
-        bits = [
-            Paragraph(f"<b>{i}. {_pdf_text(headline)}</b>", h3),
-            Paragraph(
-                f"{_pdf_text(sev_l)} · {_pdf_text(status)} · "
-                f"{_pdf_text(f.get('kind_label') or '—')} · "
-                f"{_pdf_text(f.get('cwe') or '—')} · {_pdf_text(f.get('owasp') or '—')} · "
-                f"{_pdf_text(f.get('tool') or '—')} · {_pdf_text(host)}",
-                small,
-            ),
-        ]
-        tech = str(f.get("title") or "")
-        if tech and tech != headline:
-            bits.append(Paragraph(f"Nome técnico: {_pdf_text(tech)}", small))
-        if f.get("what_it_is"):
-            bits.append(Paragraph(_pdf_text(f["what_it_is"]), body))
-        if f.get("everyday"):
-            bits.append(Paragraph(f"<i>{_pdf_text(f['everyday'])}</i>", body))
-        if f.get("why_it_matters"):
-            bits.append(
-                Paragraph(f"<b>Por que importa:</b> {_pdf_text(f['why_it_matters'])}", body)
-            )
-        for hap in (f.get("could_happen") or [])[:4]:
-            bits.append(Paragraph(f"• {_pdf_text(hap)}", body))
-        decide = list(f.get("how_to_decide") or [])[:4]
-        if decide:
-            bits.append(Paragraph("<b>Como decidir:</b>", body))
-            for d in decide:
-                bits.append(Paragraph(f"• {_pdf_text(d)}", body))
-        if cmd:
-            bits.append(
-                Paragraph(
-                    f"<b>Comando:</b> <font face='Courier' size='8'>{_pdf_text(cmd)}</font>",
-                    body,
-                )
-            )
-        if evidence:
-            bits.append(Paragraph(f"<b>Evidência:</b> {_pdf_text(evidence)}", body))
-        bits.append(Spacer(1, 0.12 * cm))
-        story.append(KeepTogether(bits))
-
-    story.append(Paragraph("5. Como corrigir", h2))
-    rems = model["remediations"] or []
-    if not rems:
-        story.append(
-            Paragraph(
-                "Sem plano de correção ainda — aparece quando houver achados (além de logs de teste).",
-                body,
-            )
-        )
-    for i, r in enumerate(rems[:60], 1):
-        bits = [
-            Paragraph(f"<b>{i}. {_pdf_text(r.get('remediation_title') or 'Correção')}</b>", h3),
-            Paragraph(
-                f"Achado: {_pdf_text(r.get('finding_title'))} · "
-                f"{_pdf_text(r.get('severity_label') or r.get('severity') or '')}",
-                body,
-            ),
-        ]
-        if r.get("who"):
-            bits.append(Paragraph(f"<b>Quem faz:</b> {_pdf_text(r['who'])}", body))
-        if r.get("why"):
-            bits.append(Paragraph(_pdf_text(r["why"]), body))
-        steps = list(r.get("steps") or [])
-        if steps:
-            bits.append(Paragraph("<b>Passo a passo</b>", body))
-            for n, s in enumerate(steps, 1):
-                bits.append(Paragraph(f"{n}. {_pdf_text(s)}", body))
-        elif r.get("action"):
-            bits.append(Paragraph(_pdf_text(r["action"]), body))
-        if r.get("verify"):
-            bits.append(
-                Paragraph(f"<b>Como saber que corrigiu:</b> {_pdf_text(r['verify'])}", body)
-            )
-        bits.append(Spacer(1, 0.15 * cm))
-        story.append(KeepTogether(bits))
-
-    story.append(Paragraph("6. Notas da conversa", h2))
-    notes = list(model.get("notes") or [])
-    if notes:
-        for n, text in enumerate(notes[-4:], 1):
-            story.append(Paragraph(f"<b>Nota {n}</b>", h3))
-            story.append(Paragraph(_pdf_text(text[:2200]), body))
-    else:
-        story.append(Paragraph("A Argus ainda não registrou análise nesta conversa.", body))
-
-    story.append(Paragraph("7. Conformidade indicativa ISO 27001 / SOC 2", h2))
-    _append_iso_soc2(
-        story,
-        model["findings"],
-        model["target"] or "session",
-        h2,
-        h3,
-        body,
-        primary,
-        colors.HexColor("#E8F4FF"),
-        page_break=False,
-        report=model.get("compliance"),
-    )
-
-    story.append(Paragraph("8. Metodologia e limitações", h2))
-    story.append(
-        Paragraph(
-            "Reconhecimento, enumeração, varredura e verificação PoC não destrutiva. "
-            "WAF/CDN podem gerar falsos negativos; ausência de achado não garante segurança. "
-            "Gravidade usa o tipo do achado e a tag do scanner. "
-            "ISO/SOC 2 é mapeamento indicativo, não certificação. "
-            "Revise pendentes antes da entrega ao cliente.",
-            body,
-        )
-    )
-    story.append(Spacer(1, 0.4 * cm))
-    story.append(
-        Paragraph(
-            "Documento gerado automaticamente a partir desta conversa — mesmo conteúdo da pré-visualização.",
+            "Documento gerado para entrega ao cliente — apenas vulnerabilidades confirmadas. "
+            "DarkStar · Argus.",
             small,
         )
     )

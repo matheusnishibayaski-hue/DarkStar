@@ -11,6 +11,7 @@ _KIND_TO_KEY = {
     "rce": "rce",
     "lfi": "lfi",
     "ssti": "ssti",
+    "idor": "idor",
     "cve": "cve",
     "hsts": "header_hsts",
     "clickjack": "header_xfo",
@@ -192,6 +193,28 @@ _REMEDIATIONS: dict[str, dict[str, Any]] = {
         "action": (
             "Sanitizar/escapar saída, CSP restritiva, validar entrada e "
             "usar encoding contextual no framework."
+        ),
+    },
+    "idor": {
+        "title": "Impedir acesso aos dados de outra pessoa (IDOR)",
+        "who": "Desenvolvimento da API / backend",
+        "why": (
+            "Se trocar o ID na URL ou no pedido devolve dados de outro usuário, "
+            "um atacante pode varrer IDs e coletar e-mails, telefones e perfis."
+        ),
+        "steps": [
+            "Identifique o endpoint da evidência (ex.: /users/{id}, /orders/{id}).",
+            "Em toda leitura/atualização/exclusão, confira se o usuário autenticado "
+            "tem permissão sobre aquele recurso (dono ou papel autorizado).",
+            "Não confie só no ID enviado pelo cliente — derive o recurso da sessão "
+            "sempre que fizer sentido (ex.: /me).",
+            "Para IDs sequenciais, considere UUIDs opacos e rate-limit em enumeração.",
+            "Reteste: com a mesma sessão, outro ID deve responder 403 ou 404, sem dados.",
+        ],
+        "verify": "Trocar o ID com a mesma sessão não devolve dados de outra conta.",
+        "action": (
+            "Validar autorização por recurso em cada endpoint; negar acesso cruzado "
+            "entre contas; retestar com IDs de outro usuário."
         ),
     },
     "sqli": {

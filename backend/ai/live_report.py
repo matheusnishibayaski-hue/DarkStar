@@ -1,4 +1,4 @@
-"""Pré-visualização HTML do relatório da conversa (espelha o PDF)."""
+"""Pré-visualização HTML do relatório da conversa (espelha o PDF do cliente)."""
 
 from __future__ import annotations
 
@@ -45,13 +45,204 @@ def _hbar(label: str, value: int, maxv: int, color: str) -> str:
     )
 
 
+def generate_live_report_html(
+    *,
+    history: list[dict[str, Any]] | None = None,
+    tool_executions: list[dict[str, Any]] | None = None,
+    session_id: str = "",
+    title: str = "Relatório de Pentest",
+) -> str:
+    model = assemble_session_report(
+        history=history,
+        tool_executions=tool_executions,
+        session_id=session_id,
+        title=title,
+    )
+    risk = model["risk"] or {}
+    score = int(risk.get("score") or 0)
+    label = str(risk.get("label") or "—")
+    cards = model.get("client_cards") or []
+    alvos = ", ".join(_esc(t) for t in (model["targets"] or [])) or "—"
+    cards_html = _render_client_cards(cards)
+    ai_prompt = _esc(model.get("ai_prompt") or "")
+    empty_banner = (
+        "<div class='empty'>Ainda não há testes nesta conversa. "
+        "Fale com a Argus ou rode o piloto — esta prévia atualiza sozinha.</div>"
+        if model["empty"]
+        else ""
+    )
+    risk_color = (
+        "#166534"
+        if score < 30
+        else "#d97706"
+        if score < 50
+        else "#c2410c"
+        if score < 75
+        else "#dc2626"
+    )
+    simple = model.get("simple_summary") or {}
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"/>
+<title>{_esc(model["title"])}</title>
+<style>
+  :root {{ --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --accent:#1e90ff; --paper:#fff; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; background:#e8eaed; color:var(--ink); font-family:"Segoe UI", system-ui, sans-serif; }}
+  .page {{ max-width:760px; margin:16px auto 32px; background:var(--paper); padding:36px 40px 48px;
+           box-shadow:0 8px 28px rgba(0,0,0,.14); }}
+  .brand {{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; }}
+  h1 {{ font-size:24px; margin:8px 0 6px; line-height:1.25; }}
+  .meta {{ color:var(--muted); font-size:13px; margin-bottom:18px; }}
+  .danger {{ display:grid; grid-template-columns:140px 1fr; gap:0; border:1px solid var(--line);
+             margin:0 0 18px; background:#f8fafc; }}
+  .danger-score {{ background:#eef6ff; padding:18px 12px; text-align:center; }}
+  .danger-score b {{ display:block; font-size:28px; color:{risk_color}; }}
+  .danger-score span {{ font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }}
+  .danger-body {{ padding:14px 16px; }}
+  .danger-body .level {{ font-size:18px; font-weight:700; margin:0 0 6px; }}
+  .danger-body .scale {{ font-size:11px; color:var(--muted); margin:0 0 8px; }}
+  .danger-body p {{ margin:0; font-size:14px; line-height:1.5; }}
+  .now {{ font-weight:600; margin:0 0 8px; font-size:14px; }}
+  .scope {{ font-size:12px; color:var(--muted); margin:0 0 20px; }}
+  h2 {{ font-size:13px; letter-spacing:.08em; text-transform:uppercase; border-bottom:2px solid var(--accent);
+        padding-bottom:6px; margin:28px 0 14px; color:var(--accent); }}
+  .card {{ border:1px solid var(--line); border-left:4px solid var(--accent); padding:14px 16px;
+           margin:0 0 14px; background:#fcfcfd; }}
+  .card.alto {{ border-left-color:#dc2626; }}
+  .card.medio {{ border-left-color:#d97706; }}
+  .card.baixo {{ border-left-color:#2563eb; }}
+  .card h3 {{ margin:0 0 6px; font-size:15px; }}
+  .card .tags {{ margin:0 0 10px; }}
+  .tag {{ display:inline-block; font-size:10px; padding:2px 7px; border:1px solid var(--line);
+          margin:0 6px 4px 0; background:#fff; }}
+  .card p {{ font-size:13px; line-height:1.55; margin:0 0 8px; }}
+  .card ol, .card ul {{ margin:4px 0 8px; padding-left:1.2rem; font-size:13px; }}
+  .prompt {{ background:#f3f4f6; border:1px solid #d1d5db; padding:12px 14px; font-family:Consolas,monospace;
+             font-size:11px; white-space:pre-wrap; line-height:1.45; color:#1f2937; }}
+  .note {{ font-size:12px; color:var(--muted); }}
+  .empty {{ padding:40px 16px; text-align:center; color:var(--muted); }}
+  .foot {{ margin-top:32px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:10px; }}
+  .simple-box {{ border:1px solid var(--line); padding:14px 16px; margin:12px 0 18px; background:#f8fafc; }}
+  .simple-box h2 {{ margin:0 0 8px; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
+                    border:none; padding:0; color:var(--muted); }}
+  .simple-box .lead {{ margin:0 0 10px; }}
+  .simple-box .now {{ margin:0; font-weight:600; }}
+  .charts {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:8px 0 20px; }}
+  .chart-box {{ border:1px solid var(--line); padding:10px 12px 12px; background:#fafafa; }}
+  .chart-box h3 {{ margin:0 0 8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }}
+  .hbar {{ display:grid; grid-template-columns:92px 1fr 28px; gap:6px; align-items:center; margin:4px 0; font-size:11px; }}
+  .hbar span {{ color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+  .hbar b {{ text-align:right; font-size:11px; }}
+  .risk-num {{ font-size:36px; font-weight:700; margin:4px 0 6px; }}
+  .risk-num small {{ font-size:14px; color:var(--muted); font-weight:500; }}
+  @media (max-width:640px) {{ .danger {{ grid-template-columns:1fr; }} .charts {{ grid-template-columns:1fr; }} }}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">DarkStar · Argus v{_esc(APP_VERSION)}</div>
+  <h1>{_esc(model["title"])}</h1>
+  <div class="meta">CONFIDENCIAL · {model["now"]} · Alvo(s): {alvos}</div>
+  {empty_banner}
+  <div class="danger">
+    <div class="danger-score"><b>{score}/100</b><span>nível de perigo</span></div>
+    <div class="danger-body">
+      <p class="level">{_esc(label)}</p>
+      <p class="scale">Baixo · Médio · Médio alto · Alto</p>
+      <p>{_esc(simple.get("found") or "")}</p>
+    </div>
+  </div>
+  <p class="now">{_esc(simple.get("now") or "")}</p>
+  <p class="scope"><b>Escopo:</b> {_esc(model.get("scope") or "")}</p>
+
+  <h2>Problemas encontrados</h2>
+  {cards_html}
+
+  <h2>Prompt para IA (copie e cole)</h2>
+  <p class="note">Cole em ChatGPT, Claude ou outra IA para um plano de correção priorizado.</p>
+  <pre class="prompt">{ai_prompt}</pre>
+
+  <div class="foot">Prévia = mesmo conteúdo do PDF baixado. Só vulnerabilidades confirmadas. DarkStar · Argus v{_esc(APP_VERSION)}.</div>
+</div>
+</body>
+</html>
+"""
+
+
+def _render_client_cards(cards: list[dict[str, Any]]) -> str:
+    if not cards:
+        return (
+            "<p>Nenhuma vulnerabilidade confirmada neste teste. "
+            "Logs de ferramenta e alarmes falsos foram omitidos.</p>"
+        )
+    parts: list[str] = []
+    for i, c in enumerate(cards, 1):
+        sev = str(c.get("severity") or "").lower()
+        cls = (
+            "alto"
+            if sev in {"critical", "high"}
+            else "medio"
+            if sev in {"medium"}
+            else "baixo"
+        )
+        tags = f"<span class='tag'>{_esc(c.get('severity_label') or '—')}</span>"
+        if c.get("kind_label"):
+            tags += f"<span class='tag'>{_esc(c['kind_label'])}</span>"
+        if c.get("host"):
+            tags += f"<span class='tag'>{_esc(c['host'])}</span>"
+        what = f"<p><b>O que é:</b> {_esc(c['what'])}</p>" if c.get("what") else ""
+        happen = "".join(f"<li>{_esc(x)}</li>" for x in (c.get("could_happen") or [])[:4])
+        happen_html = f"<ul>{happen}</ul>" if happen else ""
+        steps = "".join(f"<li>{_esc(s)}</li>" for s in (c.get("fix_steps") or [])[:6])
+        steps_html = f"<ol>{steps}</ol>" if steps else ""
+        action = f"<p>{_esc(c['fix_action'])}</p>" if c.get("fix_action") else ""
+        who = f"<p class='note'>Quem faz: {_esc(c['fix_who'])}</p>" if c.get("fix_who") else ""
+        verify = (
+            f"<p><b>Como saber que corrigiu:</b> {_esc(c['fix_verify'])}</p>"
+            if c.get("fix_verify")
+            else ""
+        )
+        parts.append(
+            f"<div class='card {cls}'>"
+            f"<h3>{i}. {_esc(c.get('title') or 'Problema')}</h3>"
+            f"<div class='tags'>{tags}</div>"
+            f"{what}"
+            f"<p><b>O que pode causar:</b> {_esc(c.get('impact') or '—')}</p>"
+            f"{happen_html}"
+            f"<p><b>Como corrigir — {_esc(c.get('fix_title') or 'Correção')}</b></p>"
+            f"{who}{action}{steps_html}{verify}"
+            f"</div>"
+        )
+    return "".join(parts)
+
+
+def _simple_summary_html(model: dict[str, Any]) -> str:
+    from backend.ai.report_model import build_simple_summary
+
+    s = model.get("simple_summary") or build_simple_summary(model)
+    return f"""
+  <div class="simple-box">
+    <h2>Risco geral</h2>
+    <p class="now">{_esc(s.get("risk_line") or "")}</p>
+    <p class="note">0–100 com nível: Baixo · Médio · Médio alto · Alto (só confirmados).</p>
+    <h2>O que encontramos</h2>
+    <p class="lead">{_esc(s.get("found") or "")}</p>
+    <h2>O que fazer agora</h2>
+    <p class="now">{_esc(s.get("now") or "")}</p>
+  </div>"""
+
+
 def _charts_html(model: dict[str, Any]) -> str:
+    """Mantido para testes de cobertura / legado."""
     sev = model.get("severity") or {}
     kinds = model.get("kinds") or {}
     tools = model.get("tools") or {}
     risk = model.get("risk") or {}
     score = max(0, min(100, int(risk.get("score") or 0)))
-    risk_color = "#166534" if score < 20 else "#d97706" if score < 45 else "#dc2626"
+    risk_color = "#166534" if score < 30 else "#d97706" if score < 50 else "#dc2626"
     sev_rows = [
         ("Crítico", sev.get("critical") or 0, "#7f1d1d"),
         ("Grave", sev.get("high") or 0, "#dc2626"),
@@ -62,8 +253,6 @@ def _charts_html(model: dict[str, Any]) -> str:
     sev_max = max((v for _, v, _ in sev_rows), default=1) or 1
     kind_max = max(list(kinds.values()) or [1])
     tool_max = max(list(tools.values()) or [1])
-    iso = int(model.get("iso_cov") or 0)
-    soc = int(model.get("soc_cov") or 0)
     n_conf = len(model.get("confirmed") or [])
     n_fp = len(model.get("fps") or [])
     n_pend = len(model.get("pending") or [])
@@ -81,16 +270,12 @@ def _charts_html(model: dict[str, Any]) -> str:
     return f"""
   <div class="charts">
     <div class="chart-box">
-      <h3>Risco residual</h3>
+      <h3>Nível de perigo</h3>
       <p class="risk-num" style="color:{risk_color}">{score}<small>/100</small></p>
-      <p class="note">{_esc(risk.get("label") or "—")} — só o que você confirmou como problema real.</p>
-      <svg width="100%" height="16" viewBox="0 0 220 16" aria-label="risco">
-        <rect width="220" height="16" fill="#e5e7eb"/>
-        <rect width="{round(2.2 * score)}" height="16" fill="{risk_color}"/>
-      </svg>
+      <p class="note">{_esc(risk.get("label") or "—")} — Baixo · Médio · Médio alto · Alto.</p>
     </div>
     <div class="chart-box">
-      <h3>Gravidade (achados ativos)</h3>
+      <h3>Gravidade</h3>
       {sev_html}
     </div>
     <div class="chart-box">
@@ -101,229 +286,10 @@ def _charts_html(model: dict[str, Any]) -> str:
       {_hbar("Descartados", n_disc, status_max, "#9ca3af")}
     </div>
     <div class="chart-box">
-      <h3>ISO 27001 / SOC 2 (indicativo)</h3>
-      {_hbar("ISO 27001", iso, 100, "#166534")}
-      {_hbar("SOC 2", soc, 100, "#1e90ff")}
-      <p class="note">Percentual indicativo — não é certificação.</p>
-    </div>
-    <div class="chart-box">
-      <h3>Tipos de achado</h3>
+      <h3>Tipos / ferramentas</h3>
       {kind_html}
-    </div>
-    <div class="chart-box">
-      <h3>Ferramentas usadas</h3>
       {tool_html}
     </div>
-  </div>"""
-
-
-def generate_live_report_html(
-    *,
-    history: list[dict[str, Any]] | None = None,
-    tool_executions: list[dict[str, Any]] | None = None,
-    session_id: str = "",
-    title: str = "Relatório de Pentest",
-) -> str:
-    model = assemble_session_report(
-        history=history,
-        tool_executions=tool_executions,
-        session_id=session_id,
-        title=title,
-    )
-    findings = model["findings"]
-    executions = model["executions"]
-    confirmed = model["confirmed"]
-    fps = model["fps"]
-    risk = model["risk"]
-    target = model["target"]
-    alvos = ", ".join(_esc(t) for t in (model["targets"] or [])) or "—"
-    risk_html = (
-        f"<div class='kpi'><b>{_esc(risk.get('score', 0))}</b>"
-        f"<span>risco · {_esc(risk.get('label'))}</span></div>"
-    )
-    iso_html = _render_iso_soc2(findings, target or "session", model.get("compliance"))
-    tests_html = _render_tests(executions)
-    findings_html = _render_findings(findings)
-    rem_html = _render_remediations(model["remediations"])
-    chat_html = _render_chat_notes(model.get("notes") or model["assistant_msgs"])
-    charts_html = _charts_html(model)
-    empty_banner = (
-        "<div class='empty'>Ainda não há testes nesta conversa. "
-        "Fale com a Argus ou rode o piloto — esta prévia atualiza sozinha.</div>"
-        if model["empty"]
-        else ""
-    )
-
-    return f"""<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="utf-8"/>
-<title>{_esc(model["title"])}</title>
-<style>
-  :root {{ --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --accent:#1e90ff; --paper:#fff; --ok:#166534; --bad:#991b1b; --warn:#92400e; }}
-  * {{ box-sizing: border-box; }}
-  body {{ margin:0; background:#e8eaed; color:var(--ink); font-family:"Segoe UI", Georgia, serif; }}
-  .page {{ max-width:820px; margin:16px auto 32px; background:var(--paper); padding:36px 40px 48px;
-           box-shadow:0 8px 28px rgba(0,0,0,.18); min-height:1000px; }}
-  .brand {{ font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:700; }}
-  h1 {{ font-size:26px; margin:8px 0 6px; line-height:1.2; }}
-  .meta {{ color:var(--muted); font-size:13px; margin-bottom:14px; }}
-  .kpis {{ display:grid; grid-template-columns:repeat(5,1fr); gap:8px; margin:16px 0 18px; }}
-  .kpi {{ border:1px solid var(--line); padding:10px 8px; text-align:center; }}
-  .kpi b {{ display:block; font-size:20px; }}
-  .kpi span {{ font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; }}
-  .charts {{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:8px 0 20px; }}
-  .chart-box {{ border:1px solid var(--line); padding:10px 12px 12px; background:#fafafa; }}
-  .chart-box h3 {{ margin:0 0 8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }}
-  .hbar {{ display:grid; grid-template-columns:92px 1fr 28px; gap:6px; align-items:center; margin:4px 0; font-size:11px; }}
-  .hbar span {{ color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
-  .hbar b {{ text-align:right; font-size:11px; }}
-  .risk-num {{ font-size:36px; font-weight:700; margin:4px 0 6px; }}
-  .risk-num small {{ font-size:14px; color:var(--muted); font-weight:500; }}
-  .lead {{ font-size:14px; line-height:1.6; }}
-  .barwrap {{ background:#e5e7eb; height:10px; margin:6px 0 14px; }}
-  .bar {{ height:10px; background:var(--accent); }}
-  .bar.iso {{ background:#166534; }}
-  .note {{ font-size:11px; color:var(--muted); }}
-  table.comp {{ border-collapse:collapse; width:100%; font-size:11px; margin:8px 0 16px; }}
-  table.comp th, table.comp td {{ border:1px solid var(--line); padding:4px 6px; text-align:left; }}
-  table.comp th {{ background:#f3f4f6; }}
-  h2 {{ font-size:15px; letter-spacing:.08em; text-transform:uppercase; border-bottom:2px solid var(--accent);
-        padding-bottom:6px; margin:28px 0 12px; color:var(--accent); }}
-  h3 {{ font-size:14px; margin:16px 0 6px; }}
-  p, li {{ font-size:13px; line-height:1.55; }}
-  .test {{ border:1px solid var(--line); padding:10px 12px; margin:0 0 10px; page-break-inside:avoid; }}
-  .test .cmd {{ font-family:Consolas,monospace; font-size:11px; background:#f3f4f6; padding:6px 8px; overflow-x:auto; }}
-  .test ul {{ margin:6px 0 8px; padding-left:1.2rem; }}
-  .fail-why {{ color:var(--bad); font-size:12px; }}
-  .out {{ font-family:Consolas,monospace; font-size:10.5px; white-space:pre-wrap; background:#0f172a; color:#e2e8f0;
-          padding:8px 10px; max-height:160px; overflow:auto; margin-top:8px; }}
-  details.test-log {{ margin-top:8px; font-size:12px; color:var(--muted); }}
-  .ok {{ color:var(--ok); font-weight:700; }}
-  .fail {{ color:var(--bad); font-weight:700; }}
-  .finding {{ border-left:4px solid var(--accent); padding:8px 12px; margin:0 0 12px; background:#f8fafc; }}
-  .finding.alto {{ border-color:#dc2626; }}
-  .finding.medio {{ border-color:#d97706; }}
-  .finding.baixo {{ border-color:#2563eb; }}
-  .finding.info {{ border-color:#6b7280; }}
-  .finding .impact {{ margin:4px 0 0; font-size:13px; }}
-  .finding details.tech {{ margin-top:8px; font-size:12px; color:var(--muted); }}
-  .finding details.tech summary {{ cursor:pointer; color:var(--accent); }}
-  .simple-box {{ border:1px solid var(--line); padding:14px 16px; margin:12px 0 18px; background:#f8fafc; }}
-  .simple-box h2 {{ margin:0 0 8px; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
-                    border:none; padding:0; color:var(--muted); }}
-  .simple-box .lead {{ margin:0 0 10px; }}
-  .simple-box .now {{ margin:0; font-weight:600; }}
-  .tag {{ display:inline-block; font-size:10px; padding:2px 6px; border:1px solid var(--line); margin-right:6px; }}
-  .empty {{ padding:40px 16px; text-align:center; color:var(--muted); }}
-  .foot {{ margin-top:36px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:10px; }}
-  .fix ol {{ margin:0.35rem 0 0.5rem; padding-left:1.2rem; }}
-  @media (max-width:640px) {{
-    .kpis {{ grid-template-columns:repeat(2,1fr); }}
-    .charts {{ grid-template-columns:1fr; }}
-  }}
-</style>
-</head>
-<body>
-<div class="page">
-  <div class="brand">DarkStar · Argus v{_esc(APP_VERSION)}</div>
-  <h1>{_esc(model["title"])}</h1>
-  <div class="meta">CONFIDENCIAL · {model["now"]} · Alvo(s): {alvos}</div>
-  {empty_banner}
-  {_simple_summary_html(model)}
-  <div class="kpis">
-    <div class="kpi"><b>{len(executions)}</b><span>testes</span></div>
-    <div class="kpi"><b>{len(findings)}</b><span>achados</span></div>
-    <div class="kpi"><b>{len(confirmed)}</b><span>confirmados</span></div>
-    <div class="kpi"><b>{len(fps)}</b><span>falsos +</span></div>
-    {risk_html}
-  </div>
-
-  <h2>1. O que encontramos</h2>
-  {findings_html}
-
-  <h2>2. O que fazer agora</h2>
-  {rem_html}
-
-  <h2>3. Escopo do trabalho</h2>
-  <p>{_esc(model["scope"])}</p>
-  <p>Testes em ambiente isolado (reconhecimento → enumeração → varredura → verificação).
-  Sem login autenticado, salvo se você informou credenciais no chat.</p>
-
-  <details>
-    <summary>Detalhes técnicos (gráficos, testes, conformidade)</summary>
-    {charts_html}
-    <h2>Testes realizados</h2>
-    <p>{model["ok_exec"]} com sucesso · {model["fail_exec"]} falha(s)/bloqueio(s).</p>
-    {tests_html}
-    <h2>Notas da conversa</h2>
-    {chat_html}
-    <h2>Conformidade indicativa ISO 27001 / SOC 2</h2>
-    {iso_html}
-    <h2>Metodologia e limitações</h2>
-    <ul>
-      <li>Reconhecimento, enumeração, varredura e verificação não destrutiva.</li>
-      <li>Proteções de borda (WAF/CDN) podem esconder problemas; ausência de achado não garante segurança.</li>
-      <li>Pontuação de risco e gravidade são estimativas com base nos testes desta conversa.</li>
-      <li>ISO/SOC 2 aqui é mapeamento indicativo — não substitui auditoria nem certificação.</li>
-      <li>Revise itens pendentes antes de enviar ao cliente. O PDF completo traz o detalhe técnico.</li>
-    </ul>
-  </details>
-  <div class="foot">Prévia gerada automaticamente a partir desta conversa. Atualiza conforme novos testes. DarkStar · Argus v{_esc(APP_VERSION)}.</div>
-</div>
-</body>
-</html>
-"""
-
-
-def _simple_summary_html(model: dict[str, Any]) -> str:
-    risk = model.get("risk") or {}
-    score = int(risk.get("score") or 0)
-    label = str(risk.get("label") or "não calculado")
-    confirmed = model.get("confirmed") or []
-    pending = model.get("pending") or []
-    findings = model.get("findings") or []
-    remediations = model.get("remediations") or []
-    if model.get("empty"):
-        found = "Ainda não rodamos testes nesta conversa."
-        now = "Peça à Argus um reconhecimento ou inicie o piloto automático."
-    else:
-        n = len(findings)
-        n_c = len(confirmed)
-        n_p = len(pending)
-        if n == 0:
-            found = "Os testes rodaram, mas ainda não há achados estruturados para listar."
-        elif n_c:
-            found = f"Encontramos {n} problema(s); {n_c} já confirmado(s) como real(is)" + (
-                f" e {n_p} ainda pendente(s) de triagem." if n_p else "."
-            )
-        else:
-            found = f"Listamos {n} possível(is) problema(s)" + (
-                f" — {n_p} aguardando triagem." if n_p else "."
-            )
-        if remediations:
-            top = remediations[0]
-            title = (
-                top.get("remediation_title") or top.get("finding_title") or "correção prioritária"
-            )
-            now = f"Comece por: {title}."
-            if len(remediations) > 1:
-                now += f" Há mais {len(remediations) - 1} correção(ões) na lista abaixo."
-        elif pending:
-            now = "Triagem: confirme ou descarte os pendentes antes de entregar o relatório."
-        else:
-            now = "Revise os achados abaixo e priorize os de maior gravidade."
-    exec_txt = str(model.get("executive") or "").strip()
-    exec_block = f"<p class='lead'>{_esc(exec_txt)}</p>" if exec_txt else ""
-    return f"""
-  <div class="simple-box">
-    <h2>Risco geral</h2>
-    <p class="now">{score}/100 — {_esc(label)}</p>
-    <h2>O que encontramos</h2>
-    <p class="lead">{_esc(found)}</p>
-    {exec_block}
-    <h2>O que fazer agora</h2>
-    <p class="now">{_esc(now)}</p>
   </div>"""
 
 
@@ -340,34 +306,11 @@ def _render_iso_soc2(
         except Exception:  # noqa: BLE001
             return "<p>Não foi possível mapear controles neste momento.</p>"
     disc = _esc(report.get("disclaimer_pt") or "")
-    extra = (
-        "Cobertura <b>indicativa</b> por palavras-chave — não substitui certificação "
-        "ISO/IEC 27001 nem atestado SOC 2."
-    )
-    parts = [f"<p class='note'>{disc}</p><p class='note'>{extra}</p>"]
+    parts = [f"<p class='note'>{disc}</p>"]
     for fw_id, fw in (report.get("frameworks") or {}).items():
         cov = int(fw.get("indicative_coverage_0_100") or 0)
         name = _esc(fw.get("name") or fw_id)
-        bar_cls = "iso" if "ISO" in str(fw_id).upper() else ""
-        parts.append(
-            f"<h3>{name} — {cov}%</h3>"
-            f"<p class='note'>{fw.get('gaps', 0)} gap(s) / {fw.get('controls_total', 0)} controles</p>"
-            f"<div class='barwrap'><div class='bar {bar_cls}' style='width:{max(0, min(100, cov))}%'></div></div>"
-        )
-        rows = [
-            "<table class='comp'><tr><th>Controle</th><th>Crítico</th><th>Gap</th><th>Achados</th></tr>"
-        ]
-        for c in (fw.get("controls") or [])[:24]:
-            rows.append(
-                "<tr>"
-                f"<td>{_esc(c.get('id'))} {_esc(c.get('name'))}</td>"
-                f"<td>{'sim' if c.get('critical') else 'não'}</td>"
-                f"<td>{'sim' if c.get('gap') else 'não'}</td>"
-                f"<td>{len(c.get('matched_findings') or [])}</td>"
-                "</tr>"
-            )
-        rows.append("</table>")
-        parts.append("".join(rows))
+        parts.append(f"<h3>{name} — {cov}%</h3>")
     return "".join(parts)
 
 
@@ -377,29 +320,9 @@ def _render_tests(executions: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for i, ex in enumerate(executions[:60], 1):
         d = digest_execution(ex)
-        cls = "ok" if d["status"] == "ok" else "fail"
-        bullets = "".join(f"<li>{_esc(b)}</li>" for b in d.get("bullets") or [])
-        fail = d.get("failure") or ""
-        reason = d.get("reason") or ""
-        log = d.get("log") or ""
-        log_block = (
-            f"<details class='test-log'><summary>Log limpo</summary>"
-            f"<div class='out'>{_esc(log)}</div></details>"
-            if log
-            else ""
-        )
-        fail_html = f"<p class='fail-why'>{_esc(fail)}</p>" if fail else ""
-        reason_html = f"<p class='note'>{_esc(reason)}</p>" if reason and reason != fail else ""
-        bullets_html = f"<ul>{bullets}</ul>" if bullets else ""
         parts.append(
-            f"<div class='test'><h3>{i}. {_esc(d['tool'])} · "
-            f"<span class='{cls}'>{_esc(d['status_label'])}</span></h3>"
-            f"<p>{_esc(d.get('headline') or '')}</p>"
-            f"{fail_html}"
-            f"{reason_html}"
-            f"{bullets_html}"
-            f"<div class='cmd'>{_esc(d.get('command') or '—')}</div>"
-            f"{log_block}</div>"
+            f"<div class='test'><h3>{i}. {_esc(d['tool'])}</h3>"
+            f"<p>{_esc(d.get('headline') or '')}</p></div>"
         )
     return "".join(parts)
 
@@ -417,64 +340,20 @@ def _sev_class(sev: Any) -> str:
 
 def _render_findings(findings: list[dict[str, Any]]) -> str:
     if not findings:
-        return "<p>Nenhum problema listado ainda. Quando os testes gerarem itens, eles aparecem aqui.</p>"
+        return "<p>Nenhum problema listado ainda.</p>"
     parts: list[str] = []
     for i, f in enumerate(findings[:120], 1):
-        status = _STATUS.get(
-            str(f.get("status") or "candidate"), str(f.get("status") or "Pendente")
-        )
-        sev_label = str(f.get("severity_label") or f.get("severity") or "info")
-        host = f.get("surface_target") or f.get("host") or "—"
-        evidence = str(f.get("evidence") or "")[:1600]
-        cmd = str(f.get("command") or "")[:500]
         headline = f.get("plain_title") or f.get("title") or "Problema"
-        tech = str(f.get("title") or "")
-        what = str(f.get("what_it_is") or "")
-        everyday = str(f.get("everyday") or "")
-        why = str(f.get("why_it_matters") or "")
-        impact = why or everyday or what or "Impacto ainda não descrito — revise a evidência."
-        happen = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("could_happen") or [])[:4])
-        decide = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("how_to_decide") or [])[:4])
-        kind = _esc(f.get("kind_label") or "")
-        cwe = _esc(f.get("cwe") or "")
-        owasp = _esc(f.get("owasp") or "")
-        tech_bits: list[str] = []
-        if tech and tech != headline:
-            tech_bits.append(f"<p>Nome técnico: {_esc(tech)}</p>")
-        if what:
-            tech_bits.append(f"<p>{_esc(what)}</p>")
-        if everyday and everyday != impact:
-            tech_bits.append(f"<p><i>{_esc(everyday)}</i></p>")
-        if happen:
-            tech_bits.append(f"<p>Se for verdade, pode acontecer:</p><ul>{happen}</ul>")
-        if decide:
-            tech_bits.append(f"<p>Como decidir:</p><ul>{decide}</ul>")
-        if cmd:
-            tech_bits.append(f"<p>Comando: <code>{_esc(cmd)}</code></p>")
-        if evidence:
-            tech_bits.append(f"<p>Evidência: {_esc(evidence)}</p>")
-        refs = ""
-        if kind:
-            refs += f"<span class='tag'>{kind}</span>"
-        if cwe:
-            refs += f"<span class='tag'>{cwe}</span>"
-        if owasp:
-            refs += f"<span class='tag'>{owasp}</span>"
-        if refs:
-            tech_bits.append(f"<p>{refs}</p>")
-        tech_html = (
-            f"<details class='tech'><summary>Detalhe técnico</summary>{''.join(tech_bits)}</details>"
-            if tech_bits
-            else ""
+        impact = (
+            f.get("why_it_matters")
+            or f.get("everyday")
+            or f.get("what_it_is")
+            or "—"
         )
         parts.append(
             f"<div class='finding {_sev_class(f.get('severity'))}'>"
             f"<p><b>{i}. {_esc(headline)}</b></p>"
-            f"<p><span class='tag'>{_esc(sev_label)}</span>"
-            f"<span class='tag'>{_esc(status)}</span>"
-            f"<span class='tag'>{_esc(host)}</span></p>"
             f"<p class='impact'><b>Impacto:</b> {_esc(impact)}</p>"
-            f"{tech_html}"
             f"</div>"
         )
     return "".join(parts)
@@ -482,31 +361,12 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
 
 def _render_remediations(rows: list[dict[str, Any]]) -> str:
     if not rows:
-        return "<p>Sem plano de correção ainda — aparece quando houver achados (além de logs de teste).</p>"
+        return "<p>Sem plano de correção ainda.</p>"
     parts: list[str] = []
     for i, r in enumerate(rows[:60], 1):
-        steps = r.get("steps") or []
-        steps_html = "".join(f"<li>{_esc(s)}</li>" for s in steps)
-        who = _esc(r.get("who") or "")
-        why = _esc(r.get("why") or "")
-        verify = _esc(r.get("verify") or "")
-        sev = _esc(r.get("severity_label") or r.get("severity") or "")
-        steps_block = (
-            f"<p><b>Passo a passo</b></p><ol>{steps_html}</ol>"
-            if steps_html
-            else f"<p>{_esc(r.get('action') or '')}</p>"
-        )
-        who_html = f"<p><b>Quem faz:</b> {who}</p>" if who else ""
-        why_html = f"<p>{why}</p>" if why else ""
-        verify_html = f"<p><b>Como saber que corrigiu:</b> {verify}</p>" if verify else ""
         parts.append(
             f"<div class='test fix'><h3>{i}. {_esc(r.get('remediation_title') or 'Correção')}</h3>"
-            f"<p><b>Achado:</b> {_esc(r.get('finding_title'))} · {_esc(sev)}</p>"
-            f"{who_html}"
-            f"{why_html}"
-            f"{steps_block}"
-            f"{verify_html}"
-            f"</div>"
+            f"<p>{_esc(r.get('action') or '')}</p></div>"
         )
     return "".join(parts)
 
@@ -515,7 +375,7 @@ def _render_chat_notes(assistant_msgs: list[str]) -> str:
     notes = [m.strip() for m in assistant_msgs if m and len(str(m).strip()) > 40]
     if not notes:
         return "<p>A Argus ainda não registrou análise nesta conversa.</p>"
-    parts = []
-    for n, text in enumerate(notes[-4:], 1):
-        parts.append(f"<div class='test'><h3>Nota {n}</h3><p>{_esc(text[:2200])}</p></div>")
-    return "".join(parts)
+    return "".join(
+        f"<div class='test'><h3>Nota {n}</h3><p>{_esc(text[:2200])}</p></div>"
+        for n, text in enumerate(notes[-4:], 1)
+    )

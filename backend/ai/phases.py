@@ -248,7 +248,11 @@ def phase_prompt_block(
 
 
 def evaluate_phase_advance(surface: dict[str, Any]) -> PhaseDecision:
-    """Decide se a fase atual pode avançar com base no Attack Surface."""
+    """Decide se a fase atual pode avançar com base no Attack Surface.
+
+    Critérios por artefato (hosts/DNS, ports/URLs, findings) — não por contagem
+    solta de comandos.
+    """
     phase = surface.get("phase") or "recon"
     if phase not in PHASES:
         phase = "recon"
@@ -258,46 +262,63 @@ def evaluate_phase_advance(surface: dict[str, Any]) -> PhaseDecision:
     urls = surface.get("urls") or []
     findings = surface.get("findings") or []
     tools = set(surface.get("tools_run") or [])
-    commands = int(surface.get("commands_run") or 0)
     candidates = [f for f in findings if f.get("status") == "candidate"]
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
+    open_items = [f for f in findings if f.get("status") in {"candidate", "inconclusive"}]
+
+    def _sev(f: dict) -> str:
+        return str(f.get("severity") or "").strip().lower()
+
+    high_open = [f for f in open_items if _sev(f) in {"high", "critical"}]
     verified_attempted = any(f.get("verified_at") for f in findings) or any(
         f.get("status") in {"confirmed", "false_positive"} for f in findings
     )
+    high_verified = any(
+        _sev(f) in {"high", "critical"}
+        and (f.get("verified_at") or f.get("status") in {"confirmed", "false_positive"})
+        for f in findings
+    )
 
     if phase == "recon":
-        ready = commands >= 1 and (len(hosts) >= 1 or bool(tools & PHASE_PREFERRED_TOOLS["recon"]))
-        if ready or commands >= 2:
-            return PhaseDecision("enumerate", True, "Recon inicial suficiente.", False)
-        return PhaseDecision(phase, False, "Continue o reconhecimento.", False)
+        # Seed host sozinho não basta — precisa tool de recon ou hosts extras
+        recon_tool = bool(tools & PHASE_PREFERRED_TOOLS["recon"])
+        extra_hosts = len(hosts) > 1
+        if recon_tool or extra_hosts:
+            return PhaseDecision("enumerate", True, "Recon com evidência (DNS/hosts).", False)
+        return PhaseDecision(phase, False, "Execute recon (subfinder/dig/whois/httpx).", False)
 
     if phase == "enumerate":
-        ready = bool(ports) or bool(urls) or commands >= 3
-        if ready:
-            return PhaseDecision("vuln_scan", True, "Superfície enumerada.", False)
+        if ports or urls:
+            return PhaseDecision("vuln_scan", True, "Superfície enumerada (ports/URLs).", False)
+        enum_tool = bool(tools & PHASE_PREFERRED_TOOLS["enumerate"])
+        if enum_tool and (ports or urls or hosts):
+            # Tool rodou mas ainda sem ports/urls — continue enum
+            return PhaseDecision(phase, False, "Enumere portas/URLs/serviços.", False)
         return PhaseDecision(phase, False, "Enumere portas/URLs/serviços.", False)
 
     if phase == "vuln_scan":
-        ready = (
-            bool(candidates)
-            or bool(confirmed)
-            or (bool(tools & PHASE_PREFERRED_TOOLS["vuln_scan"]) and commands >= 1)
-        )
-        # Sem achados após scan: ainda pode ir para verify/report
-        if ready or (commands >= 4 and bool(ports or urls)):
-            next_phase = "verify" if candidates else "report"
+        vuln_tool = bool(tools & PHASE_PREFERRED_TOOLS["vuln_scan"])
+        has_surface = bool(ports or urls)
+        if candidates or confirmed:
+            return PhaseDecision("verify", True, "Candidatos encontrados — verificar.", False)
+        if vuln_tool and has_surface:
             return PhaseDecision(
-                next_phase,
+                "report",
                 True,
-                "Varredura concluída." if candidates else "Sem candidatos — ir ao relatório.",
-                next_phase == "report",
+                "Varredura sem candidatos — ir ao relatório.",
+                True,
             )
         return PhaseDecision(phase, False, "Execute varredura de vulnerabilidades.", False)
 
     if phase == "verify":
-        # Pipeline assertivo roda ao final; aqui basta ter tentado ou não haver candidatos
-        open_items = [f for f in findings if f.get("status") in {"candidate", "inconclusive"}]
-        if verified_attempted or not open_items or commands >= 2:
+        if high_open and not (verified_attempted or high_verified):
+            return PhaseDecision(
+                phase,
+                False,
+                f"Verifique {len(high_open)} achado(s) high/critical antes de report.",
+                False,
+            )
+        if verified_attempted or not open_items:
             return PhaseDecision(
                 "report",
                 True,
@@ -338,19 +359,39 @@ def kickoff_for_phase(
     max_rounds: int,
     tools_executed: int,
     surface_summary_data: dict[str, Any] | None,
+    surface: dict[str, Any] | None = None,
+    offensive: bool = False,
+    offline: bool = False,
 ) -> str:
     block = phase_prompt_block(phase, surface_summary_data)
+    from backend.ai.tool_playbook import compact_playbook_block, next_actions_from_surface
+
+    surf = surface or surface_summary_data or {}
+    actions = next_actions_from_surface(
+        surf, phase=phase, offensive=offensive, offline=offline, limit=5
+    )
+    next_txt = ""
+    if actions:
+        next_txt = "\n[NEXT BEST ACTIONS]\n" + "\n".join(
+            f"- {a}" for a in actions
+        )
+    playbook = ""
+    if round_idx == 0:
+        playbook = "\n\n" + compact_playbook_block(
+            surf, phase=phase, offensive=offensive, offline=offline
+        )
+
     if round_idx == 0:
         return (
-            f"Missão autônoma iniciada (metodologia por fases).\n"
+            f"Missão autônoma iniciada (metodologia finding-driven).\n"
             f"Alvo: {target}\n"
             f"Objetivo: {objective}\n\n"
-            f"{block}\n\n"
+            f"{block}{next_txt}{playbook}\n\n"
             "Execute o primeiro comando via run_kali_tool agora, adequado à fase atual."
         )
     return (
         f"Rodada {round_idx + 1}/{max_rounds}. Comandos até agora: {tools_executed}.\n"
-        f"{block}\n"
-        "Analise o Attack Surface, execute a próxima ferramenta da fase "
+        f"{block}{next_txt}\n"
+        "Analise o Attack Surface, execute a próxima melhor ação da fase "
         "ou chame finish_mission se estiver na fase report / objetivo cumprido."
     )
