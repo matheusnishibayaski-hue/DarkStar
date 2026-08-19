@@ -1033,8 +1033,6 @@ def residual_risk_score(findings: list[dict[str, Any]]) -> dict[str, Any]:
         label = "Médio alto"
     elif score >= 30:
         label = "Médio"
-    elif score > 0:
-        label = "Baixo"
     else:
         label = "Baixo"
 
