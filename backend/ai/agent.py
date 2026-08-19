@@ -204,8 +204,7 @@ def _apply_auto_whitebox_mission(user_message: str) -> str:
         "[Sistema] Missão automática white-box. Use [Anexos] e [PROJECT INTEL] como fonte "
         "primária. Responda ao usuário SOMENTE com o relatório de achados (sem saudação, "
         "sem pedir alvo se o intel já tiver host/URL do app). Se houver alvo de rede no "
-        "intel, pode usar run_kali_tool e incorporar no relatório.\n\n"
-        + user_message
+        "intel, pode usar run_kali_tool e incorporar no relatório.\n\n" + user_message
     )
 
 

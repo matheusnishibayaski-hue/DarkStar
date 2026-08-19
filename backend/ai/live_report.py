@@ -294,18 +294,18 @@ def _simple_summary_html(model: dict[str, Any]) -> str:
         if n == 0:
             found = "Os testes rodaram, mas ainda não há achados estruturados para listar."
         elif n_c:
-            found = (
-                f"Encontramos {n} problema(s); {n_c} já confirmado(s) como real(is)"
-                + (f" e {n_p} ainda pendente(s) de triagem." if n_p else ".")
+            found = f"Encontramos {n} problema(s); {n_c} já confirmado(s) como real(is)" + (
+                f" e {n_p} ainda pendente(s) de triagem." if n_p else "."
             )
         else:
-            found = (
-                f"Listamos {n} possível(is) problema(s)"
-                + (f" — {n_p} aguardando triagem." if n_p else ".")
+            found = f"Listamos {n} possível(is) problema(s)" + (
+                f" — {n_p} aguardando triagem." if n_p else "."
             )
         if remediations:
             top = remediations[0]
-            title = top.get("remediation_title") or top.get("finding_title") or "correção prioritária"
+            title = (
+                top.get("remediation_title") or top.get("finding_title") or "correção prioritária"
+            )
             now = f"Comece por: {title}."
             if len(remediations) > 1:
                 now += f" Há mais {len(remediations) - 1} correção(ões) na lista abaixo."

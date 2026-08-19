@@ -526,6 +526,7 @@ def dashboard_bundle(
         "history": get_scan_history(days=days, limit=history_limit, session_id=sid),
     }
 
+
 def vulnerability_trend(days: int = 30, session_id: str | None = None) -> list[dict[str, Any]]:
     """Série diária a partir de ScanHistory da conversa."""
     from backend.database.models_dashboard import ScanHistory

@@ -195,7 +195,9 @@ class TestAuditIds(_DbCase):
             self.assertEqual(events[0]["client_id"], "aud-roe")
             self.assertEqual(events[0]["contract_id"], "CTR-9")
             self.assertEqual(events[0]["session_id"], "sess-1")
-            with patch("backend.clients.runtime.get_active_client_id", side_effect=RuntimeError("x")):
+            with patch(
+                "backend.clients.runtime.get_active_client_id", side_effect=RuntimeError("x")
+            ):
                 stamp = audit_mod._client_audit_stamp()
                 self.assertEqual(stamp["client_id"], "")
             audit_mod.record_event("ping", {"ok": True})

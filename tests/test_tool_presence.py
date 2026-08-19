@@ -150,7 +150,9 @@ class TestAutopilotBudgetStable(unittest.TestCase):
             )
         self.assertIsInstance(result, AutonomousResponse)
         # finish pode ser soft-blocked se pending > 3; no mínimo não crashou
-        self.assertIn(result.stopped_reason, {"objective_met", "finished_early", "max_rounds", "max_tools"})
+        self.assertIn(
+            result.stopped_reason, {"objective_met", "finished_early", "max_rounds", "max_tools"}
+        )
 
 
 if __name__ == "__main__":

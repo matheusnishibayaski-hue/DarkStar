@@ -49,8 +49,7 @@ def _container_running() -> tuple[bool, str]:
             return False, (proc.stderr or "Docker indisponível.").strip()
         if KALI_CONTAINER not in (proc.stdout or ""):
             return False, (
-                f"Container '{KALI_CONTAINER}' não está rodando. "
-                "Execute start.bat ou ./start.sh"
+                f"Container '{KALI_CONTAINER}' não está rodando. Execute start.bat ou ./start.sh"
             )
         return True, ""
     except FileNotFoundError:
@@ -134,7 +133,9 @@ def update_kali_packages(*, do_upgrade: bool = True, timeout: int | None = None)
     overall_ok = all(s.get("ok") for s in steps) and bool(steps)
     result = {
         "ok": overall_ok,
-        "error": "" if overall_ok else next(
+        "error": ""
+        if overall_ok
+        else next(
             (s.get("stderr") or "Falha no apt-get" for s in steps if not s.get("ok")),
             "Falha no apt-get",
         ),

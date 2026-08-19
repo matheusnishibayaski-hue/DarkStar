@@ -330,7 +330,9 @@ def get_tool_info(tool_id: str) -> dict[str, str]:
     }
 
 
-def enrich_categories(categories: list[dict], *, presence: dict[str, bool] | None = None) -> list[dict]:
+def enrich_categories(
+    categories: list[dict], *, presence: dict[str, bool] | None = None
+) -> list[dict]:
     enriched = []
     for cat in categories:
         tools = []

@@ -32,7 +32,9 @@ class TestPkgUpdate(unittest.TestCase):
         self.assertEqual(result["steps"][1]["name"], "upgrade")
         self.assertEqual(run.call_count, 2)
         first_args = run.call_args_list[0].args[0]
-        self.assertEqual(first_args[:4], ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update"])
+        self.assertEqual(
+            first_args[:4], ["env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "update"]
+        )
         second_args = run.call_args_list[1].args[0]
         self.assertIn("upgrade", second_args)
         self.assertIn("-y", second_args)

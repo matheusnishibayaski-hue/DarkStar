@@ -571,7 +571,9 @@ def _run_autonomous_body(
 
         if finished:
             # Soft-block: ainda há pendentes e budget — peça mais uma tool
-            pend_now = pending_scan_tools(scan_tools, (load_surface(recon_target) or {}).get("tools_run") or [])
+            pend_now = pending_scan_tools(
+                scan_tools, (load_surface(recon_target) or {}).get("tools_run") or []
+            )
             if pend_now and remaining_tools > 0 and len(pend_now) > 3 and current_phase != "report":
                 sample = ", ".join(pend_now[:8])
                 messages.append(

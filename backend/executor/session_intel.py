@@ -718,7 +718,6 @@ def _apply_normalized_severity(finding: dict[str, Any]) -> None:
         pass
 
 
-
 def merge_session_finding_fields(
     session_id: str, finding_id: str, fields: dict[str, Any]
 ) -> dict[str, Any] | None:

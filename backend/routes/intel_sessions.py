@@ -113,9 +113,7 @@ def _triage_response(session_id: str, executions: list[dict] | None = None) -> d
                     pass
             autos_persisted = True
 
-    findings_after = (
-        aggregate_session_findings(session_id, sync=False) if patch_rows else findings
-    )
+    findings_after = aggregate_session_findings(session_id, sync=False) if patch_rows else findings
     return {
         "session_id": session_id,
         "queue": queue,

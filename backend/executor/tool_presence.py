@@ -71,7 +71,9 @@ def _probe_batch_docker(names: list[str]) -> dict[str, bool]:
     parts = ["set +e"]
     for n in names:
         safe = n.replace("'", "")
-        parts.append(f"if command -v '{safe}' >/dev/null 2>&1; then echo '{safe}\\t1'; else echo '{safe}\\t0'; fi")
+        parts.append(
+            f"if command -v '{safe}' >/dev/null 2>&1; then echo '{safe}\\t1'; else echo '{safe}\\t0'; fi"
+        )
     script = "; ".join(parts)
     try:
         proc = subprocess.run(

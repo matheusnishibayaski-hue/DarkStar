@@ -263,7 +263,10 @@ def extract_project_intel(attachments: list | None) -> str:
     # tool bias hint — diversificado (não só o trio web)
     bias: list[str] = []
     joined = " ".join(stack).lower() + " " + combined.lower()[:4000]
-    if any(x in joined for x in ("node", "next", "express", "fastapi", "django", "flask", "php", "vue", "react")):
+    if any(
+        x in joined
+        for x in ("node", "next", "express", "fastapi", "django", "flask", "php", "vue", "react")
+    ):
         bias.extend(["httpx", "katana", "nuclei", "nikto", "ffuf"])
     if any(x in joined for x in ("dns", "subdomain", "domain")):
         bias.extend(["dnsx", "amass", "subfinder", "dig"])
@@ -300,9 +303,7 @@ def extract_project_intel(attachments: list | None) -> str:
     if sensitive:
         lines.append("Configs úteis: " + ", ".join(sensitive[:8]))
     if bias_u:
-        lines.append(
-            "Preferência de ferramentas (quando fizer sentido): " + ", ".join(bias_u[:8])
-        )
+        lines.append("Preferência de ferramentas (quando fizer sentido): " + ", ".join(bias_u[:8]))
     lines.append(
         "Regras: priorize o alvo autorizado pelo operador; derive paths/portas do código; "
         "não invente hosts; se não houver alvo na mensagem, peça o host/URL."
