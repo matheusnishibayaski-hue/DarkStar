@@ -292,6 +292,7 @@ class TestSoftBlockFinish(unittest.TestCase):
                 return_value=["nmap", "httpx", "nuclei", "nikto", "ffuf", "katana"],
             ),
             patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 3),
+            patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
         ):
             result = run_autonomous(
                 "softblock.test",

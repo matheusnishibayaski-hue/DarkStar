@@ -144,12 +144,42 @@ export function createToolStreamHandlers({
       window.dispatchEvent(new CustomEvent("darkstar:tool-done", { detail: data || {} }));
     },
     round_start(data) {
-      const label = `rodada ${data.round}/${data.max_rounds} · ${data.tools_executed} cmd(s)`;
+      const phase = data.phase || "?";
+      const left = data.tools_left != null ? data.tools_left : "?";
+      const cands = data.findings_candidates != null ? data.findings_candidates : 0;
+      const label =
+        `rodada ${data.round}/${data.max_rounds} · ${phase} · ` +
+        `${cands} cand. · ${left} tools left`;
       if (sessionId) setRunTyping(sessionId, label);
       if (isViewing(sessionId)) showTyping(label);
     },
     mission_start(data) {
-      const label = `auto-pilot: ${data.target}`;
+      const mode = data.engagement_mode ? ` · ${data.engagement_mode}` : "";
+      const label = `auto-pilot: ${data.target}${mode}`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
+    },
+    phase_change(data) {
+      const label = `fase ${data.from} → ${data.to}`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
+    },
+    coverage_nudge(data) {
+      const label = `cobertura: ${data.reason || "continue"}`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
+    },
+    preflight(data) {
+      const label = data.alive
+        ? `preflight ok — ${data.target || "alvo"}`
+        : `preflight: alvo sem resposta`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
+    },
+    finding_update(data) {
+      const n = data.count || 0;
+      if (n <= 0) return;
+      const label = `${n} candidato(s) high/critical`;
       if (sessionId) setRunTyping(sessionId, label);
       if (isViewing(sessionId)) showTyping(label);
     },
@@ -168,6 +198,10 @@ export async function consumeChatStream(response, handlers, options = {}) {
     tool_done: handlers.onToolDone || handlers.tool_done,
     mission_start: handlers.onMissionStart || handlers.mission_start,
     round_start: handlers.onRoundStart || handlers.round_start,
+    phase_change: handlers.onPhaseChange || handlers.phase_change,
+    coverage_nudge: handlers.onCoverageNudge || handlers.coverage_nudge,
+    preflight: handlers.onPreflight || handlers.preflight,
+    finding_update: handlers.onFindingUpdate || handlers.finding_update,
     done: handlers.onDone || handlers.done,
     error: handlers.onError || handlers.error,
   };

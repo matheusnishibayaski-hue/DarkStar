@@ -37,6 +37,8 @@ def api_autonomous_stream(req: AutonomousRequest):
                 scan_profile=req.scan_profile or None,
                 custom_tools=req.custom_tools or None,
                 attachments=[a.model_dump() for a in (req.attachments or [])] or None,
+                engagement_mode=req.engagement_mode or "safe",
+                offline=bool(req.offline),
             )
         except Exception as e:
             yield format_sse("error", {"detail": str(e)})
@@ -67,6 +69,8 @@ def api_autonomous(req: AutonomousRequest):
             scan_profile=req.scan_profile or None,
             custom_tools=req.custom_tools or None,
             attachments=[a.model_dump() for a in (req.attachments or [])] or None,
+            engagement_mode=req.engagement_mode or "safe",
+            offline=bool(req.offline),
         )
         return AutonomousResponseModel(
             message=result.message,

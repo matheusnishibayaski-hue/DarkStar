@@ -41,40 +41,73 @@ Diferença simples: **não é GPS descrevendo a rua — é o carro andando.**
 
 ---
 
-### 2. Tem um “Piloto automático” de missão
+### 2. Três personalidades — a Argus muda com o switcher
+
+No canto superior do chat: **anjo** · **diabo** · **agente**.
+
+| Switcher | Modo | Como a Argus pensa |
+|----------|------|--------------------|
+| **Anjo** | Safe | Consultor / pentester: hipótese → teste → evidência → próximo passo. |
+| **Diabo** | Offensive (master key) | Adversário disciplinado: kill chain no alvo autorizado — obsessivo por break e PoC. |
+| **Agente** | Offline (+ Ollama) | Fantasma / OPSEC: lacônico, pegada mínima, não quer ser encontrado — e é habilidoso nisso. |
+
+Prioridade se houver conflito: **offline > offensive > safe**.  
+Escopo e ética não mudam: só alvo autorizado, whitelist Kali, freios de perfil.
+
+O **Piloto** herda o mesmo modo (badge + objetivo sugerido). Chat e missão automática falam a mesma língua.
+
+---
+
+### 3. Tem um “Piloto automático” de missão
 
 Cansado de digitar passo a passo?
 
-Abra o **PILOTO**, informe o alvo e o nível do scan.
+Abra o **PILOTO**, informe o alvo, confira o **modo** (do switcher) e o **tipo de scan**, edite o **objetivo** se quiser.
 
-A Argus segue sozinha um roteiro completo:
+A Argus segue sozinha uma metodologia **finding-driven** por fases:
 
-**descobrir → mapear → procurar falhas → tentar confirmar → gerar relatório**
+**recon → enumerar → procurar falhas → verificar → relatório**
 
-É como ter um analista júnior que não para até fechar a missão — e ainda te devolve o PDF.
+Não é checklist de “rodar todas as tools”. É fila de prioridade da fase, superfície real e próximo melhor teste.
+
+Por baixo do capô (o que faz o Piloto parecer adulto):
+
+- **Preflight** — se o alvo não responde, encerra cedo (não queima 25 comandos no vazio)
+- **HUD** — fase, candidatos, tools restantes, nudges de cobertura
+- **Soft-block** — não deixa `finish` prematuro com high/critical sem verify (ou preferred da fase pendente)
+- **`coverage_waived`** — saídas justificadas (host morto / sem superfície / WAF)
+- **Anti-repeat** — não repete o mesmo comando à toa
+- **Cancel** — gera **PDF parcial** com o que já rodou
+
+No fim: verificação + PDF (ou parcial se você parou no meio).
 
 #### Exemplos fáceis de entender
 
 | Situação | Como o Piloto ajuda |
 |----------|---------------------|
-| **Você tem 1 hora antes da call** | Coloca o alvo, escolhe “básico” e deixa rodando enquanto prepara a reunião. |
-| **Lab de madrugada** | Dorme (ou faz café). A missão continua: recon → scan → verificação. |
-| **Cliente pediu “visão geral rápida”** | Missão intermediária + PDF no fim — sem montar checklist na mão. |
-| **Quer controle fino** | Perfil personalizado: você marca as tools; a Argus orquestra. |
+| **Você tem 1 hora antes da call** | Modo safe + scan básico; deixa rodando enquanto prepara a reunião. |
+| **Quer pressão de red team** | Diabo (master key) + scan intermediário/completo — kill chain no alvo autorizado. |
+| **Cliente “nada sai daqui”** | Agente (offline) — persona fantasma + Ollama; pegada baixa. |
+| **Alvo morto / errado** | Preflight detecta e encerra sem gastar o orçamento. |
+| **Quer controle fino** | Perfil personalizado: você marca as tools; a Argus orquestra finding-driven. |
+| **Precisou abortar** | **PARAR** → relatório parcial + PDF do que deu tempo. |
 
-É o modo “piloto automático do avião”: você define destino e altitude — o sistema voa o trecho.
+É o modo “piloto automático do avião”: você define destino, altitude e estilo de voo — o sistema voa o trecho.
 
 ---
 
-### 3. O relatório não é “achismo da IA”
+### 4. O relatório não é “achismo da IA”
 
 Aqui vem o diferencial que mais impressiona quem já queimou a mão com falso positivo:
 
 - candidato a vulnerabilidade passa por **verificação**
+- o corpo do PDF para o cliente destaca **achados confirmados** (não dump de log)
+- KPI de risco como **nível de perigo 0–100** (Baixo · Médio · Médio alto · Alto) — não “contagem mágica”
+- receipts de tool (`OK — nmap`, etc.) vão para **descartados**, não viram “falso positivo” automático
 - o que for fraco ou duvidoso **não entra** no resumo executivo automaticamente
 - **Baixar PDF** abre a **triagem**: um achado por vez, em português claro
 - em cada item: **opinião da Argus** (heurística imediata) + **segunda opinião da IA** (não marca sozinha)
-- a **prévia** e o **PDF** são o mesmo relatório: testes resumidos (sem ANSI), KPIs, gráficos, achados explicados e plano de correção
+- a **prévia** e o **PDF** são o mesmo relatório: testes resumidos (sem ANSI), nível de perigo, gráficos, achados explicados e plano de correção
 - os dois trazem cobertura **indicativa ISO 27001 / SOC 2** (não é certificação)
 
 **Menos vergonha na frente do cliente. Mais confiança no PDF.**
@@ -94,7 +127,7 @@ Pense num detector de metal no aeroporto: **apita fácil**, mas alguém ainda co
 
 ---
 
-### 4. Roda na sua máquina — e pode ficar **100% offline**
+### 5. Roda na sua máquina — e pode ficar **100% offline**
 
 O DarkStar não te prende a um SaaS misterioso.
 
@@ -102,10 +135,12 @@ O DarkStar não te prende a um SaaS misterioso.
 - tools no Kali isolado  
 - conversas e logs com você  
 
-E tem o detalhe que muda o jogo: o switch **offline**.
+E tem o detalhe que muda o jogo: o switch **agente / offline** (sidebar **04 offline** ou ícone no canto do chat).
 
 Com ele ligado + Ollama, a IA também fica **dentro da sua máquina**.  
 Nada de prompt indo para a nuvem. Nada de depender de Wi‑Fi.
+
+No offline a Argus vira a persona **fantasma** (OPSEC, lacônica) no **chat e no Piloto** — não só “mesmo texto com modelo local”.
 
 > O DarkStar permite pentest assistido por IA em lugares onde a internet **não pode existir** — tipo um submarino, uma rede de usina, um hospital isolado ou o lab do cliente sem cabo para fora — **sem enviar um único byte para a nuvem**.
 
@@ -127,14 +162,14 @@ Um clique. Modo local. Sem drama.
 
 ---
 
-### 5. Segurança embutida (não é “IA solta na internet”)
+### 6. Segurança embutida (não é “IA solta na internet”)
 
 O projeto nasceu com freio de mão:
 
 - só ferramentas permitidas (whitelist)
 - lista de alvos autorizados
 - perfil restrito por padrão
-- arsenal completo só com master key + modo offensive
+- arsenal completo só com master key + modo offensive (diabo)
 - auditoria do que foi executado
 
 Poderoso? Sim.  
@@ -153,16 +188,17 @@ Irresponsável? Não.
 
 ---
 
-### 6. Feito para o dia a dia de quem pentesta de verdade
+### 7. Feito para o dia a dia de quem pentesta de verdade
 
 - chat natural em português (seletor de modelo no compositor)
+- **três modos** no canto do chat (anjo / diabo / agente) — persona + risco alinhados
 - onboarding na primeira visita + tour guiado (**F1**)
 - barra de status: Docker, Kali, LLM e privilégio (perfil B / full)
 - painel de ferramentas, logs, mapa e dashboard — tudo da **conversa ativa**
 - **relatórios**: prévia HTML ao vivo (= PDF) — testes em linguagem clara, não dump de terminal
 - triagem na hora do download, com opinião automática + segunda leitura da IA
 - workspace por **cliente** (sidebar → CLIENTE) e agenda de reteste
-- **PILOTO** com básico / intermediário / completo / personalizado; **PARAR** cancela a missão
+- **PILOTO** finding-driven: modo + básico/intermediário/completo/personalizado + objetivo editável; **PARAR** cancela com PDF parcial
 - atalhos de teclado (Alt+P, Alt+T, Alt+R, Alt+N…)
 
 Abre, pede, executa, revisa, entrega.
@@ -186,15 +222,15 @@ Mais **bancada de trabalho**.
 ## Em uma imagem mental
 
 ```
-Você fala o objetivo
+Você fala o objetivo (e escolhe o modo: safe / offensive / offline)
         ↓
-Argus decide o que fazer
+Argus decide o próximo teste (finding-driven)
         ↓
 Kali executa de verdade
         ↓
 Evidência + triagem (modal no download)
         ↓
-PDF (ISO 27001 / SOC 2 indicativo) · dashboard · alertas · remediação · (opcional) GitHub
+PDF (confirmados · nível de perigo · ISO/SOC 2 indicativo) · dashboard · alertas · remediação · (opcional) GitHub
 ```
 
 **DarkStar** = a cabine  
@@ -208,10 +244,11 @@ Você manda. O sistema trabalha.
 ## O que você consegue fazer (de verdade)
 
 - Pedir scans e enumerações em linguagem natural  
-- Rodar missão automática com o Piloto (e **PARAR** se precisar)  
+- Trocar a **persona** no canto do chat: anjo (safe) · diabo (offensive + master key) · agente (offline / fantasma)  
+- Rodar missão automática com o Piloto — herda o modo, objetivo editável, HUD de fase; **PARAR** gera PDF parcial  
 - Ver logs ao vivo e histórico completo  
 - Triar achados **antes** do PDF: *é um problema real* / *alarme falso* / *ainda não sei* (ou pular o resto), com opinião da Argus e segunda opinião da IA  
-- Ver a **prévia ao vivo** e baixar o **mesmo** PDF (testes resumidos, 8 seções, gráficos, correção, ISO/SOC 2 indicativo)  
+- Ver a **prévia ao vivo** e baixar o **mesmo** PDF (confirmados em evidência, nível de perigo 0–100, correção, ISO/SOC 2 indicativo)  
 - Isolar workspaces por **cliente** (sidebar → CLIENTE: criar, trocar, excluir)  
 - Agendar reteste no Piloto (a cada N dias) ou via API (`monitor` / `remind` / `full`)  
 - Ver **delta** vs baseline e importar Nessus CSV / Nuclei JSONL (API)  
@@ -220,8 +257,8 @@ Você manda. O sistema trabalha.
 - Abrir o **workspace** da conversa (ferramentas, logs, relatórios, mapa, dashboard) — tudo filtrado pelo chat ativo  
 - Receber **alertas** (Slack, Discord, Telegram, e-mail, Jira) em achados críticos / delta  
 - Persistir conversas, PDFs, agenda e intel da **sessão** no **SQLite local** ou Postgres (`DATABASE_URL`); o hub de padrões fica em JSON até `INTELLIGENCE_STORAGE=postgres`  
-- Trocar de modelo de IA no compositor (nuvem) ou ligar **04 offline** com Ollama  
-- Desbloquear perfil avançado com master key + modo **03 offensive**  
+- Trocar de modelo de IA no compositor (nuvem) ou ligar **04 offline** / ícone **agente** com Ollama  
+- Desbloquear perfil avançado com master key + modo **03 offensive** / ícone **diabo**  
 - Integrar com Cursor/Claude via MCP (para quem quer ir além)
 
 Se você é consultor solo, lab de estudo ou time pequeno: isso aqui foi feito para o seu fluxo.
@@ -287,7 +324,8 @@ Tudo é da **conversa ativa** — apagar o chat zera intel/logs/scans ligados a 
 **Aba relatórios** (entrega do engajamento, num só lugar):
 
 1. **Prévia HTML ao vivo** — o mesmo documento do PDF, atualizado com o chat.  
-   KPIs (testes, achados, confirmados, FPs, risco) e gráficos de barras: risco residual, gravidade, triagem, ISO/SOC 2 indicativo, tipos de achado e ferramentas.  
+   **Nível de perigo 0–100** (Baixo → Alto), contagens de confirmados / triagem e gráficos: risco residual, gravidade, ISO/SOC 2 indicativo, tipos de achado e ferramentas.  
+   O corpo prioriza **achados confirmados** (o que é / o que causa / como corrigir). Receipts de tool não viram “falso positivo” automático — vão para descartados.  
    **Testes realizados** vêm resumidos (ferramenta, OK/FALHA, uma frase, bullets). Sem código ANSI nem logo de scanner. Falha (wordlist ausente, alvo sem resposta, comando errado) aparece em português. O log limpo fica em detalhe.  
    Cada achado vem em linguagem simples (o que é, analogia, impacto) + evidência.  
    **Como corrigir** traz quem faz, por quê, passo a passo e como validar.  
@@ -382,7 +420,8 @@ Abra: **http://127.0.0.1:8000**
 Na primeira vez, o script prepara quase tudo sozinho e a Argus mostra um **guia de 3 passos**.  
 Coloque sua chave no arquivo `.env` (`OPENROUTER_API_KEY`) se for usar modo online.
 
-Sidebar (sistema): **01 workspace** · **02 master key** · **03 offensive** · **04 offline** · **05 som** · **06 ajuda**.
+Sidebar (sistema): **01 workspace** · **02 master key** · **03 offensive** · **04 offline** · **05 som** · **06 ajuda**.  
+Canto do chat: **anjo** (safe) · **diabo** (offensive) · **agente** (offline / fantasma) — o Piloto herda o modo.
 
 ### Linux / macOS
 
@@ -400,9 +439,9 @@ start.bat servidor
 
 1. Instale o [Ollama](https://ollama.com) e baixe um modelo (`ollama pull llama3.1:8b`)  
 2. Abra o DarkStar  
-3. Ligue o switch **04 offline** na barra lateral  
+3. Ligue **04 offline** na barra lateral **ou** o ícone **agente** no canto do chat  
 
-A partir daí: Argus + Kali **só no seu PC**.  
+A partir daí: Argus + Kali **só no seu PC**, com persona **fantasma** (OPSEC) no chat e no Piloto.  
 Útil em lab sem internet, cliente restrito — ou qualquer lugar onde a nuvem não pode entrar.
 
 ---
@@ -413,9 +452,9 @@ A partir daí: Argus + Kali **só no seu PC**.
 2. Aperte **F1** para o tour (opcional)  
 3. Digite algo como:  
    *“faz um scan leve de portas em scanme.nmap.org”*  
-4. Ou clique **PILOTO** e deixe a missão rodar  
-5. Workspace → **relatórios**: veja a prévia (testes resumidos + gráficos) e clique **Baixar PDF** (a triagem mostra as duas opiniões se ainda houver o que validar)  
-6. (Opcional) Abas **dashboard** / **logs** / **mapa** · botão **PARAR** se a missão estiver rodando  
+4. Ou clique **PILOTO**: confira o modo (anjo/diabo/agente), o tipo de scan e o objetivo — e deixe a missão rodar  
+5. Workspace → **relatórios**: veja a prévia (nível de perigo + achados confirmados) e clique **Baixar PDF** (a triagem mostra as duas opiniões se ainda houver o que validar)  
+6. (Opcional) Abas **dashboard** / **logs** / **mapa** · botão **PARAR** se a missão estiver rodando (PDF parcial)  
 7. (Opcional) Sidebar → **CLIENTE** para separar conversas por workspace  
 8. (Opcional) Pelo venv: `python -m backend.cli autonomous --target scanme.nmap.org --dry-run`  
 
@@ -433,7 +472,7 @@ Use **Alt** + tecla (evita conflito com Ctrl+T / Ctrl+R do navegador).
 | **Alt+T** | Workspace · ferramentas |
 | **Alt+R** ou **Alt+F** | Workspace · relatórios |
 | **Alt+L** | Workspace · logs |
-| **Alt+C** | Workspace · mapa |
+| **Alt+C** | Workspace · dashboard |
 | **Alt+N** | Novo chat |
 | **Alt+K** ou **Ctrl+K** | Focar o prompt |
 | **F1** / **Alt+H** / **?** | Tour guiado |
@@ -452,7 +491,9 @@ Ctrl+Shift+T / P / E / N são alternativas. **Enter** envia; **↑** / **↓** n
 | `ALLOWED_TARGETS` | Trava global de alvos; se o cliente ativo tiver `allowed_targets`, essa lista prevalece |
 | `CHAT_API_TOKEN` | Protege a API local |
 | `MASTER_KEY` | Libera perfil completo / offensive |
-| `AI_PROVIDER=ollama` | Começa já em modo local |
+| `AI_PROVIDER=ollama` | Começa já em modo local (persona offline / fantasma) |
+| `MAX_TOOL_ITERATIONS` | Cadeia de tools no chat (padrão 10) |
+| `MAX_TOOL_ITERATIONS_OFFENSIVE` | Cadeia no modo offensive (padrão 14) |
 | `GITHUB_TOKEN` | Comentários em PR / issues / status (opcional) |
 | `DATABASE_URL` | Postgres (dashboard, conversas, clientes, agenda, PDFs, intel da sessão); sem isso → SQLite local |
 | `INTELLIGENCE_STORAGE` | Hub de padrões: `json` (padrão) ou `postgres` (exige `DATABASE_URL`) |
@@ -499,9 +540,10 @@ E2E opcional: `npm ci` + `npx playwright test -c e2e/playwright.config.js` com a
 |----------|----------------|
 | Não abre | Confira se o `start.bat` / `start.sh` está rodando |
 | Kali off | Docker Desktop aberto + `start.bat repair` |
-| IA muda | Chave OpenRouter / saldo, ou Ollama no offline |
+| IA muda | Chave OpenRouter / saldo, ou Ollama no offline (agente) |
 | Comando bloqueado | Fora do escopo ou perfil restrito |
 | Tela antiga | `Ctrl+F5` (cache do frontend) |
+| Piloto “igual” em todo modo | Confira o switcher (anjo/diabo/agente) e o badge no overlay do Piloto |
 | `No module named 'github'` / CLI estranha | Use o venv: `.\venv\Scripts\Activate.ps1` (Windows) |
 | GitHub responde 501 | `GITHUB_TOKEN` vazio ou inválido |
 | Dashboard / carteira vazios | Rode um scan **nesta** conversa; carteira lê alvos e achados do chat |

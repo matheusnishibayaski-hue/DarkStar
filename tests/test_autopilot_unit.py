@@ -58,6 +58,7 @@ class TestAutopilotUnit(unittest.TestCase):
         with (
             patch("backend.ai.autopilot.get_llm_provider", return_value=provider),
             patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
         ):
             result = run_autonomous(
                 "scanme.nmap.org",
@@ -85,6 +86,7 @@ class TestAutopilotUnit(unittest.TestCase):
             patch("backend.ai.autopilot.get_llm_provider", return_value=provider),
             patch("backend.ai.autopilot.build_recon_context", return_value=""),
             patch("backend.ai.autopilot.generate_report", return_value="# relatorio"),
+            patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
         ):
             result = run_autonomous(
                 "scanme.nmap.org",
@@ -120,6 +122,7 @@ class TestAutopilotUnit(unittest.TestCase):
             patch("backend.ai.autopilot.get_llm_provider", return_value=provider),
             patch("backend.ai.autopilot.build_recon_context", return_value=""),
             patch("backend.ai.autopilot.generate_report", return_value="# r"),
+            patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
         ):
             result = run_autonomous(
                 "scanme.nmap.org",

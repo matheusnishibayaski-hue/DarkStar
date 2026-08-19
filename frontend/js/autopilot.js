@@ -1,7 +1,8 @@
 /** Piloto automático — missão com IA por perfil de scan. */
 
 import { apiFetch } from "./api.js";
-import { isOffensiveModeEnabled } from "./offensive-mode.js";
+import { isOffensiveModeEnabled, onOffensiveModeChange } from "./offensive-mode.js";
+import { isOfflineModeEnabled, onOfflineModeChange } from "./offline-mode.js";
 import {
   getActiveSession,
   getSessionById,
@@ -48,15 +49,63 @@ const customToolSelection = new Set();
 /** @type {Array<{id:string,label:string,description:string,tool_count:number}>} */
 let scanProfileMeta = [];
 
-const DEFAULT_OBJECTIVES = {
-  basic:
-    "Scan básico: executar as ferramentas essenciais do perfil (portas, DNS, HTTP, nuclei, nikto) e resumir achados.",
-  intermediate:
-    "Scan intermediário: recon ampliado, enumeração web e checks adicionais do perfil; priorizar achados confirmáveis.",
-  full:
-    "Scan completo: percorrer o catálogo de ferramentas do perfil no alvo autorizado e documentar tudo relevante.",
-  custom: "Scan personalizado: executar cada ferramenta selecionada e consolidar achados com evidências.",
+/** @returns {"safe"|"offensive"|"offline"} */
+export function currentEngagementMode() {
+  if (isOfflineModeEnabled()) return "offline";
+  if (isOffensiveModeEnabled()) return "offensive";
+  return "safe";
+}
+
+const MODE_OBJECTIVES = {
+  safe: {
+    basic:
+      "Mapear a superfície do alvo autorizado (DNS/portas/HTTP), identificar candidatos relevantes e verificar o que for confirmável com evidência.",
+    intermediate:
+      "Recon e enumeração ampliada no alvo autorizado; priorizar achados confirmáveis e cobrir a fila da fase atual (não o catálogo inteiro).",
+    full: "Engajamento amplo finding-driven: cobrir superfícies quentes, verificar high/critical e documentar gaps — sem checklist cosmética.",
+    custom:
+      "Usar as ferramentas selecionadas de forma finding-driven no alvo autorizado; evidência antes de finish.",
+  },
+  offensive: {
+    basic:
+      "Kill chain curta no alvo autorizado: enum → hipótese de abuso → PoC mínimo (auth/IDOR/injection/misconfig).",
+    intermediate:
+      "Comprometer evidência: encadear enum→vetores de abuso; priorizar auth bypass, IDOR, API e high/critical.",
+    full: "Engajamento ofensivo autorizado: maximizar superfície de abuso verificável; não parar no primeiro 200 OK.",
+    custom:
+      "Ferramentas escolhidas com mentalidade adversária no alvo autorizado; hipótese → PoC → próximo vetor.",
+  },
+  offline: {
+    basic:
+      "Recon low-noise no alvo autorizado: passive-first, pegada mínima, evidência limpa; só escalar ruído se necessário.",
+    intermediate:
+      "Mapear e verificar com OPSEC: rate baixo, artefatos em /tools/output/, próximo passo o mais silencioso de maior valor.",
+    full: "Cobertura fantasma: superfícies quentes com mínimo rastro; PoC cirúrgico; documentar o que foi tocado.",
+    custom:
+      "Ferramentas selecionadas em modo fantasma — quieto, preciso, só no alvo autorizado.",
+  },
 };
+
+const MODE_LABELS = { safe: "Safe", offensive: "Offensive", offline: "Offline (fantasma)" };
+
+function defaultObjectiveForSelection() {
+  const mode = currentEngagementMode();
+  const map = MODE_OBJECTIVES[mode] || MODE_OBJECTIVES.safe;
+  return map[selectedScanProfile] || map.basic;
+}
+
+function syncPilotModeUi() {
+  const mode = currentEngagementMode();
+  const badge = document.getElementById("pilot-mode-badge");
+  if (badge) badge.textContent = MODE_LABELS[mode] || mode;
+  const obj = document.getElementById("autopilot-objective");
+  if (obj && (!obj.dataset.touched || obj.value.trim() === "")) {
+    obj.value = defaultObjectiveForSelection();
+    delete obj.dataset.touched;
+  }
+}
+
+const DEFAULT_OBJECTIVES = MODE_OBJECTIVES.safe;
 
 async function refreshOffensiveDependentUi() {
   await refreshScanProfileUi();
@@ -142,6 +191,10 @@ function renderScanProfileOptions() {
       if (!input.checked) return;
       selectedScanProfile = input.value || "basic";
       syncCustomToolsPanel();
+      const obj = document.getElementById("autopilot-objective");
+      if (obj && !obj.dataset.touched) {
+        obj.value = defaultObjectiveForSelection();
+      }
     });
   });
   syncCustomToolsPanel();
@@ -167,6 +220,16 @@ export function initAutopilot(context) {
   repeatCb?.addEventListener("change", () => {
     if (daysWrap) daysWrap.hidden = !repeatCb.checked;
   });
+  const obj = document.getElementById("autopilot-objective");
+  obj?.addEventListener("input", () => {
+    obj.dataset.touched = "1";
+  });
+  syncPilotModeUi();
+  onOffensiveModeChange(() => {
+    void refreshOffensiveDependentUi();
+    syncPilotModeUi();
+  });
+  onOfflineModeChange(() => syncPilotModeUi());
 }
 
 async function initScanProfileUi() {
@@ -276,7 +339,9 @@ function setBusy(sessionId) {
 export async function startAutopilot() {
   const target = ctx.autopilotTarget?.value.trim();
   const scanProfile = selectedScanProfile;
-  const objective = DEFAULT_OBJECTIVES[scanProfile] || DEFAULT_OBJECTIVES.basic;
+  const mode = currentEngagementMode();
+  const objEl = document.getElementById("autopilot-objective");
+  const objective = (objEl?.value || "").trim() || defaultObjectiveForSelection();
   const customTools = scanProfile === "custom" ? getCustomToolsList() : [];
 
   if (scanProfile === "custom" && !customTools.length) {
@@ -304,10 +369,9 @@ export async function startAutopilot() {
   }
   closeOverlay(ctx.overlayAutopilot);
 
-  const offensive = isOffensiveModeEnabled();
-  const userMsg = `[Auto-Pilot · ${scanProfileLabel(scanProfile)}${
-    offensive ? " · modo ofensivo" : ""
-  }]\nAlvo: ${target}\nObjetivo: ${objective}`;
+  const modeTag =
+    mode === "offensive" ? " · ofensivo" : mode === "offline" ? " · offline" : "";
+  const userMsg = `[Auto-Pilot · ${scanProfileLabel(scanProfile)}${modeTag}]\nAlvo: ${target}\nObjetivo: ${objective}`;
   const missionId = createMissionId();
   const abortController = new AbortController();
   startRun(sessionId, { missionId, abort: abortController, kind: "pilot" });
@@ -322,7 +386,7 @@ export async function startAutopilot() {
   renderSessions();
   updateSessionTitle();
   renderChat();
-  showAutopilotProgress("Piloto em execução — planejando e testando (pode levar vários minutos)");
+  showAutopilotProgress("Piloto em execução — preflight e missão (pode levar vários minutos)");
 
   if (repeatOn) {
     scheduleRepeat({
@@ -353,7 +417,9 @@ export async function startAutopilot() {
         chat_session_id: session.id,
         scan_profile: scanProfile,
         custom_tools: customTools,
-        risk_profile: isOffensiveModeEnabled() ? "full" : "safe-active",
+        engagement_mode: mode,
+        offline: mode === "offline",
+        risk_profile: mode === "offensive" ? "full" : "safe-active",
         attachments,
         ...getModelPayload(),
       }),
@@ -429,11 +495,12 @@ export async function startAutopilot() {
       scrollChatToBottom();
     }
 
-    if (data.stopped_reason !== "cancelled" && (data.tool_executions || []).length > 0) {
+    if ((data.tool_executions || []).length > 0) {
+      const cancelled = data.stopped_reason === "cancelled";
       if (isViewing(sessionId)) {
         appendLine(
           "info",
-          `Missão concluída · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
+          `${cancelled ? "Missão interrompida" : "Missão concluída"} · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
             data.objective_met ? "objetivo atingido" : data.stopped_reason
           } · gerando PDF…`
         );
@@ -441,13 +508,21 @@ export async function startAutopilot() {
       try {
         await downloadSessionPdf(sess, { silent: true });
         if (isViewing(sessionId)) {
-          appendLine("info", "Relatório PDF gerado e salvo em Relatórios (Alt+F).");
+          appendLine(
+            "info",
+            cancelled
+              ? "Relatório parcial PDF gerado e salvo em Relatórios (Alt+F)."
+              : "Relatório PDF gerado e salvo em Relatórios (Alt+F)."
+          );
         }
-        toast(`Missão concluída · PDF do relatório pronto`, "success");
-        if (isViewing(sessionId)) openSessionReportModal();
+        toast(
+          cancelled ? "Relatório parcial pronto" : "Missão concluída · PDF do relatório pronto",
+          cancelled ? "warn" : "success"
+        );
+        if (isViewing(sessionId) && !cancelled) openSessionReportModal();
       } catch (pdfErr) {
         if (isViewing(sessionId)) appendLine("warn", `PDF automático: ${pdfErr.message}`);
-        toast(`Missão ok, mas PDF falhou: ${pdfErr.message}`, "warn");
+        toast(`PDF falhou: ${pdfErr.message}`, "warn");
       }
     } else if (data.stopped_reason === "cancelled") {
       toast("Missão cancelada", "warn");

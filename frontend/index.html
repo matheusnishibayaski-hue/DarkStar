@@ -373,6 +373,15 @@
           <label class="autopilot-label" for="autopilot-target">Alvo autorizado</label>
           <input type="text" id="autopilot-target" class="panel-field autopilot-input pilot-target-input" placeholder="scanme.nmap.org ou https://site.com" spellcheck="false" autocomplete="off" />
         </div>
+        <div class="form-field" id="pilot-mode-wrap">
+          <span class="autopilot-label">Modo de engajamento</span>
+          <p class="pilot-mode-badge" id="pilot-mode-badge" aria-live="polite">Safe</p>
+          <p class="pilot-advanced-desc">Herdado do switcher do chat (anjo / diabo / agente). Troque no canto do chat.</p>
+        </div>
+        <div class="form-field">
+          <label class="autopilot-label" for="autopilot-objective">Objetivo</label>
+          <textarea id="autopilot-objective" class="panel-field autopilot-input" rows="3" maxlength="2000" spellcheck="true"></textarea>
+        </div>
         <div class="form-field" id="pilot-scan-wrap">
           <span class="autopilot-label">Tipo de scan</span>
           <div class="pilot-scan-options" id="pilot-scan-options" role="radiogroup" aria-label="Tipo de scan"></div>

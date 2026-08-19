@@ -78,6 +78,12 @@ class AutonomousRequest(BaseModel):
         description="basic | intermediate | full | custom",
     )
     custom_tools: list[str] = Field(default_factory=list, max_length=200)
+    engagement_mode: str = Field(
+        default="safe",
+        max_length=16,
+        description="safe | offensive | offline",
+    )
+    offline: bool = False
     attachments: list[ChatAttachment] = Field(
         default_factory=list,
         max_length=13,

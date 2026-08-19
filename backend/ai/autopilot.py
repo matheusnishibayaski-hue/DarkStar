@@ -28,6 +28,7 @@ from backend.ai.providers.base import BaseLLMProvider
 from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.scan_profiles import (
     max_tool_budget,
+    pending_phase_tools,
     pending_scan_tools,
     resolve_scan_tools,
     scan_profile_prompt_block,
@@ -40,8 +41,6 @@ from backend.ai.verify import run_verification_pipeline
 from backend.config import (
     MAX_AUTONOMOUS_ROUNDS,
     MAX_AUTONOMOUS_TOOLS,
-    MAX_TOOL_ITERATIONS,
-    MAX_TOOL_ITERATIONS_OFFENSIVE,
     RISK_PROFILE,
 )
 from backend.config_prompts import resolve_autonomous_system
@@ -64,7 +63,8 @@ FINISH_MISSION_TOOL = {
         "name": "finish_mission",
         "description": (
             "Encerra a missão autônoma quando o objetivo foi atingido, parcialmente cumprido "
-            "ou não há mais passos técnicos úteis a executar."
+            "ou não há mais passos técnicos úteis. Use coverage_waived=true só com justificativa "
+            "(host morto, sem superfície, WAF total)."
         ),
         "parameters": {
             "type": "object",
@@ -76,6 +76,13 @@ FINISH_MISSION_TOOL = {
                 "objective_met": {
                     "type": "boolean",
                     "description": "True se o objetivo principal foi atingido.",
+                },
+                "coverage_waived": {
+                    "type": "boolean",
+                    "description": (
+                        "True se a cobertura restante é justificada como impossível "
+                        "(alvo morto / sem superfície / bloqueio total)."
+                    ),
                 },
             },
             "required": ["summary", "objective_met"],
@@ -129,18 +136,19 @@ def _run_autonomous_cycle(
     *,
     phase: str = "recon",
     risk_profile: str = "safe-active",
-) -> tuple[str, bool, bool, str]:
+) -> tuple[str, bool, bool, str, bool]:
     """
     Uma rodada do auto-pilot.
-    Retorna: (texto, missão_finalizada, objective_met, model_to_use)
+    Retorna: (texto, missão_finalizada, objective_met, model_to_use, coverage_waived)
     """
     tool_calls_budget = max_tool_calls
     nudged = False
     healing_attempts = 0
+    recent_cmds = [e.command for e in executions if e.command]
 
     while tool_calls_budget > 0:
         if get_mission_registry().is_cancelled(mission_id):
-            return "Missão cancelada pelo usuário.", True, False, model_to_use
+            return "Missão cancelada pelo usuário.", True, False, model_to_use, False
 
         try:
             completion = _completion(provider, model_to_use, messages, AUTONOMOUS_TOOLS)
@@ -172,7 +180,7 @@ def _run_autonomous_cycle(
 
             text = assistant_message.content or ""
             messages.append({"role": "assistant", "content": text or "(aguardando próxima etapa)"})
-            return text, False, False, model_to_use
+            return text, False, False, model_to_use, False
 
         messages.append(assistant_dict_from_message(assistant_message))
 
@@ -189,20 +197,26 @@ def _run_autonomous_cycle(
                 if args is None:
                     summary = heal_err or "Missão encerrada (erro ao ler parâmetros)."
                     objective_met = False
+                    coverage_waived = False
                 else:
                     summary = args.get("summary", "Missão encerrada.")
                     objective_met = bool(args.get("objective_met", False))
+                    coverage_waived = bool(args.get("coverage_waived", False))
 
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": tool_call.id,
                         "content": json.dumps(
-                            {"status": "mission_finished", "objective_met": objective_met}
+                            {
+                                "status": "mission_finished",
+                                "objective_met": objective_met,
+                                "coverage_waived": coverage_waived,
+                            }
                         ),
                     }
                 )
-                return summary, True, objective_met, model_to_use
+                return summary, True, objective_met, model_to_use, coverage_waived
 
             if name == "run_kali_tool":
                 args, heal_err = resolve_tool_arguments(
@@ -217,6 +231,30 @@ def _run_autonomous_cycle(
                 else:
                     command = args.get("command", "")
                     reason = args.get("reason", "")
+
+                from backend.ai.pilot_helpers import command_looks_repeated
+
+                tools_run_hint: list[str] = []
+                for ex in executions:
+                    if ex.tool:
+                        tools_run_hint.append(ex.tool)
+                    elif ex.command:
+                        tools_run_hint.append(ex.command.strip().split()[0].split("/")[-1])
+                if command_looks_repeated(command, tools_run_hint, recent_cmds):
+                    tool_calls_budget -= 1
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": (
+                                "[ANTI-REPEAT] Comando quase idêntico já executado nesta missão. "
+                                "Aprofunde (outra tool/flags/path) em vez de repetir."
+                            ),
+                        }
+                    )
+                    if tool_calls_budget <= 0:
+                        return "", False, False, model_to_use, False
+                    continue
 
                 allowed, block_msg = is_tool_allowed(
                     command, phase=phase, risk_profile=risk_profile
@@ -235,7 +273,7 @@ def _run_autonomous_cycle(
                         }
                     )
                     if tool_calls_budget <= 0:
-                        return "", False, False, model_to_use
+                        return "", False, False, model_to_use, False
                     continue
 
                 result_text = _record_execution(
@@ -247,6 +285,7 @@ def _run_autonomous_cycle(
                     mission_id=mission_id,
                     chat_session_id=chat_session_id,
                 )
+                recent_cmds.append(command)
                 tool_calls_budget -= 1
                 messages.append(
                     {
@@ -276,9 +315,9 @@ def _run_autonomous_cycle(
                             ),
                         }
                     )
-                    return "", False, False, model_to_use
+                    return "", False, False, model_to_use, False
 
-    return "", False, False, model_to_use
+    return "", False, False, model_to_use, False
 
 
 def run_autonomous(
@@ -293,6 +332,8 @@ def run_autonomous(
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
     attachments: list | None = None,
+    engagement_mode: str | None = None,
+    offline: bool = False,
 ) -> AutonomousResponse:
     registry = get_mission_registry()
     if mission_id:
@@ -311,6 +352,8 @@ def run_autonomous(
             scan_profile=scan_profile,
             custom_tools=custom_tools,
             attachments=attachments,
+            engagement_mode=engagement_mode,
+            offline=offline,
         )
     finally:
         if mission_id:
@@ -329,6 +372,8 @@ def _run_autonomous_body(
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
     attachments: list | None = None,
+    engagement_mode: str | None = None,
+    offline: bool = False,
 ) -> AutonomousResponse:
     provider = get_llm_provider()
     if not provider.is_configured():
@@ -346,13 +391,49 @@ def _run_autonomous_body(
         )
 
     scan_prof = normalize_scan_profile(scan_profile or "basic")
-    profile = normalize_risk_profile(risk_profile or RISK_PROFILE)
+    from backend.ai.pilot_presets import resolve_engagement_mode, resolve_pilot_preset
+
+    provider_ollama = False
+    try:
+        from backend.ai.providers import get_active_provider_name
+
+        provider_ollama = get_active_provider_name() == "ollama"
+    except Exception:
+        provider_ollama = False
+    elevated = False
+    try:
+        from backend.security.privileges import is_elevated
+
+        elevated = bool(is_elevated())
+    except Exception:
+        elevated = False
+
+    mode = resolve_engagement_mode(
+        engagement_mode=engagement_mode,
+        offline_flag=bool(offline),
+        provider_is_ollama=provider_ollama,
+        elevated=elevated,
+        risk_profile=risk_profile,
+    )
+    preset = resolve_pilot_preset(engagement_mode=mode, scan_profile=scan_prof)
+    # Risk: preset + pedido do cliente, com teto de privilégio
+    profile = normalize_risk_profile(risk_profile or preset.risk_profile or RISK_PROFILE)
+    if preset.offensive and elevated:
+        profile = "full"
+    elif mode in {"safe", "offline"}:
+        profile = normalize_risk_profile(risk_profile or "safe-active")
+        if profile == "full" and not elevated:
+            profile = "safe-active"
     try:
         from backend.security.privileges import effective_risk_profile
 
         profile = effective_risk_profile(profile)
     except Exception:
         pass
+
+    offensive = preset.offensive and profile == "full"
+    offline_mode = preset.offline
+
     scan_tools = resolve_scan_tools(
         scan_prof,
         custom_tools,
@@ -383,26 +464,24 @@ def _run_autonomous_body(
     )
     recon_context = build_recon_context([recon_target])
     surface_context = build_surface_context(recon_target)
-    offensive = profile == "full"
-    try:
-        from backend.ai.providers import get_active_provider_name
-
-        offline = get_active_provider_name() == "ollama"
-    except Exception:
-        offline = False
     system = resolve_autonomous_system(
         target=target,
         objective=objective,
         risk_profile=profile,
         offensive=offensive,
-        offline=offline,
+        offline=offline_mode,
     )
     system = f"{system}\n\n{phase_prompt_block(surface.get('phase') or 'recon', surface_summary(surface))}"
     if recon_context:
         system = f"{system}\n\n{recon_context}"
     if surface_context:
         system = f"{system}\n\n{surface_context}"
-    scan_block = scan_profile_prompt_block(scan_prof, scan_tools, target=target)
+    scan_block = scan_profile_prompt_block(
+        scan_prof,
+        scan_tools,
+        target=target,
+        phase=surface.get("phase") or "recon",
+    )
     if scan_block:
         system = f"{system}\n\n{scan_block}"
 
@@ -410,7 +489,7 @@ def _run_autonomous_body(
 
     system = (
         f"{system}\n\n"
-        f"{compact_playbook_block(surface, phase=surface.get('phase'), offensive=offensive, offline=offline)}"
+        f"{compact_playbook_block(surface, phase=surface.get('phase'), offensive=offensive, offline=offline_mode, target_hint=target)}"
     )
 
     # White-box: mapa/arquivos da Pasta/GitHub (mesmo pipeline do chat)
@@ -461,10 +540,81 @@ def _run_autonomous_body(
             "risk_profile": profile,
             "scan_profile": scan_prof,
             "scan_tool_count": len(scan_tools),
+            "engagement_mode": mode,
+            "tools_budget": mission_budget,
         }
         if mission_id:
             payload["mission_id"] = mission_id
         emit("mission_start", payload)
+
+    # --- Preflight ---
+    from backend.ai.pilot_helpers import (
+        interpret_preflight_output,
+        kickoff_target_hint,
+        preflight_commands,
+    )
+
+    pf_cmds = preflight_commands(target, offline=offline_mode)
+    pf_results: list[dict] = []
+    for cmd in pf_cmds:
+        if remaining_tools <= 0:
+            break
+        before = len(executions)
+        _record_execution(
+            cmd,
+            "preflight — checagem leve do alvo",
+            executions,
+            recon_targets=[recon_target],
+            emit=emit,
+            mission_id=mission_id,
+            chat_session_id=chat_session_id,
+        )
+        remaining_tools = max(0, mission_budget - len(executions))
+        if len(executions) > before:
+            last = executions[-1]
+            pf_results.append(
+                {
+                    "command": last.command,
+                    "exit_code": last.exit_code,
+                    "stdout": last.stdout,
+                    "stderr": last.stderr,
+                }
+            )
+    pf = interpret_preflight_output(commands=pf_cmds, results=pf_results)
+    if emit:
+        emit(
+            "preflight",
+            {
+                "alive": pf.get("alive", True),
+                "reason": pf.get("reason", ""),
+                "waive": bool(pf.get("waive")),
+                "target": recon_target,
+            },
+        )
+    if pf.get("waive"):
+        surface = load_surface(recon_target) or surface
+        surface["coverage_waived"] = True
+        surface["phase"] = "report"
+        save_surface(recon_target, surface)
+        final_message = (
+            f"Preflight: alvo sem resposta ({pf.get('reason')}). "
+            "Missão encerrada com coverage_waived — orçamento preservado."
+        )
+        stopped_reason = "preflight_dead"
+        objective_met = False
+        # pular loop
+        max_rounds = 0
+    else:
+        hint = kickoff_target_hint(target, offline=offline_mode)
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    f"[PREFLIGHT OK] {pf.get('reason')}\n"
+                    f"[KICKOFF ADAPTATIVO]\n{hint}"
+                ),
+            }
+        )
 
     for round_idx in range(max_rounds):
         if get_mission_registry().is_cancelled(mission_id):
@@ -479,18 +629,17 @@ def _run_autonomous_body(
         surface = load_surface(recon_target) or surface
         current_phase = surface.get("phase") or "recon"
         summary = surface_summary(surface)
-        iter_cap = MAX_TOOL_ITERATIONS_OFFENSIVE if offensive else (
-            max(MAX_TOOL_ITERATIONS, 8) if scan_prof in {"intermediate", "full"} else MAX_TOOL_ITERATIONS
-        )
+        iter_cap = preset.per_round_iters
         per_round = min(iter_cap, remaining_tools)
 
         used = list(surface.get("tools_run") or [])
         pending = pending_scan_tools(scan_tools, used)
-        # Preferidos da fase ∩ pendentes
-        from backend.ai.phases import PHASE_PREFERRED_TOOLS
+        from backend.ai.tool_playbook import rank_pending_tools
 
-        phase_pref = PHASE_PREFERRED_TOOLS.get(current_phase, frozenset())
-        pending_phase = [t for t in pending if t in phase_pref] or pending[:8]
+        pending_phase = pending_phase_tools(scan_tools, used, current_phase)
+        pending_phase = rank_pending_tools(
+            pending_phase, offline=offline_mode, offensive=offensive
+        )
 
         kickoff = kickoff_for_phase(
             phase=current_phase,
@@ -502,14 +651,14 @@ def _run_autonomous_body(
             surface_summary_data=summary,
             surface=surface,
             offensive=offensive,
-            offline=offline,
+            offline=offline_mode,
         )
         if pending_phase and current_phase != "report":
             sample = ", ".join(pending_phase[:8])
             kickoff = (
-                f"{kickoff}\n\n[Pendentes do perfil — rode UMA agora]: {sample}"
+                f"{kickoff}\n\n[Pendentes da fase — rode UMA agora]: {sample}"
                 f"{'…' if len(pending) > 8 else ''} "
-                f"({len(pending)} restantes). Varie as ferramentas; não repita as já usadas."
+                f"({len(pending)} no perfil). Finding-driven — não checklist."
             )
         messages.append({"role": "user", "content": kickoff})
 
@@ -522,11 +671,17 @@ def _run_autonomous_body(
                     "tools_executed": len(executions),
                     "phase": current_phase,
                     "risk_profile": profile,
+                    "engagement_mode": mode,
+                    "tools_left": remaining_tools,
+                    "findings_candidates": summary.get("findings_candidates", 0),
+                    "findings_confirmed": summary.get("findings_confirmed", 0),
+                    "ports_count": summary.get("ports_count", 0),
+                    "urls_count": summary.get("urls_count", 0),
                 },
             )
 
         try:
-            text, finished, met, model_to_use = _run_autonomous_cycle(
+            text, finished, met, model_to_use, waived = _run_autonomous_cycle(
                 client,
                 messages,
                 executions,
@@ -548,6 +703,11 @@ def _run_autonomous_body(
                 tools_executed=len(executions),
                 stopped_reason="error",
             )
+
+        if waived:
+            surface = load_surface(recon_target) or surface
+            surface["coverage_waived"] = True
+            save_surface(recon_target, surface)
 
         rounds_completed = round_idx + 1
         remaining_tools = max(0, mission_budget - len(executions))
@@ -593,10 +753,14 @@ def _run_autonomous_body(
             )
 
         if finished:
-            # Soft-block: pendências de alto valor ou high/critical sem verify
-            # — mesmo com objective_met=true, até waive / última rodada.
+            # Soft-block: high/critical sem verify OU preferred da fase pendente
             surf_now = load_surface(recon_target) or surface
-            pend_now = pending_scan_tools(scan_tools, surf_now.get("tools_run") or [])
+            if waived:
+                surf_now["coverage_waived"] = True
+                save_surface(recon_target, surf_now)
+            phase_pend = pending_phase_tools(
+                scan_tools, surf_now.get("tools_run") or [], current_phase
+            )
             rounds_left = max_rounds - (round_idx + 1)
             findings_now = surf_now.get("findings") or []
             high_unverified = [
@@ -613,35 +777,37 @@ def _run_autonomous_body(
                 and not last_round
                 and remaining_tools > 0
                 and current_phase != "report"
-                and (
-                    high_unverified
-                    or (pend_now and len(pend_now) > 3)
-                )
+                and (high_unverified or bool(phase_pend))
             )
             if should_block:
-                sample = ", ".join(pend_now[:8]) if pend_now else "verify high/critical"
+                sample = ", ".join(phase_pend[:8]) if phase_pend else "verify high/critical"
                 reason_bits = []
                 if high_unverified:
                     reason_bits.append(
                         f"{len(high_unverified)} high/critical sem verify"
                     )
-                if pend_now and len(pend_now) > 3:
-                    reason_bits.append(f"{len(pend_now)} tools do perfil pendentes")
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            f"[Cobertura] Não finalize ainda — {'; '.join(reason_bits)}. "
-                            f"Orçamento: {remaining_tools} comando(s). "
-                            f"Rode UMA ação de alto valor"
-                            + (f" (ex.: {sample})" if sample else "")
-                            + ". Só chame finish_mission na fase report, última rodada "
-                            "ou com coverage_waived."
-                        ),
-                    }
+                if phase_pend:
+                    reason_bits.append(
+                        f"{len(phase_pend)} preferred da fase pendente(s)"
+                    )
+                nudge = (
+                    f"[Cobertura] Não finalize ainda — {'; '.join(reason_bits)}. "
+                    f"Orçamento: {remaining_tools} comando(s). "
+                    f"Rode UMA ação de alto valor (ex.: {sample}). "
+                    "Só finish na fase report, última rodada ou coverage_waived=true."
                 )
+                messages.append({"role": "user", "content": nudge})
+                if emit:
+                    emit(
+                        "coverage_nudge",
+                        {
+                            "reason": "; ".join(reason_bits),
+                            "phase": current_phase,
+                            "tools_left": remaining_tools,
+                            "pending": phase_pend[:8],
+                        },
+                    )
                 finished = False
-                # Mantém met em memória só se realmente aceitar finish depois
             else:
                 final_message = text
                 objective_met = met
@@ -659,6 +825,24 @@ def _run_autonomous_body(
         if text:
             final_message = text
 
+        # finding_update HUD
+        surf_hud = load_surface(recon_target) or surface
+        high_cands = [
+            f
+            for f in (surf_hud.get("findings") or [])
+            if f.get("status") == "candidate"
+            and str(f.get("severity") or "").lower() in {"high", "critical"}
+        ]
+        if emit and high_cands:
+            emit(
+                "finding_update",
+                {
+                    "count": len(high_cands),
+                    "titles": [str(f.get("title") or "")[:80] for f in high_cands[:5]],
+                    "phase": surf_hud.get("phase"),
+                },
+            )
+
         # Se já pode finalizar e a IA não chamou finish, injeta nudge
         if decision.can_finish and not finished:
             messages.append(
@@ -671,7 +855,12 @@ def _run_autonomous_body(
                 }
             )
 
-    if not final_message and executions:
+    if stopped_reason == "cancelled":
+        final_message = (
+            (final_message or "Missão interrompida pelo usuário.")
+            + "\n\n_Missão interrompida — relatório parcial com o que já foi executado._"
+        )
+    elif not final_message and executions:
         final_message = (
             f"Missão encerrada após {rounds_completed} rodada(s) e {len(executions)} comando(s). "
             "Consulte o relatório para detalhes."
@@ -679,19 +868,20 @@ def _run_autonomous_body(
     elif not final_message:
         final_message = "Nenhum comando foi executado durante a missão autônoma."
 
-    # Pipeline assertivo: PoC + re-verificação antes do relatório
-    if not get_mission_registry().is_cancelled(mission_id):
-        if emit:
-            emit("verify_pipeline_start", {"target": recon_target})
-        from backend.config import VERIFY_MAX_FINDINGS
+    # Pipeline assertivo: PoC + re-verificação (também em cancel parcial, se houver execuções)
+    was_cancelled = stopped_reason == "cancelled"
+    if emit and not was_cancelled:
+        emit("verify_pipeline_start", {"target": recon_target})
+    from backend.config import VERIFY_MAX_FINDINGS
 
+    try:
         verify_result = run_verification_pipeline(
             recon_target,
             emit=emit,
-            mission_id=mission_id,
+            mission_id=mission_id if not was_cancelled else None,
             max_findings=VERIFY_MAX_FINDINGS,
         )
-    else:
+    except Exception:
         verify_result = None
 
     bucket = findings_for_report(recon_target)
@@ -754,7 +944,8 @@ def _run_autonomous_body(
     status_line = (
         f"\n\n---\n**Auto-Pilot:** {rounds_completed} rodada(s) · "
         f"{len(executions)} comando(s) · "
-        f"fase={surface.get('phase', '?')} · risco={profile} · scan={scan_prof} · "
+        f"modo={mode} · fase={surface.get('phase', '?')} · risco={profile} · "
+        f"scan={scan_prof} · "
         f"{'objetivo atingido' if objective_met else stopped_reason}"
     )
     final_message = final_message + status_line
@@ -810,6 +1001,8 @@ def run_autonomous_stream(
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
     attachments: list | None = None,
+    engagement_mode: str | None = None,
+    offline: bool = False,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -830,6 +1023,8 @@ def run_autonomous_stream(
                 scan_profile=scan_profile,
                 custom_tools=custom_tools,
                 attachments=attachments,
+                engagement_mode=engagement_mode,
+                offline=offline,
             )
             event_queue.put(
                 format_sse(

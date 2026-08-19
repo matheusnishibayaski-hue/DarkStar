@@ -188,6 +188,94 @@ def next_actions_from_surface(
     return out
 
 
+_PHASE_CATEGORIES: dict[str, frozenset[str]] = {
+    "recon": frozenset({"DNS / OSINT"}),
+    "enumerate": frozenset({"Portas / serviços", "HTTP enum", "SMB / AD (se porta 445/389)"}),
+    "vuln_scan": frozenset({"Vuln / templates", "Auth / API", "HTTP enum"}),
+    "verify": frozenset({"Auth / API", "Vuln / templates", "HTTP enum"}),
+    "report": frozenset(),
+}
+
+
+def classify_target_kind(target: str) -> str:
+    """url | ip | domain."""
+    t = (target or "").strip().lower()
+    if t.startswith("http://") or t.startswith("https://"):
+        return "url"
+    host = t.split("/")[0].split(":")[0]
+    parts = host.split(".")
+    if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts if p.isdigit()):
+        try:
+            if all(0 <= int(p) <= 255 for p in parts):
+                return "ip"
+        except ValueError:
+            pass
+    return "domain"
+
+
+def adaptive_first_actions(target: str, *, offline: bool = False) -> list[str]:
+    kind = classify_target_kind(target)
+    if kind == "url":
+        return [
+            "Alvo é URL — httpx -title -tech-detect no URL autorizado",
+            "Em seguida crawl leve (katana) se HTTP responder",
+        ]
+    if kind == "ip":
+        if offline:
+            return ["Alvo é IP — nmap -sV focado (portas top) com rate moderado"]
+        return ["Alvo é IP — nmap -sV -sC no IP autorizado"]
+    # domain
+    if offline:
+        return [
+            "Alvo é domínio — passive DNS primeiro (dig/subfinder)",
+            "Só depois probe HTTP quieto (httpx)",
+        ]
+    return [
+        "Alvo é domínio — dig/subfinder/whois antes de port scan largo",
+        "Em seguida httpx no host se DNS resolver",
+    ]
+
+
+def rank_pending_tools(
+    pending: list[str],
+    *,
+    offline: bool = False,
+    offensive: bool = False,
+) -> list[str]:
+    quiet = {
+        "dig",
+        "whois",
+        "host",
+        "subfinder",
+        "amass",
+        "httpx",
+        "curl",
+        "dnsx",
+        "gau",
+        "waybackurls",
+    }
+    loud = {"masscan", "rustscan", "nmap", "nikto", "ffuf", "gobuster", "feroxbuster"}
+    attack = {"nuclei", "dalfox", "sqlmap", "wpscan", "nikto", "ffuf"}
+
+    def score(t: str) -> int:
+        if offline:
+            if t in quiet:
+                return 0
+            if t in loud:
+                return 5
+            return 2
+        if offensive:
+            if t in attack:
+                return 0
+            if t in quiet:
+                return 1
+            return 2
+        # safe: prefer phase-natural order already in pending
+        return 1
+
+    return sorted(pending, key=score)
+
+
 def compact_playbook_block(
     surface: dict[str, Any] | None = None,
     *,
@@ -195,6 +283,7 @@ def compact_playbook_block(
     offensive: bool = False,
     offline: bool = False,
     max_chars: int = 3500,
+    target_hint: str | None = None,
 ) -> str:
     """Texto curto para injetar no system prompt do chat/piloto."""
     lines: list[str] = [
@@ -203,7 +292,13 @@ def compact_playbook_block(
         "Sem ; | & ou redirecionamentos de shell. Varie ferramentas; não pare no primeiro 200 OK.",
         "",
     ]
+    ph = (phase or "").strip().lower()
+    allowed_cats = _PHASE_CATEGORIES.get(ph)
     for title, body in _CATEGORY_BLOCKS:
+        if allowed_cats is not None and allowed_cats and title not in allowed_cats:
+            continue
+        if allowed_cats is not None and not allowed_cats and ph == "report":
+            continue
         lines.append(f"## {title}")
         lines.append(body)
         lines.append("")
@@ -213,6 +308,11 @@ def compact_playbook_block(
         lines.append("")
     elif offensive:
         lines.append(_OFFENSIVE_ATTACK_PATHS)
+        lines.append("")
+
+    if target_hint:
+        for a in adaptive_first_actions(target_hint, offline=offline)[:2]:
+            lines.append(f"[KICKOFF] {a}")
         lines.append("")
 
     actions = next_actions_from_surface(

@@ -144,6 +144,22 @@ def pending_scan_tools(scan_tools: list[str], tools_run: list[str] | None) -> li
     return out
 
 
+def pending_phase_tools(
+    scan_tools: list[str],
+    tools_run: list[str] | None,
+    phase: str,
+) -> list[str]:
+    """Pendentes do perfil ∩ preferidos da fase."""
+    from backend.ai.phases import PHASE_PREFERRED_TOOLS
+
+    pend = pending_scan_tools(scan_tools, tools_run)
+    pref = PHASE_PREFERRED_TOOLS.get((phase or "recon").strip().lower(), frozenset())
+    if not pref:
+        return pend[:8]
+    phase_pend = [t for t in pend if t in pref]
+    return phase_pend or pend[:8]
+
+
 def max_tool_budget(profile: str, tool_count: int) -> int:
     """Limite de execuções de comando na missão."""
     p = normalize_profile(profile)
@@ -161,25 +177,41 @@ def scan_profile_prompt_block(
     tools: list[str],
     *,
     target: str,
+    phase: str | None = None,
 ) -> str:
+    """Fila de prioridade finding-driven — não exige rodar o catálogo inteiro."""
     if not tools:
         return ""
+    from backend.ai.phases import PHASE_PREFERRED_TOOLS
+
     label = PROFILE_LABELS.get(normalize_profile(profile), profile)
+    ph = (phase or "recon").strip().lower()
+    pref = PHASE_PREFERRED_TOOLS.get(ph, frozenset())
+    phase_first = [t for t in tools if t in pref]
+    rest = [t for t in tools if t not in pref]
+    ordered = (phase_first or tools[:12]) + rest
+    # Limitar exemplos no prompt para não estourar contexto
+    show = ordered[:24]
     lines = [
         f"[PERFIL DE SCAN: {label}]",
         f"Alvo autorizado: {target}",
-        "Regras obrigatórias:",
-        "1. Execute CADA ferramenta da lista abaixo pelo menos UMA vez no alvo (comando real via execute_kali_command).",
-        "2. Use exemplos do catálogo Kali adaptados ao alvo; não invente ferramentas fora da lista.",
-        "3. Só chame finish_mission depois de ter tentado todas as ferramentas pendentes ou documentado bloqueio/WAF.",
-        "4. Priorize ordem lógica: DNS/recon → portas → HTTP → vulns.",
+        f"Fase atual: {ph}",
+        "Regras (finding-driven):",
+        "1. A lista é FILA DE PRIORIDADE da fase — não checklist obrigatória de todas as tools.",
+        "2. Escolha a próxima melhor ação (superfície + achados); varie ferramentas.",
+        "3. finish_mission quando a fase tiver evidência mínima + verify de high/critical,",
+        "   ou com coverage_waived=true justificado (host morto / sem superfície / WAF).",
+        "4. Ordem lógica: DNS/recon → portas → HTTP → vulns → verify.",
         "",
-        f"Ferramentas ({len(tools)}):",
+        f"Fila ({len(tools)} no perfil; mostrando {len(show)}):",
     ]
-    for tid in tools:
+    for tid in show:
         meta = get_tool_info(tid)
         ex = meta.get("example", "").replace("alvo.com", target).replace("scanme.nmap.org", target)
-        lines.append(f"- {tid}: {meta.get('summary', '')} Ex.: {ex}")
+        mark = "★" if tid in pref else "·"
+        lines.append(f"{mark} {tid}: {meta.get('summary', '')} Ex.: {ex}")
+    if len(ordered) > len(show):
+        lines.append(f"… +{len(ordered) - len(show)} outras no perfil (use se a superfície pedir).")
     return "\n".join(lines)
 
 
