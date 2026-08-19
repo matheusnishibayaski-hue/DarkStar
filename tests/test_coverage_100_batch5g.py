@@ -836,7 +836,7 @@ class TestLiveReportRemaining(unittest.TestCase):
                 }
             ]
         )
-        self.assertIn("Nenhum achado", lr._render_findings([]))
+        self.assertIn("Nenhum problema listado", lr._render_findings([]))
         lr._render_findings(
             [
                 {

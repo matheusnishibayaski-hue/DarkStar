@@ -571,10 +571,19 @@ def _run_autonomous_body(
 
         if finished:
             # Soft-block: ainda há pendentes e budget — peça mais uma tool
+            # Não anula objective_met=true; só adia finished_early se ainda houver rodada.
             pend_now = pending_scan_tools(
                 scan_tools, (load_surface(recon_target) or {}).get("tools_run") or []
             )
-            if pend_now and remaining_tools > 0 and len(pend_now) > 3 and current_phase != "report":
+            rounds_left = max_rounds - (round_idx + 1)
+            if (
+                not met
+                and pend_now
+                and remaining_tools > 0
+                and len(pend_now) > 3
+                and current_phase != "report"
+                and rounds_left > 0
+            ):
                 sample = ", ".join(pend_now[:8])
                 messages.append(
                     {
