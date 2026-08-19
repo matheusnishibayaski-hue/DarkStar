@@ -17,13 +17,14 @@ test("boot — health e versão 2.0.0", async ({ page }) => {
   expect(health).toHaveProperty("scope_warning");
 });
 
-test("intel — abre workspace mapa e aba relatórios", async ({ page }) => {
+test("intel — abre workspace dashboard e aba relatórios", async ({ page }) => {
   await page.goto("/");
   await expect(page.locator("#status-pill-docker")).toBeVisible();
+  // Alt+C → openThreats → aba dashboard (mapa legado removido)
   await page.keyboard.press("Alt+c");
   await expect(page.locator("#view-workspace")).toBeVisible();
-  await expect(page.locator("#ws-panel-mapa")).toBeVisible();
-  await expect(page.locator("#workspace-map-body")).toBeAttached();
+  await expect(page.locator("#ws-panel-dashboard")).toBeVisible();
+  await expect(page.locator("#dashboard-period")).toBeAttached();
   await page.click('[data-ws-tab="report"]');
   await expect(page.locator("#ws-panel-report")).toBeVisible();
   await expect(page.locator('[data-ws-tab="report"]')).toHaveClass(/active/);

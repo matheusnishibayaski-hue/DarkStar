@@ -12,7 +12,7 @@ export function initThreatIntel(context) {
   ctx = context || {};
 }
 
-/** @deprecated use openWorkspace('mapa') */
+/** @deprecated use openWorkspace('dashboard') */
 export function activateThreatsTab() {
   openThreatsPanel();
 }
