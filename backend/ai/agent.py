@@ -97,9 +97,9 @@ EmitFn = Callable[[str, dict], None]
 
 
 def _apply_recon_context(user_message: str, history: list[dict]) -> tuple[str, list[str]]:
+    from backend.ai.project_intel import operator_text_for_targets
     from backend.executor.recon_db import is_recon_target
     from backend.executor.surface import build_surface_context
-    from backend.ai.project_intel import operator_text_for_targets
 
     # Preferir texto do operador (sem anexos/intel) para não poluir com deps/URLs de libs
     op_text = operator_text_for_targets(user_message)

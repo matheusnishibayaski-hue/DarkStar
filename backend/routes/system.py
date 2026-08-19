@@ -213,8 +213,8 @@ def api_tools_update(upgrade: bool = True):
 
     Requer master key (perfil full). Não aceita comandos livres — argv fixo no servidor.
     """
-    from backend.security.privileges import is_elevated
     from backend.executor.pkg_update import update_kali_packages
+    from backend.security.privileges import is_elevated
 
     if not is_elevated():
         raise HTTPException(

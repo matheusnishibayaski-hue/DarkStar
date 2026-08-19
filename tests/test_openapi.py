@@ -63,6 +63,7 @@ class TestOpenApi(unittest.TestCase):
 
     def test_tools_and_scan_profiles_smoke(self):
         from backend.main import app
+
         from tests.auth_patch import patch_chat_api_token
 
         with patch_chat_api_token(""):

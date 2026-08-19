@@ -142,7 +142,11 @@ class TestFpExplain(unittest.TestCase):
             self.assertEqual(row["triage"]["suggestion"], "unsure")
 
     def test_idor_narrative_not_auto_fp(self):
-        from backend.ai.fp_explain import build_triage_buckets, detect_finding_kind, explain_false_positive
+        from backend.ai.fp_explain import (
+            build_triage_buckets,
+            detect_finding_kind,
+            explain_false_positive,
+        )
 
         finding = {
             "id": "idor1",
