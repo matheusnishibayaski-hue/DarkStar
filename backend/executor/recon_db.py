@@ -81,7 +81,7 @@ def is_recon_target(alvo: str) -> bool:
     if len(parts) < 2:
         return False
     tld = parts[-1]
-    # TLD de lixo JS / propriedades DOM
+    # TLD de lixo JS / propriedades DOM / paths de código
     if tld in {
         "href",
         "length",
@@ -103,6 +103,52 @@ def is_recon_target(alvo: str) -> bool:
         "unmask",
         "selector",
         "attr",
+        "cwd",
+        "production",
+        "development",
+        "staging",
+        "endswith",
+        "startswith",
+        "includes",
+        "indexof",
+        "tostring",
+        "valueof",
+        "prototype",
+        "sep",
+        "dirname",
+        "basename",
+        "resolve",
+        "join",
+        "split",
+        "env",
+        "argv",
+        "pid",
+    }:
+        return False
+    # Identificadores de runtime / Node (process.cwd, env.production, path.sep)
+    if parts[0] in {
+        "process",
+        "env",
+        "path",
+        "basepath",
+        "dirname",
+        "basename",
+        "module",
+        "exports",
+        "require",
+        "global",
+        "window",
+        "document",
+        "console",
+        "buffer",
+        "object",
+        "function",
+        "string",
+        "number",
+        "boolean",
+        "array",
+        "promise",
+        "error",
     }:
         return False
     if normalized in {"asp.net", "web.config", "web.config.bak"}:

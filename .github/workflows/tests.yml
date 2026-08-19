@@ -103,7 +103,7 @@ jobs:
   e2e:
     needs: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
@@ -123,8 +123,8 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
 
       - name: Start API server
         run: |

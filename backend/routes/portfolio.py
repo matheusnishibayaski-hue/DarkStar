@@ -9,7 +9,7 @@ from backend.ai.risk_history import load_risk_history
 from backend.ai.risk_score import compute_risk_score, risk_score_for_target
 from backend.clients.runtime import get_active_client_id
 from backend.clients.store import list_clients
-from backend.executor.recon_db import normalize_target
+from backend.executor.recon_db import is_recon_target, normalize_target
 from backend.executor.session_intel import (
     aggregate_session_findings,
     load_session,
@@ -31,6 +31,8 @@ _LIFECYCLE_PT = {
 def _host(value: str) -> str:
     raw = str(value or "").strip()
     if not raw or raw in {"_session", "-", "—"}:
+        return ""
+    if not is_recon_target(raw):
         return ""
     h = normalize_target(raw)
     if not h or h in {"unknown", "_session"}:

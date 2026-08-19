@@ -423,7 +423,7 @@ def assemble_session_report(
             )
 
             meta = load_session(session_id) or {}
-            findings = list(aggregate_session_findings(session_id) or [])
+            findings = list(aggregate_session_findings(session_id, sync=False) or [])
             targets = list(meta.get("targets") or [])
             if not executions:
                 executions = collect_session_tool_executions(session_id) or []

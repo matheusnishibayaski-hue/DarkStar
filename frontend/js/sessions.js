@@ -194,6 +194,8 @@ export function flushStoreOnUnload() {
       body,
       credentials: "include",
       keepalive: true,
+    }).catch(() => {
+      /* unload/tab-hide: browser often aborts; ignore Failed to fetch */
     });
   } catch (err) {
     console.warn("chat_unload_flush_failed", err);

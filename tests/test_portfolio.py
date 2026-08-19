@@ -95,3 +95,33 @@ class TestPortfolioSessionScope(unittest.TestCase):
         self.assertIn("chat", out["engagements"][0]["target"].lower())
         self.assertNotEqual(out["engagements"][0]["host"], "unknown")
         self.assertEqual(out["engagements"][0]["findings_pending"], 1)
+
+    def test_junk_code_hosts_filtered(self):
+        from backend.routes import portfolio as port
+
+        with (
+            patch.object(port, "sync_session_intel_from_logs"),
+            patch.object(
+                port,
+                "load_session",
+                return_value={
+                    "targets": [
+                        "shop.lab.test",
+                        "env.production",
+                        "process.cwd",
+                        "basepath.endswith",
+                    ]
+                },
+            ),
+            patch.object(port, "aggregate_session_findings", return_value=[]),
+            patch.object(port, "list_surface_summaries", return_value=[]),
+            patch.object(port, "load_surface", return_value={}),
+            patch.object(port, "list_clients", return_value=[]),
+            patch.object(port, "list_jobs", return_value=[]),
+            patch.object(port, "load_risk_history", return_value=[]),
+            patch.object(port, "get_active_client_id", return_value="default"),
+        ):
+            out = port.api_portfolio(session_id="sess-junk01", client_id=None)
+
+        hosts = [r["host"] for r in out["engagements"]]
+        self.assertEqual(hosts, ["shop.lab.test"])

@@ -7,7 +7,6 @@ import { getActiveSession, sessionTitle } from "./sessions.js";
 import { openToolsPanel, syncToolFromSession } from "./tools-panel.js";
 import { openSessionLogsModal } from "./session-logs-modal.js";
 import { openSessionReportModal } from "./session-report-modal.js";
-import { refreshPortfolio } from "./portfolio.js";
 import { refreshDashboard } from "./dashboard.js";
 import { dismissSidebarDrawer } from "./ui.js";
 
@@ -233,7 +232,6 @@ async function loadTab(tab) {
       break;
     case "report":
       openSessionReportModal();
-      await refreshPortfolio();
       break;
     case "dashboard":
       await refreshDashboard();
