@@ -326,9 +326,7 @@ def build_client_ai_prompt(model: dict[str, Any]) -> str:
 
     lines.append(f"Vulnerabilidades confirmadas ({len(cards)}):")
     for i, c in enumerate(cards[:20], 1):
-        lines.append(
-            f"{i}. {c.get('title')} — Gravidade: {c.get('severity_label') or '—'}"
-        )
+        lines.append(f"{i}. {c.get('title')} — Gravidade: {c.get('severity_label') or '—'}")
         if c.get("host"):
             lines.append(f"   Onde: {c['host']}")
         if c.get("impact"):
@@ -481,9 +479,7 @@ def assemble_session_report(
     discarded = [f for f in findings if f.get("status") == "discarded"]
     # Corpo do relatório para cliente: só vulnerabilidades confirmadas
     report_findings = [f for f in findings if is_reportable_finding(f)]
-    report_findings.sort(
-        key=lambda f: _SEV_ORDER.get(str(f.get("severity") or "info"), 9)
-    )
+    report_findings.sort(key=lambda f: _SEV_ORDER.get(str(f.get("severity") or "info"), 9))
 
     rem_src = list(report_findings)
     remediations: list[dict[str, Any]] = []
@@ -631,9 +627,7 @@ def _executive_paragraph(
             f"{n_discarded} registro(s) de ferramenta foram omitidos (não são vulnerabilidades)."
         )
     if grave:
-        parts.append(
-            f"{grave} item(ns) em gravidade crítica ou grave — prioridade de correção."
-        )
+        parts.append(f"{grave} item(ns) em gravidade crítica ou grave — prioridade de correção.")
     if top_fixes:
         parts.append("Comece por: " + "; ".join(top_fixes) + ".")
     return " ".join(parts)

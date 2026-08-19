@@ -372,9 +372,7 @@ def kickoff_for_phase(
     )
     next_txt = ""
     if actions:
-        next_txt = "\n[NEXT BEST ACTIONS]\n" + "\n".join(
-            f"- {a}" for a in actions
-        )
+        next_txt = "\n[NEXT BEST ACTIONS]\n" + "\n".join(f"- {a}" for a in actions)
     playbook = ""
     if round_idx == 0:
         playbook = "\n\n" + compact_playbook_block(

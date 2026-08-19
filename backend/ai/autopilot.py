@@ -609,10 +609,7 @@ def _run_autonomous_body(
         messages.append(
             {
                 "role": "user",
-                "content": (
-                    f"[PREFLIGHT OK] {pf.get('reason')}\n"
-                    f"[KICKOFF ADAPTATIVO]\n{hint}"
-                ),
+                "content": (f"[PREFLIGHT OK] {pf.get('reason')}\n[KICKOFF ADAPTATIVO]\n{hint}"),
             }
         )
 
@@ -637,9 +634,7 @@ def _run_autonomous_body(
         from backend.ai.tool_playbook import rank_pending_tools
 
         pending_phase = pending_phase_tools(scan_tools, used, current_phase)
-        pending_phase = rank_pending_tools(
-            pending_phase, offline=offline_mode, offensive=offensive
-        )
+        pending_phase = rank_pending_tools(pending_phase, offline=offline_mode, offensive=offensive)
 
         kickoff = kickoff_for_phase(
             phase=current_phase,
@@ -783,13 +778,9 @@ def _run_autonomous_body(
                 sample = ", ".join(phase_pend[:8]) if phase_pend else "verify high/critical"
                 reason_bits = []
                 if high_unverified:
-                    reason_bits.append(
-                        f"{len(high_unverified)} high/critical sem verify"
-                    )
+                    reason_bits.append(f"{len(high_unverified)} high/critical sem verify")
                 if phase_pend:
-                    reason_bits.append(
-                        f"{len(phase_pend)} preferred da fase pendente(s)"
-                    )
+                    reason_bits.append(f"{len(phase_pend)} preferred da fase pendente(s)")
                 nudge = (
                     f"[Cobertura] Não finalize ainda — {'; '.join(reason_bits)}. "
                     f"Orçamento: {remaining_tools} comando(s). "
@@ -857,9 +848,8 @@ def _run_autonomous_body(
 
     if stopped_reason == "cancelled":
         final_message = (
-            (final_message or "Missão interrompida pelo usuário.")
-            + "\n\n_Missão interrompida — relatório parcial com o que já foi executado._"
-        )
+            final_message or "Missão interrompida pelo usuário."
+        ) + "\n\n_Missão interrompida — relatório parcial com o que já foi executado._"
     elif not final_message and executions:
         final_message = (
             f"Missão encerrada após {rounds_completed} rodada(s) e {len(executions)} comando(s). "

@@ -59,8 +59,7 @@ DEFAULT_OBJECTIVES: dict[str, dict[str, str]] = {
             "cirúrgico; documentar o que foi tocado."
         ),
         "custom": (
-            "Ferramentas selecionadas em modo fantasma — quieto, preciso, só no "
-            "alvo autorizado."
+            "Ferramentas selecionadas em modo fantasma — quieto, preciso, só no alvo autorizado."
         ),
     },
 }
@@ -121,9 +120,7 @@ def resolve_pilot_preset(
         MAX_TOOL_ITERATIONS_OFFENSIVE
         if offensive
         else (
-            max(MAX_TOOL_ITERATIONS, 8)
-            if scan in {"intermediate", "full"}
-            else MAX_TOOL_ITERATIONS
+            max(MAX_TOOL_ITERATIONS, 8) if scan in {"intermediate", "full"} else MAX_TOOL_ITERATIONS
         )
     )
     return PilotPreset(

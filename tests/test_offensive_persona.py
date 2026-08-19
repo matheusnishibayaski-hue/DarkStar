@@ -49,9 +49,7 @@ class TestDualPrompts(unittest.TestCase):
         safe = resolve_autonomous_system(
             target="t.com", objective="mapear", risk_profile="safe-active"
         )
-        full = resolve_autonomous_system(
-            target="t.com", objective="mapear", risk_profile="full"
-        )
+        full = resolve_autonomous_system(target="t.com", objective="mapear", risk_profile="full")
         off = resolve_autonomous_system(
             target="t.com",
             objective="mapear",
@@ -232,14 +230,10 @@ class TestOffensiveWire(unittest.TestCase):
     def test_resolve_offline_flag_or_ollama(self):
         from backend.ai.agent import _resolve_offline
 
-        with patch(
-            "backend.ai.providers.get_active_provider_name", return_value="openrouter"
-        ):
+        with patch("backend.ai.providers.get_active_provider_name", return_value="openrouter"):
             self.assertFalse(_resolve_offline(False))
             self.assertTrue(_resolve_offline(True))
-        with patch(
-            "backend.ai.providers.get_active_provider_name", return_value="ollama"
-        ):
+        with patch("backend.ai.providers.get_active_provider_name", return_value="ollama"):
             self.assertTrue(_resolve_offline(False))
 
 

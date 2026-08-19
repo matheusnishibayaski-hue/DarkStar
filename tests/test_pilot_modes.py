@@ -47,9 +47,7 @@ class TestPilotPresets(unittest.TestCase):
         g = default_objective("offline", "basic")
         self.assertNotEqual(s, o)
         self.assertNotEqual(o, g)
-        self.assertTrue(
-            "low-noise" in g.lower() or "pegada" in g.lower() or "passive" in g.lower()
-        )
+        self.assertTrue("low-noise" in g.lower() or "pegada" in g.lower() or "passive" in g.lower())
 
     def test_offensive_iters_higher(self):
         off = resolve_pilot_preset(engagement_mode="offensive", scan_profile="full")
@@ -79,9 +77,7 @@ class TestPlaybookPhase(unittest.TestCase):
         self.assertNotIn("ATTACK PATHS", off)
 
     def test_rank_offline_prefers_quiet(self):
-        ranked = rank_pending_tools(
-            ["masscan", "dig", "nuclei"], offline=True, offensive=False
-        )
+        ranked = rank_pending_tools(["masscan", "dig", "nuclei"], offline=True, offensive=False)
         self.assertEqual(ranked[0], "dig")
 
 
@@ -145,9 +141,7 @@ class TestPilotModesIntegration(unittest.TestCase):
         p.is_configured.return_value = True
         p.resolve_models.return_value = ("m1", "m2")
         p.is_retryable_error.return_value = False
-        p.complete.return_value = LLMCompletion(
-            message=LLMMessage(content="", tool_calls=[tc])
-        )
+        p.complete.return_value = LLMCompletion(message=LLMMessage(content="", tool_calls=[tc]))
         return p
 
     def test_safe_basic_system_finding_driven(self):
@@ -224,9 +218,7 @@ class TestPilotModesIntegration(unittest.TestCase):
             patch("backend.ai.autopilot.build_recon_context", return_value=""),
             patch("backend.ai.autopilot.generate_report", return_value="# r"),
             patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
-            patch(
-                "backend.ai.providers.get_active_provider_name", return_value="ollama"
-            ),
+            patch("backend.ai.providers.get_active_provider_name", return_value="ollama"),
         ):
             run_autonomous(
                 "lab.test",
@@ -246,9 +238,7 @@ class TestPilotModesIntegration(unittest.TestCase):
         surface = empty_surface("waive.test")
         surface["phase"] = "vuln_scan"
         surface["ports"] = [{"port": "443"}]
-        surface["findings"] = [
-            {"status": "candidate", "severity": "critical", "title": "rce"}
-        ]
+        surface["findings"] = [{"status": "candidate", "severity": "critical", "title": "rce"}]
         surface["tools_run"] = ["nmap"]
 
         with (

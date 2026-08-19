@@ -315,9 +315,7 @@ def compact_playbook_block(
             lines.append(f"[KICKOFF] {a}")
         lines.append("")
 
-    actions = next_actions_from_surface(
-        surface, phase=phase, offensive=offensive, offline=offline
-    )
+    actions = next_actions_from_surface(surface, phase=phase, offensive=offensive, offline=offline)
     if actions:
         lines.append("[NEXT BEST ACTIONS]")
         for i, a in enumerate(actions, 1):

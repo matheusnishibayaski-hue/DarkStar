@@ -585,9 +585,7 @@ class TestSessionReportPack(unittest.TestCase):
     def test_danger_score_one_high_idor(self):
         from backend.ai.fp_explain import residual_risk_score
 
-        one = residual_risk_score(
-            [{"status": "confirmed", "severity": "high", "title": "IDOR"}]
-        )
+        one = residual_risk_score([{"status": "confirmed", "severity": "high", "title": "IDOR"}])
         self.assertEqual(one["score"], 62)
         self.assertEqual(one["label"], "Médio alto")
         crit = residual_risk_score(
@@ -598,9 +596,7 @@ class TestSessionReportPack(unittest.TestCase):
         empty = residual_risk_score([])
         self.assertEqual(empty["score"], 0)
         self.assertEqual(empty["label"], "Baixo")
-        mid = residual_risk_score(
-            [{"status": "confirmed", "severity": "medium"}]
-        )
+        mid = residual_risk_score([{"status": "confirmed", "severity": "medium"}])
         self.assertEqual(mid["label"], "Médio")
         low = residual_risk_score([{"status": "confirmed", "severity": "low"}])
         self.assertEqual(low["label"], "Baixo")

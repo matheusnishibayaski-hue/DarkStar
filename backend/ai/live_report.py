@@ -181,13 +181,7 @@ def _render_client_cards(cards: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for i, c in enumerate(cards, 1):
         sev = str(c.get("severity") or "").lower()
-        cls = (
-            "alto"
-            if sev in {"critical", "high"}
-            else "medio"
-            if sev in {"medium"}
-            else "baixo"
-        )
+        cls = "alto" if sev in {"critical", "high"} else "medio" if sev in {"medium"} else "baixo"
         tags = f"<span class='tag'>{_esc(c.get('severity_label') or '—')}</span>"
         if c.get("kind_label"):
             tags += f"<span class='tag'>{_esc(c['kind_label'])}</span>"
@@ -344,12 +338,7 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
     parts: list[str] = []
     for i, f in enumerate(findings[:120], 1):
         headline = f.get("plain_title") or f.get("title") or "Problema"
-        impact = (
-            f.get("why_it_matters")
-            or f.get("everyday")
-            or f.get("what_it_is")
-            or "—"
-        )
+        impact = f.get("why_it_matters") or f.get("everyday") or f.get("what_it_is") or "—"
         parts.append(
             f"<div class='finding {_sev_class(f.get('severity'))}'>"
             f"<p><b>{i}. {_esc(headline)}</b></p>"

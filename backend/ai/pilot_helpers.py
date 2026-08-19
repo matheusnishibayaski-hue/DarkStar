@@ -74,7 +74,9 @@ def interpret_preflight_output(
     }
 
 
-def command_looks_repeated(command: str, tools_run: list[str] | None, recent_commands: list[str]) -> bool:
+def command_looks_repeated(
+    command: str, tools_run: list[str] | None, recent_commands: list[str]
+) -> bool:
     """True se o binário já rodou e o comando é quase idêntico a um recente."""
     cmd = (command or "").strip().lower()
     if not cmd:

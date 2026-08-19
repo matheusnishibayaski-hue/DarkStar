@@ -470,15 +470,9 @@ def _run_openrouter_body(
         chat_mode=chat_mode,
         recon_targets=recon_targets,
     )
-    _, post_nudge, finalize_nudge = resolve_chat_prompts(
-        offensive=offensive, offline=offline
-    )
+    _, post_nudge, finalize_nudge = resolve_chat_prompts(offensive=offensive, offline=offline)
     # Offline usa orçamento safe; offensive só quando não offline
-    max_iters = (
-        MAX_TOOL_ITERATIONS_OFFENSIVE
-        if offensive and not offline
-        else MAX_TOOL_ITERATIONS
-    )
+    max_iters = MAX_TOOL_ITERATIONS_OFFENSIVE if offensive and not offline else MAX_TOOL_ITERATIONS
 
     messages: list[dict] = [{"role": "system", "content": system}]
     messages.extend(_convert_history(history))
