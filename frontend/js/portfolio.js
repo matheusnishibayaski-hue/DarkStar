@@ -78,22 +78,38 @@ function cardHtml(r) {
   const band = riskBand(risk);
   const score = risk.score ?? "—";
   const label = risk.label || band;
+  const confirmed = r.findings_confirmed || 0;
+  const pending = r.findings_pending || 0;
+  const fps = r.findings_fp || 0;
+  const life = r.lifecycle_label || r.lifecycle || "ativo";
   return `
     <article class="portfolio-card portfolio-card--${escapeHtml(band)}">
       <header class="portfolio-card-head">
-        <h3 class="portfolio-card-target">${escapeHtml(r.target || "—")}</h3>
-        <span class="portfolio-risk">${escapeHtml(String(score))} · ${escapeHtml(label)}</span>
+        <h3 class="portfolio-card-target" title="${escapeHtml(r.target || "")}">${escapeHtml(r.target || "—")}</h3>
+        <span class="portfolio-risk" title="Nível de perigo">
+          <span class="portfolio-risk-score">${escapeHtml(String(score))}</span>
+          <span class="portfolio-risk-label">${escapeHtml(label)}</span>
+        </span>
       </header>
-      <p class="portfolio-card-counts">
-        ${r.findings_confirmed || 0} confirmado(s)
-        · ${r.findings_pending || 0} pendente(s)
-        · ${r.findings_fp || 0} falso(s) positivo(s)
-      </p>
+      <ul class="portfolio-metrics" aria-label="Resumo de achados">
+        <li class="portfolio-metric">
+          <span class="portfolio-metric-n">${confirmed}</span>
+          <span class="portfolio-metric-l">confirmado${confirmed === 1 ? "" : "s"}</span>
+        </li>
+        <li class="portfolio-metric">
+          <span class="portfolio-metric-n">${pending}</span>
+          <span class="portfolio-metric-l">pendente${pending === 1 ? "" : "s"}</span>
+        </li>
+        <li class="portfolio-metric">
+          <span class="portfolio-metric-n">${fps}</span>
+          <span class="portfolio-metric-l">falso${fps === 1 ? "" : "s"}+</span>
+        </li>
+      </ul>
       <p class="portfolio-card-delta">${escapeHtml(deltaText(r.delta))}</p>
-      <p class="portfolio-card-foot">
-        <span>${escapeHtml(r.lifecycle_label || r.lifecycle || "ativo")}</span>
-        <span>próx. scan: ${escapeHtml(nextScanText(r.next_schedule))}</span>
-      </p>
+      <footer class="portfolio-card-foot">
+        <span class="portfolio-life">${escapeHtml(life)}</span>
+        <span class="portfolio-next">próx. scan · ${escapeHtml(nextScanText(r.next_schedule))}</span>
+      </footer>
     </article>`;
 }
 

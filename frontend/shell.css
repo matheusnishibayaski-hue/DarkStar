@@ -1929,6 +1929,179 @@ html.mode-offline .chat-mode-art-agent { display: block; }
   border-bottom: 1px solid var(--line);
 }
 
+.portfolio-body {
+  padding: 0.65rem 0.7rem 0.8rem;
+  max-height: min(42vh, 420px);
+  overflow-y: auto;
+}
+
+.portfolio-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 0.55rem;
+}
+
+.portfolio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0.7rem 0.75rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: inset 3px 0 0 var(--mute);
+  min-width: 0;
+}
+
+.portfolio-card--critical { box-shadow: inset 3px 0 0 var(--danger); }
+.portfolio-card--high { box-shadow: inset 3px 0 0 #f87171; }
+.portfolio-card--medium { box-shadow: inset 3px 0 0 var(--warn); }
+.portfolio-card--low { box-shadow: inset 3px 0 0 #22c55e; }
+.portfolio-card--info { box-shadow: inset 3px 0 0 var(--text-3); }
+
+.portfolio-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.portfolio-card-target {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.portfolio-risk {
+  flex: 0 0 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  line-height: 1.15;
+}
+
+.portfolio-card--critical .portfolio-risk {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+}
+.portfolio-card--high .portfolio-risk {
+  background: rgba(248, 113, 113, 0.1);
+  border-color: rgba(248, 113, 113, 0.3);
+}
+.portfolio-card--medium .portfolio-risk {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+.portfolio-card--low .portfolio-risk {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.28);
+}
+
+.portfolio-risk-score {
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.portfolio-risk-label {
+  font-size: 0.58rem;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+  color: var(--text-3);
+  max-width: 7.5rem;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.portfolio-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.35rem 0.4rem;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.portfolio-metric-n {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.portfolio-metric-l {
+  font-size: 0.58rem;
+  color: var(--text-3);
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.portfolio-card-delta {
+  margin: 0;
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: var(--text-2);
+}
+
+.portfolio-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.65rem;
+  margin-top: 0.1rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-3);
+}
+
+.portfolio-life {
+  text-transform: lowercase;
+  color: var(--text-2);
+}
+
+.portfolio-next {
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .portfolio-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
 .session-report-footer-hint {
   margin: 0;
   font-size: 0.68rem;
