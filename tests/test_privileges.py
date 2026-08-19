@@ -55,3 +55,25 @@ class TestPrivileges(unittest.TestCase):
                     self.assertEqual(ok.status_code, 200)
                     self.assertTrue(ok.json()["elevated"])
                     self.assertIn("darkstar_privilege", ok.cookies)
+
+    def test_privilege_tokens_survive_reload(self):
+        import tempfile
+        from pathlib import Path
+
+        from backend.security import privileges as priv
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "privileges.json"
+            with mock.patch.object(priv, "PRIVILEGES_FILE", path):
+                priv._tokens.clear()
+                priv._loaded = False
+                tok = priv.create_privilege_token()
+                self.assertTrue(path.is_file())
+                # Simula restart do processo
+                priv._tokens.clear()
+                priv._loaded = False
+                self.assertTrue(priv.validate_privilege_token(tok))
+                priv.revoke_privilege_token(tok)
+                priv._tokens.clear()
+                priv._loaded = False
+                self.assertFalse(priv.validate_privilege_token(tok))

@@ -1,6 +1,13 @@
 import { consumeSseStream, logStreamUrl } from "./api.js";
 import { buildExecBlock } from "./exec.js";
 import { playSound } from "./audio.js";
+import { getActiveSession } from "./sessions.js";
+import {
+  addLiveExec,
+  appendLiveLog,
+  getRun,
+  setRunTyping,
+} from "./session-runs.js";
 
 const liveLogStreams = new Map();
 const liveExecBlocks = new Map();
@@ -15,6 +22,10 @@ export function closeLiveStream(executionId) {
 
 export function closeAllLiveStreams() {
   for (const id of [...liveLogStreams.keys()]) closeLiveStream(id);
+}
+
+function isViewing(sessionId) {
+  return Boolean(sessionId && getActiveSession()?.id === sessionId);
 }
 
 export function createLiveExecBlock(chatEl, scrollChatToBottom, executionId, command) {
@@ -49,18 +60,14 @@ export function createLiveExecBlock(chatEl, scrollChatToBottom, executionId, com
   const actions = block.querySelector(".exec-actions");
   if (actions) actions.style.display = "none";
 
-  chatEl.appendChild(block);
+  chatEl?.appendChild(block);
   liveExecBlocks.set(executionId, block);
-  scrollChatToBottom();
+  scrollChatToBottom?.();
   return block;
 }
 
-export function attachLogStream(executionId, scrollChatToBottom) {
+export function attachLogStream(executionId, scrollChatToBottom, sessionId) {
   if (liveLogStreams.has(executionId)) return;
-
-  const block = liveExecBlocks.get(executionId);
-  const rawEl = block?.querySelector(".exec-live-out");
-  if (!rawEl) return;
 
   const es = new EventSource(logStreamUrl(executionId));
   liveLogStreams.set(executionId, es);
@@ -69,8 +76,14 @@ export function attachLogStream(executionId, scrollChatToBottom) {
     try {
       const data = JSON.parse(e.data);
       const prefix = data.stream === "stderr" ? "[stderr] " : "";
-      rawEl.textContent += prefix + data.text + "\n";
-      scrollChatToBottom(false);
+      const chunk = prefix + data.text + "\n";
+      if (sessionId) appendLiveLog(sessionId, executionId, chunk);
+      if (isViewing(sessionId)) {
+        const block = liveExecBlocks.get(executionId);
+        const rawEl = block?.querySelector(".exec-live-out");
+        if (rawEl) rawEl.textContent += chunk;
+        scrollChatToBottom?.(false);
+      }
     } catch { /* ignore */ }
   });
 
@@ -78,13 +91,24 @@ export function attachLogStream(executionId, scrollChatToBottom) {
   es.onerror = () => closeLiveStream(executionId);
 }
 
+export function restoreLiveBlocks(chatEl, sessionId, scrollChatToBottom) {
+  const run = getRun(sessionId);
+  if (!run || !chatEl) return;
+  for (const row of run.live) {
+    const block = createLiveExecBlock(chatEl, scrollChatToBottom, row.id, row.command);
+    const rawEl = block.querySelector(".exec-live-out");
+    if (rawEl) rawEl.textContent = row.text;
+    attachLogStream(row.id, scrollChatToBottom, sessionId);
+  }
+}
+
 export function finalizeLiveExecBlock(chatEl, exec) {
   closeLiveStream(exec.log_file_id);
   const existing = liveExecBlocks.get(exec.log_file_id);
-  if (existing) {
+  if (existing && existing.isConnected) {
     existing.replaceWith(buildExecBlock(exec));
     liveExecBlocks.delete(exec.log_file_id);
-  } else {
+  } else if (chatEl) {
     chatEl.appendChild(buildExecBlock(exec));
   }
   if (exec.blocked) playSound("exec_blocked");
@@ -93,23 +117,41 @@ export function finalizeLiveExecBlock(chatEl, exec) {
 }
 
 /** Handlers SSE reutilizáveis para chat e auto-pilot. */
-export function createToolStreamHandlers({ chatEl, showTyping, hideTyping, scrollChatToBottom }) {
+export function createToolStreamHandlers({
+  chatEl,
+  showTyping,
+  hideTyping,
+  scrollChatToBottom,
+  sessionId,
+}) {
   return {
     tool_start(data) {
-      createLiveExecBlock(chatEl, scrollChatToBottom, data.execution_id, data.command);
-      attachLogStream(data.execution_id, scrollChatToBottom);
-      showTyping(`executando: ${(data.command || "").split(" ")[0] || "tool"}`);
+      if (sessionId) addLiveExec(sessionId, data.execution_id, data.command);
+      if (isViewing(sessionId)) {
+        createLiveExecBlock(chatEl, scrollChatToBottom, data.execution_id, data.command);
+      }
+      attachLogStream(data.execution_id, scrollChatToBottom, sessionId);
+      const label = `executando: ${(data.command || "").split(" ")[0] || "tool"}`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
     },
     tool_done(data) {
-      hideTyping();
-      showTyping("analisando resultado…");
+      if (isViewing(sessionId)) {
+        hideTyping();
+        showTyping("analisando resultado…");
+      }
+      if (sessionId) setRunTyping(sessionId, "analisando resultado…");
       window.dispatchEvent(new CustomEvent("darkstar:tool-done", { detail: data || {} }));
     },
     round_start(data) {
-      showTyping(`rodada ${data.round}/${data.max_rounds} · ${data.tools_executed} cmd(s)`);
+      const label = `rodada ${data.round}/${data.max_rounds} · ${data.tools_executed} cmd(s)`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
     },
     mission_start(data) {
-      showTyping(`auto-pilot: ${data.target}`);
+      const label = `auto-pilot: ${data.target}`;
+      if (sessionId) setRunTyping(sessionId, label);
+      if (isViewing(sessionId)) showTyping(label);
     },
   };
 }

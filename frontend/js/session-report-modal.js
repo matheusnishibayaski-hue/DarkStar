@@ -53,14 +53,48 @@ function fingerprint(session) {
   ].join(":");
 }
 
-function isReportTabOpen() {
-  const panel = document.getElementById("ws-panel-report");
-  return Boolean(panel && !panel.hidden);
+function syncExpandedPreview() {
+  const src = document.getElementById("session-report-preview");
+  const dest = document.getElementById("session-report-preview-full");
+  const overlay = document.getElementById("overlay-report-preview");
+  if (!src || !dest || !overlay || overlay.hidden) return;
+  dest.srcdoc = src.srcdoc || "";
+}
+
+function openPreviewExpand() {
+  const overlay = document.getElementById("overlay-report-preview");
+  if (!overlay) return;
+  overlay.hidden = false;
+  requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
+  document.body.classList.add("has-overlay");
+  syncExpandedPreview();
+}
+
+function closePreviewExpand() {
+  const overlay = document.getElementById("overlay-report-preview");
+  if (!overlay) return;
+  overlay.classList.remove("overlay-visible");
+  overlay.hidden = true;
+  if (!document.querySelector(".overlay:not([hidden])")) {
+    document.body.classList.remove("has-overlay");
+  }
 }
 
 export function initSessionReportModal(context) {
   ctx = context;
   document.getElementById("session-report-download")?.addEventListener("click", () => handleDownloadPdf());
+  document.getElementById("session-report-expand")?.addEventListener("click", () => openPreviewExpand());
+  document.getElementById("report-preview-close")?.addEventListener("click", () => closePreviewExpand());
+  const overlay = document.getElementById("overlay-report-preview");
+  overlay?.addEventListener("click", (e) => {
+    if (e.target === overlay) closePreviewExpand();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && overlay && !overlay.hidden) {
+      e.preventDefault();
+      closePreviewExpand();
+    }
+  });
   if (!listening) {
     listening = true;
     window.addEventListener("darkstar:session-updated", () => {
@@ -100,6 +134,11 @@ export function closeSessionReportModal() {
   /* painel no workspace */
 }
 
+function isReportTabOpen() {
+  const panel = document.getElementById("ws-panel-report");
+  return Boolean(panel && !panel.hidden);
+}
+
 export function schedulePreviewRefresh() {
   if (!isReportTabOpen()) return;
   if (previewTimer) clearTimeout(previewTimer);
@@ -137,6 +176,7 @@ async function refreshPreview(force = false) {
   if (!session) {
     iframe.removeAttribute("src");
     iframe.removeAttribute("srcdoc");
+    syncExpandedPreview();
     return;
   }
   const fp = fingerprint(session);
@@ -165,10 +205,12 @@ async function refreshPreview(force = false) {
     iframe.removeAttribute("src");
     iframe.removeAttribute("sandbox");
     iframe.srcdoc = html;
+    syncExpandedPreview();
   } catch (e) {
     iframe.srcdoc = `<p style="font-family:sans-serif;padding:2rem;color:#666">${
       e.message || "Não foi possível gerar a prévia."
     }</p>`;
+    syncExpandedPreview();
   }
 }
 

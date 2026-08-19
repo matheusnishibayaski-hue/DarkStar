@@ -19,6 +19,8 @@ class TestOpenApi(unittest.TestCase):
             "/api/playbooks",
             "/api/playbooks/{playbook_id}/run",
             "/api/metrics",
+            "/api/tools",
+            "/api/system/tools/update",
             "/api/surface",
             "/api/engagements",
             "/api/engagements/{target}/verify",
@@ -56,3 +58,21 @@ class TestOpenApi(unittest.TestCase):
         res = client.get("/api/health")
         self.assertEqual(res.json()["version"], "2.0.0")
         self.assertIn("scope_warning", res.json())
+        body = res.json()
+        self.assertIn("status", body)
+
+    def test_tools_and_scan_profiles_smoke(self):
+        from backend.main import app
+        from tests.auth_patch import patch_chat_api_token
+
+        with patch_chat_api_token(""):
+            client = TestClient(app)
+            tools = client.get("/api/tools")
+            self.assertEqual(tools.status_code, 200)
+            data = tools.json()
+            # categorias ou lista flat
+            self.assertTrue(data, "GET /api/tools vazio")
+            profiles = client.get("/api/scan-profiles")
+            self.assertEqual(profiles.status_code, 200)
+            pdata = profiles.json()
+            self.assertTrue(pdata, "GET /api/scan-profiles vazio")

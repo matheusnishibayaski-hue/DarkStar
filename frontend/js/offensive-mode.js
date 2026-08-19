@@ -56,7 +56,7 @@ function setOffensiveMode(on, { silent = false } = {}) {
     enabled = false;
     if (toggleEl) toggleEl.checked = false;
     if (!silent) {
-      toast("Desbloqueie com a master key (barra lateral) para o modo offensive", "warn");
+      toast("Desbloqueie com a master key para o modo offensive", "warn");
     }
   }
   if (toggleEl) toggleEl.checked = enabled;
@@ -66,23 +66,23 @@ function setOffensiveMode(on, { silent = false } = {}) {
   if (!silent && enabled) {
     toast("Modo ofensivo — só em alvos autorizados", "warn");
   }
+  return enabled;
 }
 
 /**
- * @param {HTMLInputElement | null} input
+ * @param {HTMLInputElement | null} [input]
  */
-export function initOffensiveMode(input) {
-  toggleEl = input;
-  if (!input) {
-    applyOffensiveTheme(loadOffensivePreference() && isElevated());
-    return;
-  }
+export function initOffensiveMode(input = null) {
+  toggleEl = input || null;
   const pref = loadOffensivePreference() && isElevated();
   setOffensiveMode(pref, { silent: true });
+  if (!input) return;
   input.addEventListener("change", () => {
     setOffensiveMode(input.checked);
   });
 }
+
+export { setOffensiveMode };
 
 /** Aplicar tema antes do bundle (script inline no HTML). */
 export function bootstrapOffensiveThemeFromStorage() {

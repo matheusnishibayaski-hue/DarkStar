@@ -67,7 +67,7 @@ function buildSteps() {
     {
       selector: "#sidebar",
       title: "Barra lateral",
-      text: "Conversas, workspace (ferramentas, logs, relatórios, mapa), master key e ajuda — tudo aqui.",
+      text: "Conversas, workspace (ferramentas, logs, relatórios, dashboard), master key e ajuda — tudo aqui.",
       placement: "right",
       before: async () => {
         resetPanels();
@@ -82,10 +82,10 @@ function buildSteps() {
       placement: "right",
     },
     {
-      selector: "#btn-workspace",
+      selector: "#workspace-edge-toggle",
       title: "Workspace",
-      text: "Página da conversa: ferramentas, logs, relatórios (prévia, carteira e PDF), mapa e dashboard — só deste chat.",
-      placement: "right",
+      text: "Seta na borda direita: abre o painel da conversa (ferramentas, logs, relatórios, dashboard). Arraste o divisor para mudar a largura. Atalho Alt+T.",
+      placement: "left",
     },
     {
       selector: "#btn-session-logs",
@@ -102,20 +102,14 @@ function buildSteps() {
     {
       selector: "#btn-master-key",
       title: "Master key",
-      text: "Desbloqueia o perfil full e o modo offensive.",
+      text: "Desbloqueia o perfil full e libera o modo ofensivo (ícone do diabo no canto do chat).",
       placement: "right",
     },
     {
-      selector: "#offensive-mode-control",
-      title: "Offensive",
-      text: "Ferramentas agressivas — requer master key.",
-      placement: "right",
-    },
-    {
-      selector: "#offline-mode-control",
-      title: "Offline",
-      text: "Troca a Argus para Ollama local (sem OpenRouter). Ideal para lab air-gapped.",
-      placement: "right",
+      selector: "#chat-mode-switcher",
+      title: "Modos",
+      text: "Anjo = perfil B · Diabo = ofensivo · Agente = offline (Ollama).",
+      placement: "bottom",
     },
     {
       selector: "#btn-help",

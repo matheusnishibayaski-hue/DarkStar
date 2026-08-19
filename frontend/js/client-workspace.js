@@ -61,46 +61,78 @@ function uniqueSlug(base) {
 }
 
 async function loadClients() {
+  const prevId = activeClientId || localStorage.getItem(STORAGE_KEY) || "default";
   try {
     const res = await apiFetch("/api/clients");
     const data = await parseJson(res);
     clientsCache = data.clients || [];
-    if (data.active_client_id) {
-      activeClientId = data.active_client_id;
-      localStorage.setItem(STORAGE_KEY, activeClientId);
+    const localId = (localStorage.getItem(STORAGE_KEY) || "").trim();
+    const serverId = (data.active_client_id || "").trim();
+    const known = new Set(
+      (clientsCache || []).map((c) => c.client_id).concat(["default"])
+    );
+    // Preferência do browser (sobrevive a F5); servidor só preenche se local vazio/inválido.
+    if (localId && known.has(localId)) {
+      activeClientId = localId;
+    } else if (serverId && known.has(serverId)) {
+      activeClientId = serverId;
+    } else {
+      activeClientId = "default";
     }
+    localStorage.setItem(STORAGE_KEY, activeClientId);
     renderSelect();
+    // Re-sincroniza servidor se o browser tinha outro cliente ativo
+    if (serverId && activeClientId !== serverId) {
+      apiFetch(`/api/clients/${encodeURIComponent(activeClientId)}/activate`, {
+        method: "POST",
+      }).catch(() => {});
+    }
   } catch (err) {
     console.warn("clients_load_failed", err);
+    if (!clientsCache.length) {
+      clientsCache = [{ client_id: "default", display_name: "Padrão", targets_count: 0 }];
+    }
+    activeClientId = localStorage.getItem(STORAGE_KEY) || prevId || "default";
+    renderSelect();
   }
+  return {
+    clientId: activeClientId || "default",
+    changed: (activeClientId || "default") !== prevId,
+  };
+}
+
+function clientLabel(c) {
+  const n = c.targets_count ?? (c.targets || []).length;
+  const label = c.display_name || c.client_id;
+  return n ? `${label} · ${n}` : label;
 }
 
 function renderSelect() {
-  const sel = document.getElementById("client-workspace-select");
+  const labelEl = document.getElementById("client-picker-label");
+  const menu = document.getElementById("client-picker-menu");
   const delBtn = document.getElementById("client-workspace-del");
-  if (!sel) return;
-  const prev = activeClientId;
-  sel.innerHTML = "";
-  for (const c of clientsCache) {
-    const opt = document.createElement("option");
-    opt.value = c.client_id;
-    const n = c.targets_count ?? (c.targets || []).length;
-    const label = c.display_name || c.client_id;
-    opt.textContent = n ? `${label} · ${n}` : label;
-    opt.title = `${label} (${c.client_id}) — ${n} alvo(s)`;
-    if (c.client_id === prev) opt.selected = true;
-    sel.appendChild(opt);
+  let list = clientsCache.slice();
+  if (!list.some((c) => c.client_id === "default")) {
+    list = [{ client_id: "default", display_name: "Padrão", targets_count: 0 }, ...list];
   }
-  if (!sel.options.length) {
-    const opt = document.createElement("option");
-    opt.value = "default";
-    opt.textContent = "Padrão";
-    sel.appendChild(opt);
+  if (!list.length) {
+    list = [{ client_id: "default", display_name: "Padrão", targets_count: 0 }];
+  }
+  const current = list.find((c) => c.client_id === activeClientId) || list[0];
+  if (labelEl) labelEl.textContent = clientLabel(current);
+  if (menu) {
+    menu.innerHTML = list
+      .map((c) => {
+        const sel = c.client_id === (current.client_id || "default") ? " aria-selected=\"true\"" : "";
+        return `<button type="button" class="client-picker-item" role="option"${sel} data-client-id="${c.client_id}">${clientLabel(c)}</button>`;
+      })
+      .join("");
   }
   if (delBtn) {
-    delBtn.disabled = (sel.value || "default") === "default";
+    const id = current.client_id || "default";
+    delBtn.disabled = id === "default";
     delBtn.title =
-      sel.value === "default"
+      id === "default"
         ? "Cliente padrão não pode ser excluído"
         : "Excluir cliente ativo";
   }
@@ -114,8 +146,8 @@ async function activateClient(clientId) {
     const data = await parseJson(res);
     activeClientId = data.active_client_id || clientId;
     localStorage.setItem(STORAGE_KEY, activeClientId);
-    toast(`Cliente ativo: ${activeClientId}`, "ok");
     renderSelect();
+    toast(`Cliente ativo: ${activeClientId}`, "ok");
     window.dispatchEvent(
       new CustomEvent("darkstar:client-changed", { detail: { clientId: activeClientId } })
     );
@@ -146,27 +178,46 @@ function fillClientForm(client) {
   if (submit) submit.textContent = client?.client_id ? "Salvar" : "Criar";
 }
 
-function openCreateModal() {
-  const overlay = document.getElementById("overlay-client-new");
-  if (!overlay) return;
-  fillClientForm(null);
-  overlay.hidden = false;
-  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
+function upsertCache(client) {
+  if (!client?.client_id) return;
+  const row = {
+    ...client,
+    targets_count:
+      client.targets_count ??
+      (client.allowed_targets || client.targets || []).length ??
+      0,
+  };
+  const i = clientsCache.findIndex((c) => c.client_id === row.client_id);
+  if (i >= 0) clientsCache[i] = { ...clientsCache[i], ...row };
+  else clientsCache.push(row);
 }
 
-function openEditModal() {
+function openClientOverlay() {
   const overlay = document.getElementById("overlay-client-new");
   if (!overlay) return;
-  const current =
-    clientsCache.find((c) => c.client_id === activeClientId) || { client_id: activeClientId };
-  fillClientForm(current);
   overlay.hidden = false;
-  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
+  requestAnimationFrame(() => overlay.classList.add("overlay-visible"));
 }
 
 function closeCreateModal() {
   const overlay = document.getElementById("overlay-client-new");
-  if (overlay) overlay.hidden = true;
+  if (!overlay) return;
+  overlay.classList.remove("overlay-visible");
+  overlay.hidden = true;
+}
+
+function openCreateModal() {
+  fillClientForm(null);
+  openClientOverlay();
+  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
+}
+
+function openEditModal() {
+  const current =
+    clientsCache.find((c) => c.client_id === activeClientId) || { client_id: activeClientId };
+  fillClientForm(current);
+  openClientOverlay();
+  requestAnimationFrame(() => document.getElementById("client-new-name")?.focus());
 }
 
 async function submitCreateClient(nameRaw) {
@@ -192,10 +243,16 @@ async function submitCreateClient(nameRaw) {
           allowed_targets: allowedTargets,
         }),
       });
-      await parseJson(res);
+      const data = await parseJson(res);
       closeCreateModal();
+      upsertCache({
+        client_id: editId,
+        display_name: data.display_name || name,
+        contract_id: data.contract_id || contract,
+        allowed_targets: data.allowed_targets || allowedTargets,
+      });
+      renderSelect();
       toast("Cliente atualizado", "ok");
-      await loadClients();
       return;
     }
     const id = uniqueSlug(nameToSlug(name));
@@ -211,14 +268,16 @@ async function submitCreateClient(nameRaw) {
     if (res.status === 409) {
       toast(`Cliente já existe — ativando`, "ok");
       closeCreateModal();
-      await loadClients();
+      upsertCache({ client_id: id, display_name: name, contract_id: contract, allowed_targets: allowedTargets });
+      renderSelect();
       await activateClient(id);
       return;
     }
-    await parseJson(res);
+    const created = await parseJson(res);
     closeCreateModal();
+    upsertCache(created);
+    renderSelect();
     toast("Cliente criado", "ok");
-    await loadClients();
     await activateClient(id);
   } catch (err) {
     toast(err.message || "Falha ao salvar cliente", "err");
@@ -229,8 +288,7 @@ async function submitCreateClient(nameRaw) {
 }
 
 async function deleteClient() {
-  const sel = document.getElementById("client-workspace-select");
-  const id = (sel?.value || activeClientId || "").trim();
+  const id = (activeClientId || "").trim();
   if (!id || id === "default") {
     toast("Cliente padrão não pode ser excluído", "err");
     return;
@@ -255,19 +313,19 @@ async function deleteClient() {
     activeClientId = data.active_client_id || "default";
     localStorage.setItem(STORAGE_KEY, activeClientId);
     clientsCache = clientsCache.filter((c) => c.client_id !== id);
+    renderSelect();
     toast(`Cliente "${label}" excluído`, "ok");
-    await loadClients();
     window.dispatchEvent(
       new CustomEvent("darkstar:client-changed", { detail: { clientId: activeClientId } })
     );
   } catch (err) {
     toast(err.message || "Falha ao excluir cliente", "err");
-    await loadClients();
   }
 }
 
 export function initClientWorkspace() {
-  const sel = document.getElementById("client-workspace-select");
+  const pickerBtn = document.getElementById("client-picker-btn");
+  const menu = document.getElementById("client-picker-menu");
   const btn = document.getElementById("client-workspace-new");
   const edit = document.getElementById("client-workspace-edit");
   const del = document.getElementById("client-workspace-del");
@@ -275,8 +333,28 @@ export function initClientWorkspace() {
   const form = document.getElementById("client-new-form");
   const cancel = document.getElementById("client-new-cancel");
 
-  if (sel) {
-    sel.addEventListener("change", () => activateClient(sel.value));
+  function closeMenu() {
+    if (menu) menu.hidden = true;
+    if (pickerBtn) pickerBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if (pickerBtn && menu) {
+    pickerBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = menu.hidden;
+      menu.hidden = !open;
+      pickerBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    menu.addEventListener("click", (e) => {
+      const item = e.target.closest("[data-client-id]");
+      if (!item) return;
+      closeMenu();
+      activateClient(item.getAttribute("data-client-id"));
+    });
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("#client-workspace-select")) return;
+      closeMenu();
+    });
   }
   if (btn) {
     btn.addEventListener("click", () => openCreateModal());
@@ -307,5 +385,15 @@ export function initClientWorkspace() {
       closeCreateModal();
     }
   });
-  loadClients();
+  // Boot explícito via readyClientWorkspace() — não dispara loadClients aqui
+  // para evitar race com bootSessionsFromDb.
+}
+
+/** Resolve cliente ativo no servidor antes de carregar conversas. */
+let clientReadyPromise = null;
+export function readyClientWorkspace() {
+  if (!clientReadyPromise) {
+    clientReadyPromise = loadClients().then((info) => info.clientId);
+  }
+  return clientReadyPromise;
 }

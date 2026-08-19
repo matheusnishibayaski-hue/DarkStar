@@ -8,6 +8,11 @@ class ChatMessage(BaseModel):
     content: str
 
 
+class ChatAttachment(BaseModel):
+    name: str = Field(..., max_length=256)
+    content: str = Field(..., max_length=250000)
+
+
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
     history: list[ChatMessage] = Field(default_factory=list)
@@ -16,6 +21,8 @@ class ChatRequest(BaseModel):
     fallback_model: str = Field(default="", max_length=128)
     mission_id: str = Field(default="", max_length=64)
     chat_session_id: str = Field(default="", max_length=128)
+    chat_mode: str = Field(default="agent", max_length=16)
+    attachments: list[ChatAttachment] = Field(default_factory=list)
 
 
 class ToolExecutionResponse(BaseModel):
@@ -69,6 +76,11 @@ class AutonomousRequest(BaseModel):
         description="basic | intermediate | full | custom",
     )
     custom_tools: list[str] = Field(default_factory=list, max_length=200)
+    attachments: list[ChatAttachment] = Field(
+        default_factory=list,
+        max_length=13,
+        description="Mapa/arquivos da Pasta ou GitHub para white-box no piloto",
+    )
 
 
 class LoginRequest(BaseModel):

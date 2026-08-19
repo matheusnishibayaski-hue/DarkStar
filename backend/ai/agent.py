@@ -99,9 +99,15 @@ EmitFn = Callable[[str, dict], None]
 def _apply_recon_context(user_message: str, history: list[dict]) -> tuple[str, list[str]]:
     from backend.executor.recon_db import is_recon_target
     from backend.executor.surface import build_surface_context
+    from backend.ai.project_intel import operator_text_for_targets
 
+    # Preferir texto do operador (sem anexos/intel) para não poluir com deps/URLs de libs
+    op_text = operator_text_for_targets(user_message)
     history_text = " ".join(m.get("content", "") for m in history if m.get("role") == "user")
-    targets = [t for t in extract_targets(user_message, history_text) if is_recon_target(t)]
+    targets = [t for t in extract_targets(op_text, history_text) if is_recon_target(t)]
+    # Se o operador não deu alvo, tentar no texto completo (fallback)
+    if not targets:
+        targets = [t for t in extract_targets(user_message, history_text) if is_recon_target(t)]
     parts: list[str] = []
     recon = build_recon_context(targets)
     if recon:
@@ -186,6 +192,77 @@ def _apply_preferred_tool(user_message: str, preferred_tool: str | None) -> str:
         f"se for só dúvida conceitual sobre ela, responda em texto.]\n\n"
         f"{user_message}"
     )
+
+
+_AUTO_WHITEBOX_MARKER = "[Pentest white-box automático]"
+
+
+def _apply_auto_whitebox_mission(user_message: str) -> str:
+    if _AUTO_WHITEBOX_MARKER not in (user_message or ""):
+        return user_message
+    return (
+        "[Sistema] Missão automática white-box. Use [Anexos] e [PROJECT INTEL] como fonte "
+        "primária. Responda ao usuário SOMENTE com o relatório de achados (sem saudação, "
+        "sem pedir alvo se o intel já tiver host/URL do app). Se houver alvo de rede no "
+        "intel, pode usar run_kali_tool e incorporar no relatório.\n\n"
+        + user_message
+    )
+
+
+_CHAT_MODE_PREFIX = {
+    "plan": (
+        "[Modo Plan: monte um plano passo a passo. Não execute ferramentas Kali "
+        "nesta resposta; descreva o que faria e por quê.]\n\n"
+    ),
+    "ask": (
+        "[Modo Ask: responda só com explicação. Não chame ferramentas Kali nesta resposta.]\n\n"
+    ),
+    "review": (
+        "[Modo Review: revise achados, evidências e o relatório desta conversa. "
+        "Seja crítico e objetivo; só sugira novo scan se faltar evidência.]\n\n"
+    ),
+}
+
+
+def _apply_chat_mode(user_message: str, chat_mode: str | None) -> str:
+    mode = (chat_mode or "agent").strip().lower()
+    prefix = _CHAT_MODE_PREFIX.get(mode)
+    if not prefix:
+        return user_message
+    return prefix + user_message
+
+
+def _apply_attachments(user_message: str, attachments: list | None) -> str:
+    if not attachments:
+        return user_message
+    from backend.ai.project_intel import apply_project_intel, attachments_as_dicts
+
+    items = attachments_as_dicts(attachments)
+    chunks: list[str] = []
+    for item in items[:13]:
+        name = str(item.get("name") or "file")[:256]
+        content = str(item.get("content") or "")[:200000]
+        if not content:
+            continue
+        if name == "__project_map.txt":
+            chunks.append(
+                "[Mapa do repositório — inventário do projeto]\n"
+                "Use para: superfície de ataque, entrypoints, configs, portas/URLs implícitas, "
+                "stack e priorização de ferramentas. Cite paths ao planejar scans.\n"
+                + content
+                + "\n"
+            )
+        else:
+            chunks.append(
+                f"--- arquivo: {name} ---\n"
+                "(Conteúdo white-box — derive rotas, auth, configs e possíveis alvos.)\n"
+                + content
+                + "\n"
+            )
+    if not chunks:
+        return user_message
+    with_files = user_message + "\n\n[Anexos]\n" + "".join(chunks)
+    return apply_project_intel(with_files, items)
 
 
 def _convert_history(history: list[dict]) -> list[dict]:
@@ -467,7 +544,12 @@ def chat(
     emit: EmitFn | None = None,
     mission_id: str | None = None,
     chat_session_id: str | None = None,
+    chat_mode: str | None = None,
+    attachments: list | None = None,
 ) -> ChatResponse:
+    user_message = _apply_chat_mode(user_message, chat_mode)
+    user_message = _apply_auto_whitebox_mission(user_message)
+    user_message = _apply_attachments(user_message, attachments)
     user_message = _apply_preferred_tool(user_message, preferred_tool)
     enriched, targets = _apply_recon_context(user_message, history)
     force_tool_use = bool(preferred_tool and preferred_tool != "auto")
@@ -492,6 +574,8 @@ def chat_stream(
     fallback_model: str | None = None,
     mission_id: str | None = None,
     chat_session_id: str | None = None,
+    chat_mode: str | None = None,
+    attachments: list | None = None,
 ) -> Generator[str, None, None]:
     """Gera eventos SSE durante o processamento do chat."""
     event_queue: Queue[str | None] = Queue()
@@ -510,6 +594,8 @@ def chat_stream(
                 emit=emit,
                 mission_id=mission_id,
                 chat_session_id=chat_session_id,
+                chat_mode=chat_mode,
+                attachments=attachments,
             )
             event_queue.put(
                 format_sse(

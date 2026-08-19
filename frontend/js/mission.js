@@ -2,41 +2,52 @@
 
 import { cancelMission } from "./auth.js";
 import { closeAllLiveStreams } from "./stream.js";
+import { getActiveSession } from "./sessions.js";
+import { endRun, getRun, getRunAbort, isSessionBusy } from "./session-runs.js";
 
-let active = { id: null, abort: null, btn: null };
+let cancelBtn = null;
 
-export function initMissionControl(cancelBtn) {
-  active.btn = cancelBtn;
+export function initMissionControl(btn) {
+  cancelBtn = btn;
 }
 
 export function createMissionId() {
   return crypto.randomUUID?.() || `m-${Date.now()}`;
 }
 
-export function beginMission(missionId, abortController) {
-  active.id = missionId;
-  active.abort = abortController;
-  if (active.btn) active.btn.hidden = false;
+export function syncMissionButton() {
+  const sid = getActiveSession()?.id;
+  if (cancelBtn) cancelBtn.hidden = !isSessionBusy(sid);
 }
 
-export function endMission() {
-  active.id = null;
-  active.abort = null;
-  if (active.btn) active.btn.hidden = true;
+export function beginMission(missionId, abortController, sessionId) {
+  void missionId;
+  void abortController;
+  void sessionId;
+  syncMissionButton();
+}
+
+export function endMission(sessionId) {
+  if (sessionId) endRun(sessionId);
+  syncMissionButton();
 }
 
 export function getMissionAbortSignal() {
-  return active.abort?.signal;
+  const sid = getActiveSession()?.id;
+  return getRunAbort(sid)?.signal;
 }
 
 export async function cancelActiveMission(toast) {
-  if (!active.id) return;
-  active.abort?.abort();
-  await cancelMission(active.id);
+  const sid = getActiveSession()?.id;
+  const run = getRun(sid);
+  if (!run) return;
+  run.abort?.abort();
+  await cancelMission(run.missionId);
   closeAllLiveStreams();
   toast?.("cancelando…", "warn");
 }
 
-export function isMissionAborted() {
-  return Boolean(active.abort?.signal.aborted);
+export function isMissionAborted(sessionId) {
+  const sid = sessionId || getActiveSession()?.id;
+  return Boolean(getRunAbort(sid)?.signal.aborted);
 }

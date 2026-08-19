@@ -96,6 +96,12 @@ export function getEngagementReportUrl(target, format = "pdf") {
   return `/api/engagements/${encodeURIComponent(target)}/report?format=${format}`;
 }
 
+/** apt-get update (+ upgrade) no container Kali — requer master key. */
+export function updateKaliTools({ upgrade = true } = {}) {
+  const q = upgrade ? "" : "?upgrade=false";
+  return apiFetch(`/api/system/tools/update${q}`, { method: "POST" });
+}
+
 export function listIntelSessions() {
   return apiFetch("/api/intel/sessions");
 }

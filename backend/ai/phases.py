@@ -209,7 +209,12 @@ def is_tool_allowed(
     return True, ""
 
 
-def phase_prompt_block(phase: str, surface_summary: dict[str, Any] | None = None) -> str:
+def phase_prompt_block(
+    phase: str,
+    surface_summary: dict[str, Any] | None = None,
+    *,
+    pending_tools: list[str] | None = None,
+) -> str:
     label = PHASE_LABELS.get(phase, phase)
     goal = PHASE_GOALS.get(phase, "")
     preferred = sorted(PHASE_PREFERRED_TOOLS.get(phase, frozenset()))
@@ -223,11 +228,20 @@ def phase_prompt_block(phase: str, surface_summary: dict[str, Any] | None = None
             f"findings_candidatos={surface_summary.get('findings_candidates', 0)}, "
             f"findings_confirmados={surface_summary.get('findings_confirmed', 0)}."
         )
+    pending_txt = ""
+    if pending_tools:
+        sample = ", ".join(pending_tools[:10])
+        pending_txt = (
+            f"\nPendentes do perfil nesta missão (priorize uma não usada): {sample}"
+            f"{'…' if len(pending_tools) > 10 else ''}."
+        )
     return (
         f"[FASE ATUAL: {phase} — {label}]\n"
         f"Objetivo da fase: {goal}\n"
-        f"Ferramentas preferidas: {preferred_txt}."
+        f"Ferramentas preferidas da fase: {preferred_txt}."
+        f"{pending_txt}"
         f"{summary_txt}\n"
+        "Varie as ferramentas — não repita sempre as mesmas. "
         "Siga a metodologia: não pule para exploração destrutiva. "
         "Só chame finish_mission na fase report (ou se o objetivo já estiver claramente cumprido)."
     )

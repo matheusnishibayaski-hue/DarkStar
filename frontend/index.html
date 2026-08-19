@@ -8,16 +8,12 @@
   <title>DarkStar · Argus</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/styles.css?v=53" />
-  <link rel="stylesheet" href="/static/shell.css?v=27" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/styles.css?v=66" />
+  <link rel="stylesheet" href="/static/shell.css?v=49" />
   <script>
     (function () {
       try {
-        if (localStorage.getItem("darkstar-pilot-offensive") === "1"
-            || localStorage.getItem("chat-ia-kali-pilot-offensive") === "1") {
-          document.documentElement.classList.add("mode-offensive");
-        }
         if (localStorage.getItem("darkstar-offline-mode") === "1") {
           document.documentElement.classList.add("mode-offline");
         }
@@ -30,88 +26,131 @@
     <aside class="sidebar" id="sidebar" aria-label="Navegação">
       <button type="button" class="sidebar-close" id="sidebar-close" aria-label="Fechar">×</button>
 
-      <div class="spine">
-        <div class="spine-eye" aria-hidden="true" title="Argus"></div>
-        <p class="spine-brand" aria-label="DarkStar">DARKSTAR</p>
-        <p class="spine-meta">ARGUS</p>
+      <div class="ide-activity" aria-label="Activity bar">
+        <span class="ide-mark" title="DarkStar · Argus" aria-hidden="true">
+          <svg class="ide-mark-icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M12 2.2l1.35 7.15L20.5 9.4 14.7 13.4l2.1 7.4L12 16.9 7.2 20.8l2.1-7.4L3.5 9.4l7.15-.05L12 2.2z"/>
+          </svg>
+        </span>
+        <nav class="sidebar-nav" aria-label="Ações">
+          <button type="button" class="ide-act nav-item" id="btn-master-key" title="01 master key">
+            <svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="8" cy="12" r="3.2"/><path d="M11 12h9l-2.2 2.2M18 12l-2.2-2.2"/></svg>
+            <span class="sr-only nav-item-label" data-key-label>master key</span>
+          </button>
+          <button type="button" class="ide-act nav-item" id="btn-sound" title="02 som">
+            <svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 10v4h3l5 4V6L7 10H4z"/><path d="M16 9.5a3.2 3.2 0 0 1 0 5"/></svg>
+            <span class="sr-only nav-item-label">som</span>
+          </button>
+          <button type="button" class="ide-act nav-item" id="btn-help" title="03 ajuda (F1)">
+            <svg class="ide-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.4a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1 1-1 1.8V14"/><circle cx="12" cy="16.4" r=".7" fill="currentColor" stroke="none"/></svg>
+            <span class="sr-only">ajuda</span>
+          </button>
+        </nav>
       </div>
 
-      <div class="rail">
-        <div class="sidebar-head">
-          <span class="sidebar-logo" aria-hidden="true">
-            <span class="brand-mark"><span class="brand-name">DarkStar</span></span>
-          </span>
-        </div>
+      <div class="ide-explorer rail">
+        <header class="sidebar-head">
+          <div class="sidebar-logo">
+            <span class="brand-mark">
+              <span class="brand-name">DarkStar</span>
+            </span>
+            <span class="brand-sub">Argus</span>
+          </div>
+        </header>
 
-        <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa">+ NOVO</button>
+        <button type="button" class="sidebar-new" id="sidebar-new" title="Nova conversa">
+          <span class="sidebar-new-plus" aria-hidden="true">+</span>
+          <span class="sidebar-new-label">Nova conversa</span>
+        </button>
 
-        <p class="rail-label">CLIENTE</p>
-        <div class="client-workspace" id="client-workspace">
-          <select id="client-workspace-select" class="client-workspace-select" title="Workspace do cliente" aria-label="Cliente ativo"></select>
-          <button type="button" class="client-workspace-new" id="client-workspace-new" title="Novo cliente">+</button>
-          <button type="button" class="client-workspace-edit" id="client-workspace-edit" title="Editar escopo do cliente ativo">✎</button>
-          <button type="button" class="client-workspace-del" id="client-workspace-del" title="Excluir cliente ativo">×</button>
-        </div>
+        <section class="client-card" aria-label="Cliente">
+          <p class="rail-label">Cliente</p>
+          <div class="client-workspace" id="client-workspace">
+            <div class="client-picker" id="client-workspace-select">
+              <button type="button" class="client-picker-btn" id="client-picker-btn" title="Workspace do cliente" aria-haspopup="listbox" aria-expanded="false" aria-label="Cliente ativo">
+                <span class="client-picker-kicker">workspace</span>
+                <span class="client-picker-row">
+                  <span id="client-picker-label">Padrão</span>
+                  <span class="client-picker-caret" aria-hidden="true">▾</span>
+                </span>
+              </button>
+              <div class="client-picker-menu" id="client-picker-menu" hidden role="listbox" aria-label="Clientes"></div>
+            </div>
+            <div class="client-workspace-actions">
+              <button type="button" class="client-workspace-new" id="client-workspace-new" title="Novo cliente">+</button>
+              <button type="button" class="client-workspace-edit" id="client-workspace-edit" title="Editar escopo do cliente ativo">Editar</button>
+              <button type="button" class="client-workspace-del" id="client-workspace-del" title="Excluir cliente ativo">×</button>
+            </div>
+          </div>
+        </section>
 
-        <p class="rail-label">SESSÕES</p>
-        <div class="sidebar-sessions" id="sidebar-sessions"></div>
-
-        <nav class="sidebar-nav" aria-label="Ações">
-          <p class="rail-label">SISTEMA</p>
-          <button type="button" class="nav-item" id="btn-workspace" title="Workspace da conversa">
-            <span>01 workspace</span>
-            <span class="term-badge" id="tool-badge">auto</span>
-          </button>
-          <div class="nav-sep"></div>
-          <button type="button" class="nav-item" id="btn-master-key" title="Master key">
-            <span data-key-label>02 master key</span>
-          </button>
-          <label class="nav-item nav-toggle" id="offensive-mode-control" for="offensive-mode-toggle">
-            <span>03 offensive</span>
-            <input type="checkbox" id="offensive-mode-toggle" class="offensive-mode-input" />
-            <span class="offensive-mode-switch" aria-hidden="true"></span>
-          </label>
-          <label class="nav-item nav-toggle" id="offline-mode-control" for="offline-mode-toggle" title="LLM local (Ollama)">
-            <span>04 offline</span>
-            <input type="checkbox" id="offline-mode-toggle" class="offensive-mode-input offline-mode-input" />
-            <span class="offensive-mode-switch offline-mode-switch" aria-hidden="true"></span>
-          </label>
-          <button type="button" class="nav-item" id="btn-sound">05 som</button>
-          <button type="button" class="nav-item" id="btn-help" title="F1">06 ajuda</button>
-        </nav>
+        <section class="sessions-section" aria-label="Conversas">
+          <p class="rail-label">Conversas</p>
+          <div class="sidebar-sessions" id="sidebar-sessions"></div>
+        </section>
       </div>
     </aside>
 
     <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
 
+    <div class="ide-stage">
     <main class="main-area">
-      <div class="terminal crt" id="terminal">
-        <header class="term-bar crt-titlebar">
+      <div class="ide-editor" id="terminal">
+        <header class="ide-titlebar">
           <div class="term-bar-left">
             <button type="button" class="term-btn term-btn-menu" id="btn-menu" title="Menu (M)" aria-label="Abrir ou recolher menu" aria-controls="sidebar" aria-expanded="true">☰</button>
-            <div class="title-stack">
-              <span class="title-kicker">CANAL</span>
-              <h1 class="term-bar-title" id="session-title">Chat</h1>
-            </div>
+            <h1 class="term-bar-title" id="session-title">Chat</h1>
           </div>
-          <nav class="term-bar-actions crt-toolbar">
-            <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Piloto automático (Alt+P)">PILOTO</button>
-            <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar missão">PARAR</button>
+          <nav class="term-bar-actions">
+            <div class="chat-mode-switcher" id="chat-mode-switcher" role="group" aria-label="Modo visual">
+              <button type="button" class="chat-mode-tile" data-chat-visual-mode="safe" title="Perfil B — seguro" aria-pressed="true">
+                <img src="/static/img/mode-angel.png?v=2" alt="" />
+                <span class="sr-only">Perfil B</span>
+              </button>
+              <button type="button" class="chat-mode-tile" data-chat-visual-mode="offensive" title="Modo ofensivo (requer master key)" aria-pressed="false">
+                <img src="/static/img/mode-demon.png?v=2" alt="" />
+                <span class="sr-only">Ofensivo</span>
+              </button>
+              <button type="button" class="chat-mode-tile" data-chat-visual-mode="offline" title="Modo offline (Ollama)" aria-pressed="false">
+                <img src="/static/img/mode-agent.png?v=2" alt="" />
+                <span class="sr-only">Offline</span>
+              </button>
+            </div>
+            <button type="button" class="term-btn term-btn-pilot" id="btn-autopilot" title="Piloto automático (Alt+P)">Piloto</button>
+            <button type="button" class="term-btn term-btn-cancel" id="btn-cancel-mission" hidden title="Cancelar missão">Parar</button>
           </nav>
         </header>
 
         <div class="health-banner" id="health-banner" hidden role="status"></div>
         <div class="health-banner scope-banner" id="scope-banner" hidden role="status"></div>
 
-        <div class="paper">
-          <div class="term-screen crt-screen" id="chat"></div>
+        <div class="ide-editor-body">
+          <div class="chat-mode-art" id="chat-mode-art" aria-hidden="true">
+            <img class="chat-mode-art-img chat-mode-art-angel" src="/static/img/mode-angel.png?v=2" alt="" />
+            <img class="chat-mode-art-img chat-mode-art-demon" src="/static/img/mode-demon.png?v=2" alt="" />
+            <img class="chat-mode-art-img chat-mode-art-agent" src="/static/img/mode-agent.png?v=2" alt="" />
+          </div>
+          <div class="ide-chat" id="chat"></div>
 
-          <footer class="composer crt-dock">
-            <form class="term-prompt cmd-form" id="form" autocomplete="off">
+          <footer class="ide-composer">
+            <div class="composer-modes" id="composer-modes" role="tablist" aria-label="Modo do chat">
+              <button type="button" class="composer-mode active" data-chat-mode="agent" role="tab">Agent</button>
+              <button type="button" class="composer-mode" data-chat-mode="plan" role="tab">Plan</button>
+              <button type="button" class="composer-mode" data-chat-mode="ask" role="tab">Ask</button>
+              <button type="button" class="composer-mode" data-chat-mode="review" role="tab">Review</button>
+            </div>
+            <div class="composer-attach-chips" id="composer-attach-chips" hidden></div>
+            <form class="cmd-form" id="form" autocomplete="off">
               <div class="composer-box">
-                <span class="composer-mark" aria-hidden="true">›</span>
+                <div class="composer-plus-wrap">
+                  <button type="button" class="composer-plus" id="composer-plus" title="Anexar" aria-haspopup="menu" aria-expanded="false">+</button>
+                  <div class="composer-plus-menu" id="composer-plus-menu" hidden role="menu">
+                    <button type="button" role="menuitem" id="composer-attach-folder">Pasta</button>
+                    <button type="button" role="menuitem" id="composer-attach-github">GitHub</button>
+                  </div>
+                </div>
                 <input type="text" class="cmd-input" id="input" spellcheck="true" autofocus
-                  placeholder="falar com Argus…" aria-label="Mensagem" />
+                  placeholder="Mensagem para a Argus… (ou arraste uma pasta)" aria-label="Mensagem" />
                 <div class="composer-tools">
                   <div class="model-picker-wrap">
                     <button type="button" class="model-trigger" id="model-trigger" title="Modelo" aria-haspopup="listbox" aria-expanded="false">
@@ -120,147 +159,176 @@
                     </button>
                     <div class="model-menu" id="model-menu" hidden role="listbox" aria-label="Selecionar modelo"></div>
                   </div>
-                  <button type="submit" class="composer-send" title="Enviar" aria-label="Enviar">ENVIAR</button>
+                  <button type="submit" class="composer-send" title="Enviar" aria-label="Enviar">Enviar</button>
                 </div>
               </div>
+              <input type="file" id="composer-folder-input" hidden webkitdirectory directory multiple />
             </form>
-            <div class="status-bar crt-status" id="status-bar">
-              <div class="status-bar-left">
-                <span class="status-tag" id="status-pill-docker" title="Docker">docker</span>
-                <span class="status-tag" id="status-pill-kali" title="Kali">kali</span>
-                <span class="status-tag" id="status-pill-llm" title="Provedor de IA">llm</span>
-                <span class="status-tag status-tag--warn" id="status-pill-privilege" title="Privilégio">priv:B</span>
-                <span id="status-bar-text"></span>
-              </div>
-            </div>
           </footer>
+          <button type="button" class="scroll-bottom" id="btn-scroll-bottom" hidden title="Ir ao final">↓</button>
         </div>
       </div>
 
-      <section class="workspace-view crt" id="view-workspace" hidden aria-label="Workspace da conversa">
-        <header class="workspace-bar crt-titlebar">
+      <div class="workspace-resize-handle" id="workspace-resize-handle" title="Arraste para redimensionar" role="separator" aria-orientation="vertical" aria-label="Redimensionar workspace" aria-hidden="true"></div>
+
+      <section class="workspace-view" id="view-workspace" hidden aria-label="Workspace da conversa">
+        <header class="ide-titlebar workspace-bar">
           <div class="workspace-bar-left">
-            <button type="button" class="term-btn" id="workspace-back" title="Voltar ao chat">← chat</button>
-            <div class="title-stack">
-              <span class="title-kicker">WORKSPACE</span>
-              <h1 class="term-bar-title" id="workspace-title">Conversação</h1>
+            <div class="workspace-bar-titles">
+              <p class="workspace-kicker">painel</p>
+              <h1 class="term-bar-title" id="workspace-title">Workspace</h1>
             </div>
+            <p class="workspace-session-hint" id="workspace-session-hint">escopo: conversa ativa</p>
           </div>
-          <p class="workspace-session-hint" id="workspace-session-hint">escopo: conversa ativa</p>
+          <button type="button" class="term-btn workspace-back-btn" id="workspace-back" title="Fechar workspace">Fechar</button>
         </header>
         <nav class="workspace-tabs" id="workspace-tabs" aria-label="Abas do workspace">
           <button type="button" class="workspace-tab active" data-ws-tab="tools">ferramentas</button>
           <button type="button" class="workspace-tab" data-ws-tab="logs">logs</button>
           <button type="button" class="workspace-tab" data-ws-tab="report">relatórios</button>
-          <button type="button" class="workspace-tab" data-ws-tab="mapa">mapa</button>
           <button type="button" class="workspace-tab" data-ws-tab="dashboard">dashboard</button>
-          <button type="button" class="workspace-tab" data-ws-tab="triage">triagem</button>
         </nav>
         <div class="workspace-panels">
           <div class="workspace-panel active" data-ws-panel="tools" id="ws-panel-tools">
-            <div class="workspace-panel-toolbar">
-              <input type="text" class="panel-search tools-search" id="tool-search" placeholder="Buscar ferramenta…" spellcheck="false" />
+            <div class="workspace-panel-toolbar tools-toolbar">
+              <div class="ws-toolbar-row">
+                <input type="text" class="panel-search tools-search" id="tool-search" placeholder="Buscar ferramenta…" spellcheck="false" />
+                <button type="button" class="term-btn tools-update-btn" id="btn-tools-update" title="apt-get update + upgrade no container Kali (requer master key)">
+                  Atualizar tools
+                </button>
+              </div>
               <div class="tools-categories" id="tool-categories"></div>
+              <p class="tools-hint"><span class="tools-hint-key">auto</span> = IA escolhe · <span class="tools-hint-key">usar</span> = envia exemplo</p>
             </div>
-            <p class="tools-hint"><strong>auto</strong> = IA escolhe · <em>usar</em> = envia exemplo · preferência desta conversa</p>
             <div class="workspace-panel-body tools-grid-wrap" id="tool-list"></div>
           </div>
           <div class="workspace-panel" data-ws-panel="logs" id="ws-panel-logs" hidden>
+            <div class="workspace-panel-toolbar">
+              <p class="rail-label ws-toolbar-label">Logs da conversa</p>
+              <p class="panel-callout">Execuções desta sessão</p>
+            </div>
             <div class="workspace-panel-body session-modal-body" id="session-logs-body"></div>
           </div>
           <div class="workspace-panel" data-ws-panel="report" id="ws-panel-report" hidden>
-            <div class="report-live-toolbar">
-              <p class="panel-callout" id="session-report-meta">pré-visualização ao vivo</p>
-              <p class="session-report-footer-hint" id="session-report-footer-hint">
-                A prévia acompanha o que o chat descobrir.
-              </p>
-              <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
-            </div>
-            <div class="report-live-preview-wrap">
-              <iframe id="session-report-preview" class="report-live-preview" title="Pré-visualização do relatório"></iframe>
-            </div>
-            <section class="report-carteira" aria-label="Carteira desta conversa">
-              <div class="workspace-panel-toolbar">
-                <span class="report-saved-label">Carteira · alvos desta conversa</span>
-                <span class="panel-title-sub" id="portfolio-meta"></span>
+            <div class="workspace-panel-toolbar report-live-toolbar">
+              <div class="ws-toolbar-stack">
+                <p class="rail-label ws-toolbar-label">Relatório</p>
+                <p class="panel-callout" id="session-report-meta">pré-visualização ao vivo</p>
+                <p class="session-report-footer-hint" id="session-report-footer-hint">
+                  A prévia acompanha o que o chat descobrir.
+                </p>
               </div>
-              <div id="portfolio-body" class="portfolio-body"></div>
-            </section>
-            <div class="report-saved-pdfs">
-              <div class="workspace-panel-toolbar files-simple-toolbar">
-                <span class="report-saved-label">PDFs salvos desta conversa</span>
-                <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
-                <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
-                <span class="panel-title-sub" id="files-meta"></span>
+              <div class="ws-toolbar-actions">
+                <button type="button" class="session-report-download-btn session-report-expand-btn" id="session-report-expand">Expandir</button>
+                <button type="button" class="session-report-download-btn" id="session-report-download">Baixar PDF</button>
               </div>
-              <div class="workspace-panel-body files-panel-body" id="files-list"></div>
             </div>
-          </div>
-          <div class="workspace-panel" data-ws-panel="mapa" id="ws-panel-mapa" hidden>
-            <div class="workspace-panel-toolbar">
-              <p class="panel-callout" id="workspace-map-meta">Alvos e achados desta conversa</p>
-              <a class="threatmap-link" href="https://cybermap.kaspersky.com/pt" target="_blank" rel="noopener noreferrer">cybermap (externo)</a>
+            <div class="workspace-panel-body workspace-panel-body--report">
+              <div class="report-live-preview-wrap">
+                <iframe id="session-report-preview" class="report-live-preview" title="Pré-visualização do relatório"></iframe>
+              </div>
+              <section class="report-carteira" aria-label="Carteira desta conversa">
+                <div class="workspace-panel-toolbar report-section-head">
+                  <div class="ws-toolbar-stack">
+                    <p class="rail-label ws-toolbar-label">Carteira</p>
+                    <span class="report-saved-label">Alvos desta conversa</span>
+                  </div>
+                  <span class="panel-title-sub" id="portfolio-meta"></span>
+                </div>
+                <div id="portfolio-body" class="portfolio-body"></div>
+              </section>
+              <section class="report-saved-pdfs" aria-label="PDFs salvos">
+                <div class="workspace-panel-toolbar files-simple-toolbar report-section-head">
+                  <div class="ws-toolbar-stack">
+                    <p class="rail-label ws-toolbar-label">Arquivos</p>
+                    <span class="report-saved-label">PDFs salvos desta conversa</span>
+                  </div>
+                  <div class="ws-toolbar-actions">
+                    <input type="search" class="panel-search" id="files-search" placeholder="Buscar…" spellcheck="false" />
+                    <button type="button" class="files-refresh-btn" id="files-refresh">atualizar</button>
+                    <span class="panel-title-sub" id="files-meta"></span>
+                  </div>
+                </div>
+                <div class="files-panel-body" id="files-list"></div>
+              </section>
             </div>
-            <div class="workspace-panel-body" id="workspace-map-body"></div>
           </div>
           <div class="workspace-panel" data-ws-panel="dashboard" id="ws-panel-dashboard" hidden>
             <div class="workspace-panel-toolbar">
-              <div class="dashboard-period" id="dashboard-period" role="group" aria-label="Período">
-                <button type="button" class="dashboard-period-btn" data-days="7">7d</button>
-                <button type="button" class="dashboard-period-btn active" data-days="30">30d</button>
-                <button type="button" class="dashboard-period-btn" data-days="90">90d</button>
-                <button type="button" class="dashboard-period-btn" data-days="365">1a</button>
+              <div class="ws-toolbar-stack">
+                <p class="rail-label ws-toolbar-label">Dashboard</p>
+                <p class="panel-callout">Visão para envio ao cliente</p>
+                <div class="dashboard-period" id="dashboard-period" role="group" aria-label="Período">
+                  <button type="button" class="dashboard-period-btn" data-days="7">7d</button>
+                  <button type="button" class="dashboard-period-btn active" data-days="30">30d</button>
+                  <button type="button" class="dashboard-period-btn" data-days="90">90d</button>
+                  <button type="button" class="dashboard-period-btn" data-days="365">1a</button>
+                </div>
               </div>
-              <button type="button" class="term-btn" id="dashboard-refresh" title="Atualizar">↻</button>
+              <div class="ws-toolbar-actions">
+                <button type="button" class="term-btn" id="dashboard-refresh" title="Atualizar">Atualizar</button>
+                <button type="button" class="term-btn" data-export="xlsx" title="Exportar Excel">Exportar Excel</button>
+              </div>
             </div>
             <div class="workspace-panel-body dashboard-body" id="dashboard-body">
+              <p class="dashboard-exec-lead" id="dashboard-exec-lead"></p>
               <div class="dashboard-metrics" id="dashboard-metrics"></div>
               <div class="dashboard-charts">
                 <div class="dashboard-chart-box">
-                  <h3 class="dashboard-section-title">Tendência</h3>
+                  <h3 class="dashboard-section-title">Evolução no período</h3>
                   <canvas id="dashboard-trend-chart" height="160"></canvas>
                 </div>
                 <div class="dashboard-chart-box">
-                  <h3 class="dashboard-section-title">Severidade (soma do período)</h3>
+                  <h3 class="dashboard-section-title">Distribuição por gravidade</h3>
                   <canvas id="dashboard-severity-chart" height="160"></canvas>
                 </div>
               </div>
               <div class="dashboard-tables">
                 <div>
-                  <h3 class="dashboard-section-title">Top issues</h3>
+                  <h3 class="dashboard-section-title">Problemas principais</h3>
                   <div class="dashboard-table-wrap">
                     <table class="portfolio-table" id="dashboard-top-issues">
-                      <thead><tr><th>Título</th><th>Sev</th><th>Alvo</th><th>N</th></tr></thead>
+                      <thead><tr><th>Problema</th><th>Gravidade</th><th>Alvo</th><th>Vezes</th></tr></thead>
                       <tbody></tbody>
                     </table>
                   </div>
                 </div>
                 <div>
-                  <h3 class="dashboard-section-title">Scans recentes</h3>
+                  <h3 class="dashboard-section-title">Histórico de varreduras</h3>
                   <div class="dashboard-table-wrap">
                     <table class="portfolio-table" id="dashboard-recent-scans">
-                      <thead><tr><th>Alvo</th><th>Vulns</th><th>C</th><th>H</th><th>Quando</th></tr></thead>
+                      <thead><tr><th>Alvo</th><th>Problemas</th><th>Críticas</th><th>Altas</th><th>Quando</th></tr></thead>
                       <tbody></tbody>
                     </table>
                   </div>
                 </div>
               </div>
               <div class="dashboard-export">
-                <button type="button" class="term-btn" data-export="json">Export JSON</button>
-                <button type="button" class="term-btn" data-export="csv">Export CSV</button>
-                <button type="button" class="term-btn" data-export="pdf">Export PDF</button>
+                <button type="button" class="term-btn" data-export="xlsx">Excel (.xlsx)</button>
+                <button type="button" class="term-btn" data-export="pdf">PDF</button>
+                <button type="button" class="term-btn" data-export="csv">CSV</button>
+                <button type="button" class="term-btn" data-export="json">JSON</button>
               </div>
             </div>
           </div>
-          <div class="workspace-panel" data-ws-panel="triage" id="ws-panel-triage" hidden>
-            <div class="workspace-panel-toolbar">
-              <p class="panel-callout" id="workspace-triage-meta">achados desta conversa</p>
-            </div>
-            <div class="workspace-panel-body" id="workspace-triage-body"></div>
-          </div>
         </div>
       </section>
+      <button type="button" class="workspace-edge-toggle" id="workspace-edge-toggle" title="Abrir workspace (Alt+T)" aria-expanded="false" aria-controls="view-workspace">
+        <span class="workspace-edge-chevron" aria-hidden="true"></span>
+        <span class="sr-only">Abrir ou fechar workspace</span>
+      </button>
     </main>
+    <div class="ide-status status-bar" id="status-bar">
+      <div class="status-bar-left">
+        <span class="status-tag" id="status-pill-docker" title="Docker">docker</span>
+        <span class="status-tag" id="status-pill-kali" title="Kali">kali</span>
+        <span class="status-tag" id="status-pill-llm" title="Provedor de IA">llm</span>
+        <span class="status-tag status-tag--warn" id="status-pill-privilege" title="Privilégio">priv:B</span>
+        <span class="status-tag term-badge" id="tool-badge" title="Ferramenta preferida">auto</span>
+        <span id="status-bar-text"></span>
+      </div>
+    </div>
+    </div>
   </div>
 
   <button type="button" id="btn-new" hidden tabindex="-1" aria-hidden="true"></button>
@@ -272,15 +340,13 @@
   <span id="status-clock" hidden aria-hidden="true"></span>
   <span id="term-toolbar-extra" hidden aria-hidden="true"></span>
   <div class="chat-conversation-actions" hidden aria-hidden="true"></div>
-
-  <button type="button" class="scroll-bottom" id="btn-scroll-bottom" hidden title="Ir ao final">↓</button>
   <div class="toast-container" id="toast-container" aria-live="polite"></div>
 
   <div class="guided-tour" id="guided-tour" hidden aria-hidden="true">
     <div class="guided-tour-blocker" id="guided-tour-blocker" aria-hidden="true"></div>
     <div class="guided-tour-backdrop" id="guided-tour-backdrop" hidden></div>
     <div class="guided-tour-spotlight" id="guided-tour-spotlight" hidden></div>
-    <div class="guided-tour-card crt-panel" id="guided-tour-card" role="dialog" aria-modal="true" aria-labelledby="guided-tour-title">
+    <div class="guided-tour-card ide-modal" id="guided-tour-card" role="dialog" aria-modal="true" aria-labelledby="guided-tour-title">
       <p class="guided-tour-progress" id="guided-tour-progress">1 / 1</p>
       <h2 class="guided-tour-title" id="guided-tour-title">Ajuda</h2>
       <p class="guided-tour-text" id="guided-tour-text"></p>
@@ -294,7 +360,7 @@
   </div>
 
   <div class="overlay overlay-pilot" id="overlay-autopilot" hidden>
-    <div class="panel panel-autopilot crt-panel" role="dialog" aria-modal="true" aria-label="Piloto automático">
+    <div class="panel panel-autopilot ide-modal" role="dialog" aria-modal="true" aria-label="Piloto automático">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main">Piloto automático</span>
@@ -334,7 +400,7 @@
   </div>
 
   <div class="overlay" id="overlay-help" hidden>
-    <div class="panel panel-help crt-panel" role="dialog" aria-modal="true" aria-label="Ajuda">
+    <div class="panel panel-help ide-modal" role="dialog" aria-modal="true" aria-label="Ajuda">
       <div class="panel-head">
         <div class="panel-head-text">
           <span class="panel-title-main">Ajuda</span>
@@ -347,7 +413,7 @@
   </div>
 
   <div class="overlay" id="overlay-remediation" hidden>
-    <div class="panel panel-wide panel-remediation crt-panel" role="dialog" aria-modal="true" aria-label="Remediação">
+    <div class="panel panel-wide panel-remediation ide-modal" role="dialog" aria-modal="true" aria-label="Remediação">
       <div class="panel-head">
         <div class="panel-head-text">
           <span class="panel-title-main" id="remediation-title">Remediação</span>
@@ -394,10 +460,10 @@
   </div>
 
   <div class="overlay overlay-onboarding" id="overlay-onboarding" hidden>
-    <div class="panel panel-narrow panel-onboarding crt-panel" role="dialog" aria-modal="true" aria-label="Bem-vindo">
+    <div class="panel panel-narrow panel-onboarding ide-modal" role="dialog" aria-modal="true" aria-label="Bem-vindo">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
-          <span class="panel-title-main" id="onboarding-title">bem-vindo</span>
+          <span class="panel-title-main" id="onboarding-title">Bem-vindo</span>
           <span class="panel-title-sub">guia rápido</span>
         </div>
       </div>
@@ -409,8 +475,23 @@
     </div>
   </div>
 
+  <div class="overlay overlay-report-preview" id="overlay-report-preview" hidden>
+    <div class="panel panel-report-preview ide-modal" role="dialog" aria-modal="true" aria-labelledby="report-preview-title">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="report-preview-title">Prévia do relatório</span>
+          <span class="panel-title-sub">visualização ampliada</span>
+        </div>
+        <button type="button" class="panel-close" id="report-preview-close" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body report-preview-full-body">
+        <iframe id="session-report-preview-full" class="report-live-preview-full" title="Pré-visualização ampliada do relatório"></iframe>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay overlay-login" id="overlay-login" hidden>
-    <div class="panel panel-narrow panel-login crt-panel" role="dialog" aria-modal="true" aria-label="Login">
+    <div class="panel panel-narrow panel-login ide-modal" role="dialog" aria-modal="true" aria-label="Login">
       <div class="panel-head">
         <div class="panel-head-text">
           <span class="panel-title-main">Login</span>
@@ -421,7 +502,7 @@
       <div class="panel-body autopilot-form">
         <p class="panel-callout">Token do <code>.env</code></p>
         <div class="form-field">
-          <label class="autopilot-label" for="login-token">TOKEN</label>
+          <label class="autopilot-label" for="login-token">Token</label>
           <input type="password" id="login-token" class="panel-field autopilot-input" placeholder="••••••••" spellcheck="false" autocomplete="off" />
         </div>
         <button type="button" class="autopilot-start autopilot-start-auth" id="login-submit">Entrar</button>
@@ -430,7 +511,7 @@
   </div>
 
   <div class="overlay overlay-client-new" id="overlay-client-new" hidden>
-    <div class="panel panel-narrow panel-client-new crt-panel" role="dialog" aria-modal="true" aria-labelledby="client-new-title" aria-label="Novo cliente">
+    <div class="panel panel-narrow panel-client-new ide-modal" role="dialog" aria-modal="true" aria-labelledby="client-new-title" aria-label="Novo cliente">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main" id="client-new-title">Novo cliente</span>
@@ -442,15 +523,15 @@
         <form id="client-new-form" autocomplete="off">
           <input type="hidden" id="client-edit-id" value="" />
           <div class="form-field">
-            <label class="autopilot-label" for="client-new-name">NOME</label>
+            <label class="autopilot-label" for="client-new-name">Nome</label>
             <input type="text" id="client-new-name" class="panel-field autopilot-input" placeholder="Ex.: Empresa de Teste" spellcheck="true" maxlength="200" required />
           </div>
           <div class="form-field">
-            <label class="autopilot-label" for="client-new-contract">CONTRATO (opcional)</label>
+            <label class="autopilot-label" for="client-new-contract">Contrato (opcional)</label>
             <input type="text" id="client-new-contract" class="panel-field autopilot-input" placeholder="Ex.: ROE-2026-014" spellcheck="false" maxlength="80" />
           </div>
           <div class="form-field">
-            <label class="autopilot-label" for="client-new-targets">ALVOS AUTORIZADOS (opcional)</label>
+            <label class="autopilot-label" for="client-new-targets">Alvos autorizados (opcional)</label>
             <input type="text" id="client-new-targets" class="panel-field autopilot-input" placeholder="scanme.nmap.org, 10.0.0.5" spellcheck="false" />
           </div>
           <p class="panel-callout" id="client-new-hint">Vazio = usa ALLOWED_TARGETS do .env. Preenchido = só estes alvos neste cliente.</p>
@@ -460,12 +541,33 @@
     </div>
   </div>
 
-  <div class="overlay overlay-triage-gate" id="overlay-triage-gate" hidden>
-    <div class="panel panel-wide panel-triage-gate crt-panel" id="triage-gate-card" role="dialog" aria-modal="true" aria-labelledby="triage-gate-title">
+  <div class="overlay overlay-github-tree" id="overlay-github-tree" hidden>
+    <div class="panel panel-narrow panel-github-tree ide-modal" role="dialog" aria-modal="true" aria-labelledby="github-tree-title">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
-          <span class="panel-title-main" id="triage-gate-title">Antes do PDF: o que isto significa?</span>
-          <span class="panel-title-sub">uma pergunta de cada vez, em português claro · <span id="triage-gate-progress">0 / 0</span></span>
+          <span class="panel-title-main" id="github-tree-title">GitHub</span>
+          <span class="panel-title-sub" id="github-tree-meta">owner/repo público ou com GITHUB_TOKEN</span>
+        </div>
+        <button type="button" class="panel-close" id="github-tree-close" aria-label="Fechar">×</button>
+      </div>
+      <div class="panel-body autopilot-form">
+        <div class="form-field">
+          <label class="autopilot-label" for="github-tree-repo">Repositório</label>
+          <input type="text" id="github-tree-repo" class="panel-field autopilot-input" placeholder="owner/repo" spellcheck="false" />
+        </div>
+        <button type="button" class="autopilot-start" id="github-tree-load">Listar</button>
+        <button type="button" class="term-btn" id="github-tree-attach-project" title="Mapa + arquivos prioritários">Anexar projeto</button>
+        <div class="github-tree-list" id="github-tree-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay overlay-triage-gate" id="overlay-triage-gate" hidden>
+    <div class="panel panel-wide panel-triage-gate ide-modal" id="triage-gate-card" role="dialog" aria-modal="true" aria-labelledby="triage-gate-title">
+      <div class="panel-head panel-head-accent">
+        <div class="panel-head-text">
+          <span class="panel-title-main" id="triage-gate-title">Antes do PDF</span>
+          <span class="panel-title-sub">Isto é vulnerabilidade? · <span id="triage-gate-progress">0 / 0</span></span>
         </div>
         <button type="button" class="panel-close" id="triage-gate-cancel" aria-label="Cancelar">×</button>
       </div>
@@ -481,7 +583,7 @@
   </div>
 
   <div class="overlay overlay-master-key" id="overlay-master-key" hidden>
-    <div class="panel panel-narrow panel-master-key crt-panel" role="dialog" aria-modal="true" aria-labelledby="master-key-title" aria-label="Master key">
+    <div class="panel panel-narrow panel-master-key ide-modal" role="dialog" aria-modal="true" aria-labelledby="master-key-title" aria-label="Master key">
       <div class="panel-head panel-head-accent">
         <div class="panel-head-text">
           <span class="panel-title-main" id="master-key-title">Master key</span>
@@ -494,7 +596,7 @@
           Sem a key você opera no <strong>perfil B</strong> (ferramentas agressivas bloqueadas).
         </p>
         <div class="form-field">
-          <label class="autopilot-label" for="master-key-input">MASTER KEY</label>
+          <label class="autopilot-label" for="master-key-input">Master key</label>
           <input type="password" id="master-key-input" class="panel-field autopilot-input" placeholder="cole a chave…" spellcheck="false" autocomplete="off" />
         </div>
         <button type="button" class="autopilot-start" id="master-key-submit">Desbloquear perfil full</button>
@@ -504,6 +606,6 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <script type="module" src="/static/js/main.js?v=77"></script>
+  <script type="module" src="/static/js/main.js?v=107"></script>
 </body>
 </html>

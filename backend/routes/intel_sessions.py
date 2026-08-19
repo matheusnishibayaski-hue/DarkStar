@@ -11,11 +11,13 @@ from backend.executor.session_intel import (
     backfill_session_findings_from_client,
     collect_session_tool_executions,
     delete_session_intel,
+    ingest_assistant_findings,
     ingest_extracted_findings,
     list_session_summaries,
     load_session,
     merge_session_finding_fields,
     patch_session_finding,
+    patch_session_findings_batch,
     session_summary,
     set_session_label,
     sync_session_intel_from_logs,
@@ -41,7 +43,7 @@ class SessionExecutionsSync(BaseModel):
 def _triage_response(session_id: str, executions: list[dict] | None = None) -> dict:
     """Fila de triagem sem reindexar logs nem gerar compliance (isso atrasava o modal)."""
     from backend.ai.fp_explain import (
-        build_triage_queue,
+        build_triage_buckets,
         residual_risk_score,
         severity_counts,
     )
@@ -52,22 +54,80 @@ def _triage_response(session_id: str, executions: list[dict] | None = None) -> d
             ingest_extracted_findings(session_id, extra_executions=executions, skip_disk_logs=True)
         except Exception:  # noqa: BLE001
             pass
-        findings = aggregate_session_findings(session_id, sync=False)
     else:
-        findings = aggregate_session_findings(session_id, sync=False)
         try:
             ingest_extracted_findings(session_id)
-            findings = aggregate_session_findings(session_id, sync=False)
         except Exception:  # noqa: BLE001
             pass
-    queue = build_triage_queue(findings)
+
+    try:
+        ingest_assistant_findings(session_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+    findings = aggregate_session_findings(session_id, sync=False)
+    buckets = build_triage_buckets(findings)
+    queue = buckets["queue"]
+
+    def _auto_row(item: dict, status: str) -> dict:
+        from backend.ai.report_model import enrich_finding
+
+        enriched = enrich_finding(item)
+        return {
+            "id": str(item.get("id") or ""),
+            "status": status,
+            "surface_target": item.get("surface_target") or item.get("host") or "_session",
+            "title": item.get("title") or "",
+            "severity": enriched.get("severity") or item.get("severity") or "info",
+            "severity_label": enriched.get("severity_label") or "",
+            "kind": enriched.get("kind") or "",
+            "suggestion": (item.get("triage") or {}).get("suggestion"),
+        }
+
+    auto_confirmed = [_auto_row(x, "confirmed") for x in buckets["auto_confirmed"] if x.get("id")]
+    auto_fp = [
+        _auto_row(x, "false_positive") for x in buckets["auto_false_positive"] if x.get("id")
+    ]
+    auto_disc = [
+        _auto_row(x, "discarded") for x in buckets.get("auto_discarded") or [] if x.get("id")
+    ]
+
+    # Uma gravação só; não apaga evidência original
+    patch_rows = auto_confirmed + auto_fp + auto_disc
+    autos_persisted = False
+    if patch_rows:
+        try:
+            patch_session_findings_batch(session_id, patch_rows, preserve_evidence=True)
+            autos_persisted = True
+        except Exception:  # noqa: BLE001
+            for row in patch_rows:
+                try:
+                    patch_session_finding(
+                        session_id,
+                        str(row.get("surface_target") or "_session"),
+                        str(row["id"]),
+                        str(row["status"]),
+                        preserve_evidence=True,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
+            autos_persisted = True
+
+    findings_after = (
+        aggregate_session_findings(session_id, sync=False) if patch_rows else findings
+    )
     return {
         "session_id": session_id,
         "queue": queue,
         "queue_count": len(queue),
-        "findings_total": len(findings),
-        "risk": residual_risk_score(findings),
-        "severity": severity_counts(findings),
+        "auto_confirmed": auto_confirmed,
+        "auto_false_positive": auto_fp,
+        "auto_discarded": auto_disc,
+        "auto_count": len(auto_confirmed) + len(auto_fp) + len(auto_disc),
+        "autos_persisted": autos_persisted,
+        "findings_total": len(findings_after),
+        "risk": residual_risk_score(findings_after),
+        "severity": severity_counts(findings_after),
         "compliance": None,
     }
 

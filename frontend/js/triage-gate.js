@@ -1,4 +1,4 @@
-/** Modal de triagem antes do PDF — um achado por vez, linguagem simples. */
+/** Modal de triagem antes do PDF — só itens duvidosos, texto curto. */
 
 import { patchSessionFinding, fetchIntelTriageQueue, fetchFindingAiReview } from "./api/routes.js";
 import { escapeHtml } from "./exec.js";
@@ -14,6 +14,7 @@ let summaryData = {};
 let abortCtl = null;
 let loadGen = 0;
 let reviewGen = 0;
+let autoApplied = 0;
 
 export function initTriageGate({ toast } = {}) {
   toastFn = toast || toastFn;
@@ -69,11 +70,45 @@ function renderLoading() {
   if (body) {
     body.innerHTML = `
       <div class="triage-gate-loading" role="status">
-        <p>Montando a leitura dos achados…</p>
-        <p class="triage-gate-loading-hint">Isso costuma levar um instante. Você já pode cancelar.</p>
+        <p>Separando o que precisa da sua leitura…</p>
       </div>`;
   }
   setSkipVisible(false);
+}
+
+async function applyAutoClassifications(data) {
+  if (data?.autos_persisted) {
+    const n =
+      (data.auto_confirmed?.length || 0) +
+      (data.auto_false_positive?.length || 0) +
+      (data.auto_discarded?.length || 0);
+    return n;
+  }
+  const confirmed = Array.isArray(data.auto_confirmed) ? data.auto_confirmed : [];
+  const fps = Array.isArray(data.auto_false_positive) ? data.auto_false_positive : [];
+  const disc = Array.isArray(data.auto_discarded) ? data.auto_discarded : [];
+  const jobs = [
+    ...confirmed.map((row) => ({ ...row, status: "confirmed" })),
+    ...fps.map((row) => ({ ...row, status: "false_positive" })),
+    ...disc.map((row) => ({ ...row, status: "discarded" })),
+  ].filter((row) => row.id);
+  let ok = 0;
+  await Promise.all(
+    jobs.map(async (row) => {
+      try {
+        const res = await patchSessionFinding(sessionId, row.id, {
+          surface_target: row.surface_target || "_session",
+          status: row.status,
+          // Não sobrescrever evidência — só status
+          evidence: "",
+        });
+        if (res.ok) ok += 1;
+      } catch {
+        /* best-effort */
+      }
+    })
+  );
+  return ok;
 }
 
 export async function runTriageGate(sid, executions = []) {
@@ -87,6 +122,7 @@ export async function runTriageGate(sid, executions = []) {
   queue = [];
   index = 0;
   summaryData = {};
+  autoApplied = 0;
   renderLoading();
   openOverlay(overlay);
 
@@ -104,6 +140,8 @@ export async function runTriageGate(sid, executions = []) {
     const data = await res.json();
     if (gen !== loadGen) return done;
     summaryData = data;
+    autoApplied = await applyAutoClassifications(data);
+    if (gen !== loadGen) return done;
     queue = data.queue || [];
     index = 0;
     renderSummary();
@@ -119,7 +157,6 @@ export async function runTriageGate(sid, executions = []) {
           <div class="triage-gate-actions">
             <button type="button" class="triage-choice triage-choice--maybe" data-triage-generate="1">
               <strong>Gerar o PDF mesmo assim</strong>
-              <span>Sem classificar os itens desta vez</span>
             </button>
           </div>
         </div>`;
@@ -129,42 +166,26 @@ export async function runTriageGate(sid, executions = []) {
   return done;
 }
 
-function closeGate(proceed) {
+function closeGate(ok) {
   abortCtl?.abort();
-  abortCtl = null;
-  loadGen += 1;
-  reviewGen += 1;
-  setSkipVisible(false);
   closeOverlay(document.getElementById("overlay-triage-gate"));
-  const fn = resolveGate;
+  const resolve = resolveGate;
   resolveGate = null;
-  fn?.(Boolean(proceed));
+  resolve?.(Boolean(ok));
 }
 
-function itemsHtml(arr) {
-  return (arr || []).map((x) => `<li>${escapeHtml(String(x))}</li>`).join("");
+function itemsHtml(list) {
+  if (!Array.isArray(list) || !list.length) return "";
+  return list
+    .slice(0, 3)
+    .map((x) => `<li>${escapeHtml(String(x))}</li>`)
+    .join("");
 }
 
-function verdictLabel(verdict) {
-  const v = String(verdict || "unsure");
+function verdictLabel(v) {
   if (v === "confirmed") return "Parece um problema real";
   if (v === "false_positive") return "Parece alarme falso";
   return "Ainda incerto";
-}
-
-function renderOpinionBlock(t) {
-  const sug = t.suggestion || "unsure";
-  const fp = Math.max(0, Math.min(100, Number(t.likely_fp) || 0));
-  const pro = itemsHtml(t.why_vulnerability);
-  const contra = itemsHtml([...(t.why_false_positive || []), ...(t.reasons || [])].slice(0, 5));
-  return `
-    <section class="triage-opinion triage-opinion--${escapeHtml(sug)}">
-      <h4>Opinião da Argus (automática)</h4>
-      <p class="triage-opinion-verdict">${escapeHtml(t.suggestion_label || verdictLabel(sug))}</p>
-      <p class="triage-opinion-meta">Chance de alarme falso: <strong>${fp}%</strong> — a decisão final é sua.</p>
-      ${pro ? `<p class="triage-block-lead">Por que pode ser real</p><ul>${pro}</ul>` : ""}
-      ${contra ? `<p class="triage-block-lead">Por que pode ser alarme falso</p><ul>${contra}</ul>` : ""}
-    </section>`;
 }
 
 function reviewFpChance(review) {
@@ -179,25 +200,15 @@ function reviewFpChance(review) {
 
 function renderAiReviewHtml(review) {
   if (!review) {
-    return `<p class="triage-ai-loading">Segunda leitura da IA…</p>`;
+    return `<p class="triage-ai-loading">Opinião da IA…</p>`;
   }
   if (review.source === "unavailable" || review.error) {
-    return `<p class="triage-ai-miss">${escapeHtml(
-      review.error || "Segunda opinião indisponível. Use a opinião automática acima."
-    )}</p>`;
+    return "";
   }
-  const reasons = itemsHtml(review.reasons);
-  const summary = review.summary ? `<p>${escapeHtml(review.summary)}</p>` : "";
-  const adjusted = review.adjusted && review.adjust_reason
-    ? `<p class="triage-opinion-note">${escapeHtml(review.adjust_reason)}</p>`
-    : "";
-  return `
-    <p class="triage-opinion-verdict">${escapeHtml(verdictLabel(review.verdict))}</p>
-    <p class="triage-opinion-meta">Chance de alarme falso: <strong>${reviewFpChance(review)}%</strong> — a decisão final é sua.</p>
-    ${summary}
-    ${reasons ? `<ul>${reasons}</ul>` : ""}
-    ${adjusted}
-    <p class="triage-opinion-note">Isto não marca o achado sozinho.</p>`;
+  const summary = review.summary
+    ? escapeHtml(String(review.summary).slice(0, 280))
+    : escapeHtml(verdictLabel(review.verdict));
+  return `<p class="triage-ai-line">${summary}</p>`;
 }
 
 function fillAiReview(review) {
@@ -214,7 +225,7 @@ function requestAiReview(finding) {
     return;
   }
   if (!sessionId || !fid) {
-    fillAiReview({ source: "unavailable", error: "Não foi possível pedir a segunda opinião agora." });
+    fillAiReview({ source: "unavailable" });
     return;
   }
   const gen = ++reviewGen;
@@ -232,10 +243,7 @@ function requestAiReview(finding) {
     })
     .catch((e) => {
       if (e?.name === "AbortError" || gen !== reviewGen) return;
-      fillAiReview({
-        source: "unavailable",
-        error: "Não foi possível pedir a segunda opinião agora.",
-      });
+      fillAiReview({ source: "unavailable" });
     });
 }
 
@@ -251,24 +259,17 @@ function sevTone(sev) {
 function renderSummary() {
   const el = document.getElementById("triage-gate-summary");
   if (!el) return;
-  const sev = summaryData.severity || {};
-  const risk = summaryData.risk || {};
   const n = queue.length;
+  const auto = Number(summaryData.auto_count ?? autoApplied) || autoApplied;
   el.hidden = false;
-  el.innerHTML = `
-    <p>
-      Vamos olhar <strong>${n}</strong> item${n === 1 ? "" : "s"} desta conversa.
-      O PDF só coloca no corpo o que você marcar como problema real;
-      alarme falso e “não sei” vão para o anexo.
-    </p>
-    <p class="triage-gate-summary-meta">
-      Já confirmados hoje: risco <strong>${escapeHtml(String(risk.label || "ainda nenhum"))}</strong>
-      · crítico ${sev.critical || 0}
-      · grave ${sev.high || 0}
-      · atenção ${sev.medium || 0}
-      · leve ${sev.low || 0}
-      · só info ${sev.info || 0}
-    </p>`;
+  if (!n && !auto) {
+    el.innerHTML = `<p class="triage-gate-summary-line">Nada pendente — pode gerar o PDF.</p>`;
+    return;
+  }
+  const parts = [];
+  if (n) parts.push(`<strong>${n}</strong> para você decidir`);
+  if (auto) parts.push(`<strong>${auto}</strong> já classificados automaticamente`);
+  el.innerHTML = `<p class="triage-gate-summary-line">${parts.join(" · ")}</p>`;
 }
 
 function renderProgress() {
@@ -280,7 +281,7 @@ function renderProgress() {
     progress.textContent = total ? `${current} de ${total}` : "0 de 0";
   }
   if (bar) {
-    const pct = total ? Math.round((index / total) * 100) : 0;
+    const pct = total ? Math.round((index / Math.max(total, 1)) * 100) : 100;
     bar.style.width = `${pct}%`;
   }
 }
@@ -291,15 +292,21 @@ function renderDone(message) {
   body.innerHTML = `
     <div class="triage-gate-done-box">
       <p class="triage-gate-done">${escapeHtml(message)}</p>
-      <p class="triage-gate-done-hint">O relatório em PDF usa a sua classificação: problemas reais no corpo; o resto no anexo, com o motivo.</p>
       <div class="triage-gate-actions">
         <button type="button" class="triage-choice triage-choice--yes" data-triage-generate="1">
           <strong>Gerar o PDF agora</strong>
-          <span>Baixa o relatório com o que você já decidiu</span>
         </button>
       </div>
     </div>`;
   setSkipVisible(false);
+}
+
+function shortBlurb(t, f) {
+  const what = String(t.what_it_is || "").trim();
+  if (what) return what.slice(0, 220);
+  const hint = String(t.suggestion_hint || "").trim();
+  if (hint) return hint;
+  return "A ferramenta apontou um sinal e a automação não tem certeza se é falha real.";
 }
 
 function renderCard() {
@@ -307,11 +314,15 @@ function renderCard() {
   const body = document.getElementById("triage-gate-body");
   if (!body) return;
   if (!queue.length) {
-    renderDone("Nada pendente nesta conversa. Você pode gerar o PDF agora.");
+    renderDone(
+      autoApplied
+        ? "Tudo que era claro já foi classificado. Pode gerar o PDF."
+        : "Nada pendente nesta conversa. Pode gerar o PDF."
+    );
     return;
   }
   if (index >= queue.length) {
-    renderDone("Pronto. Você olhou todos os itens desta fila.");
+    renderDone("Pronto. Pode gerar o PDF.");
     return;
   }
   const f = queue[index];
@@ -319,89 +330,32 @@ function renderCard() {
   const sev = String(f.severity || "info");
   const tone = sevTone(sev);
   const where = f.surface_target || f.host || "";
-  const could = itemsHtml(t.could_happen);
-  const whyFp = itemsHtml(t.why_false_positive);
-  const steps = itemsHtml(t.how_to_decide);
-  const second = f.second_look
-    ? `<p class="triage-gate-second">Atenção: isto já tinha sido marcado como vulnerabilidade, mas parece mais alarme falso. Confira de novo antes do PDF.</p>`
-    : "";
-  const evidence = String(f.evidence || "").trim();
-  const command = String(f.command || "").trim();
+  const opinion =
+    t.suggestion_hint ||
+    t.suggestion_label ||
+    "A automação não tem certeza — escolha abaixo.";
 
   body.innerHTML = `
-    <p class="triage-gate-kicker triage-gate-kicker--${escapeHtml(t.suggestion || "unsure")}">${escapeHtml(
-      t.suggestion_label || "Precisa da sua leitura"
-    )}</p>
-    ${t.suggestion_hint ? `<p class="triage-gate-hint">${escapeHtml(t.suggestion_hint)}</p>` : ""}
     <h3 class="triage-gate-title">${escapeHtml(t.plain_title || f.title || "Achado")}</h3>
-    ${second}
     <p class="triage-gate-meta">
-      <span class="triage-sev triage-sev--${tone}">${escapeHtml(t.severity_plain || sev)}</span>
-      ${f.tool ? `<span>Encontrado por: ${escapeHtml(f.tool)}</span>` : ""}
-      ${where ? `<span>Onde: ${escapeHtml(where)}</span>` : ""}
+      <span class="triage-sev triage-sev--${escapeHtml(tone)}">${escapeHtml(t.severity_plain || sev)}</span>
+      ${f.tool ? `<span>${escapeHtml(f.tool)}</span>` : ""}
+      ${where ? `<span>${escapeHtml(where)}</span>` : ""}
     </p>
-    ${f.title && f.title !== t.plain_title ? `<p class="triage-gate-techname">Nome técnico: ${escapeHtml(f.title)}</p>` : ""}
-
-    <section class="triage-block">
-      <h4>O que é isto, em palavras simples</h4>
-      <p>${escapeHtml(t.what_it_is || "A ferramenta apontou um sinal. Scanners erram — por isso pedimos a sua leitura.")}</p>
-    </section>
-
-    ${
-      t.everyday
-        ? `<section class="triage-block triage-block--analogy">
-      <h4>Uma analogia do dia a dia</h4>
-      <p>${escapeHtml(t.everyday)}</p>
-    </section>`
-        : ""
-    }
-
-    <section class="triage-block">
-      <h4>Por que isto importa</h4>
-      <p>${escapeHtml(t.why_it_matters || "")}</p>
-      ${could ? `<p class="triage-block-lead">Se for verdade, o que pode acontecer:</p><ul>${could}</ul>` : ""}
-    </section>
-
-    <section class="triage-block triage-block--fp">
-      <h4>Por que pode ser só um alarme falso</h4>
-      <ul>${whyFp || "<li>Scanners automáticos gritam fácil. Sem prova na evidência, não trate como ataque.</li>"}</ul>
-    </section>
-
-    <section class="triage-block">
-      <h4>Como decidir (mesmo sem ser técnico)</h4>
-      <ol>${steps || "<li>Se a evidência mostra o problema de forma clara no alvo autorizado, é real. Se não completou ou foi bloqueado, escolha incerto.</li>"}</ol>
-    </section>
-
-    ${renderOpinionBlock(t)}
-
-    <section class="triage-opinion triage-opinion--ai" id="triage-ai-box">
-      <h4>Segunda opinião (IA)</h4>
-      <div id="triage-ai-review">${renderAiReviewHtml(f.ai_review && f.ai_review.source === "llm" ? f.ai_review : null)}</div>
-    </section>
-
-    ${
-      evidence || command
-        ? `<details class="triage-evidence">
-      <summary>Ver o detalhe técnico (evidência)</summary>
-      ${command ? `<p class="triage-gate-cmd">Comando: <code>${escapeHtml(command.slice(0, 400))}</code></p>` : ""}
-      ${evidence ? `<pre class="triage-gate-evidence">${escapeHtml(evidence.slice(0, 1400))}</pre>` : ""}
-    </details>`
-        : ""
-    }
-
-    <p class="triage-gate-ask">O que você quer que o PDF diga sobre isto?</p>
+    <p class="triage-gate-blurb">${escapeHtml(shortBlurb(t, f))}</p>
+    <p class="triage-gate-opinion"><strong>Opinião da IA:</strong> ${escapeHtml(opinion)}</p>
+    <div id="triage-ai-review" class="triage-ai-review-slim">${renderAiReviewHtml(
+      f.ai_review && f.ai_review.source === "llm" ? f.ai_review : null
+    )}</div>
     <div class="triage-gate-actions">
       <button type="button" class="triage-choice triage-choice--yes" data-triage-status="confirmed">
-        <strong>É um problema real</strong>
-        <span>Entra no corpo do relatório como vulnerabilidade</span>
+        <strong>Problema real</strong>
       </button>
       <button type="button" class="triage-choice triage-choice--no" data-triage-status="false_positive">
-        <strong>É alarme falso</strong>
-        <span>Não assusta o cliente; vai só no anexo</span>
+        <strong>Alarme falso</strong>
       </button>
       <button type="button" class="triage-choice triage-choice--maybe" data-triage-status="inconclusive">
-        <strong>Ainda não sei</strong>
-        <span>Fica no anexo como incerto, nada some</span>
+        <strong>Não sei</strong>
       </button>
     </div>`;
   setSkipVisible(true);

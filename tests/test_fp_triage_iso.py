@@ -95,10 +95,121 @@ class TestFpExplain(unittest.TestCase):
             ]
         )
         ids = {x["id"] for x in q}
-        self.assertEqual(ids, {"1"})
-        self.assertIn("triage", q[0])
+        self.assertNotIn("2", ids)
+        self.assertNotIn("3", ids)
+        # candidate claro (confirmed) ou incerto — nunca confirmed humano já fechado
+        for row in q:
+            self.assertEqual(row["triage"]["suggestion"], "unsure")
 
-    def test_queue_includes_confirmed_info_port(self):
+    def test_queue_only_unsure_buckets_auto(self):
+        from backend.ai.fp_explain import build_triage_buckets
+
+        buckets = build_triage_buckets(
+            [
+                {
+                    "id": "p1",
+                    "title": "OK — nmap",
+                    "severity": "info",
+                    "tool": "nmap",
+                    "status": "candidate",
+                    "source": "client_history",
+                },
+                {
+                    "id": "x1",
+                    "title": "SQL Injection in login",
+                    "severity": "high",
+                    "status": "candidate",
+                },
+                {
+                    "id": "u1",
+                    "title": "Something ambiguous header maybe",
+                    "severity": "medium",
+                    "status": "candidate",
+                    "evidence": "partial timeout",
+                },
+            ]
+        )
+        q_ids = {x["id"] for x in buckets["queue"]}
+        conf_ids = {x["id"] for x in buckets["auto_confirmed"]}
+        fp_ids = {x["id"] for x in buckets["auto_false_positive"]}
+        disc_ids = {x["id"] for x in buckets["auto_discarded"]}
+        self.assertIn("p1", disc_ids)
+        self.assertNotIn("p1", fp_ids)
+        self.assertIn("x1", conf_ids)
+        self.assertNotIn("p1", q_ids)
+        self.assertNotIn("x1", q_ids)
+        for row in buckets["queue"]:
+            self.assertEqual(row["triage"]["suggestion"], "unsure")
+
+    def test_idor_narrative_not_auto_fp(self):
+        from backend.ai.fp_explain import build_triage_buckets, detect_finding_kind, explain_false_positive
+
+        finding = {
+            "id": "idor1",
+            "title": "IDOR / falha de autorização (acesso a dados de outros usuários)",
+            "severity": "high",
+            "status": "candidate",
+            "source": "assistant_narrative",
+            "evidence": (
+                "Isso confirma que o endpoint não está validando corretamente a autorização "
+                "para acessar dados de outros usuários. Um atacante poderia facilmente "
+                "iterar sobre os IDs para coletar e-mails e telefones."
+            ),
+        }
+        self.assertEqual(detect_finding_kind(finding), "idor")
+        expl = explain_false_positive(finding)
+        self.assertEqual(expl["kind"], "idor")
+        self.assertNotEqual(expl["suggestion"], "false_positive")
+        self.assertLessEqual(expl["likely_fp"], 54)
+        buckets = build_triage_buckets([finding])
+        disc = {x["id"] for x in buckets["auto_discarded"]}
+        fps = {x["id"] for x in buckets["auto_false_positive"]}
+        self.assertNotIn("idor1", disc)
+        self.assertNotIn("idor1", fps)
+        in_queue_or_conf = {x["id"] for x in buckets["queue"]} | {
+            x["id"] for x in buckets["auto_confirmed"]
+        }
+        self.assertIn("idor1", in_queue_or_conf)
+
+    def test_perfil_not_lfi_via_rfi_substring(self):
+        from backend.ai.fp_explain import detect_finding_kind
+
+        kind = detect_finding_kind(
+            {
+                "title": "Endpoint /api/perfil",
+                "evidence": "GET /api/perfil/42 retornou nome e e-mail",
+                "severity": "info",
+            }
+        )
+        self.assertNotEqual(kind, "lfi")
+
+    def test_receipt_with_idor_evidence_not_scan_summary(self):
+        from backend.ai.fp_explain import detect_finding_kind, is_pure_scan_receipt
+
+        finding = {
+            "title": "OK — curl",
+            "severity": "info",
+            "source": "client_history",
+            "evidence": "IDOR: endpoint não valida autorização; dados de outros usuários",
+        }
+        self.assertFalse(is_pure_scan_receipt(finding))
+        self.assertEqual(detect_finding_kind(finding), "idor")
+
+    def test_medium_never_forced_auto_fp(self):
+        from backend.ai.fp_explain import apply_fp_hard_rules
+
+        likely, verdict, adj, _ = apply_fp_hard_rules(
+            kind="generic",
+            blob="possible issue",
+            likely_fp=90,
+            verdict="false_positive",
+            severity="medium",
+        )
+        self.assertEqual(verdict, "unsure")
+        self.assertTrue(adj)
+        self.assertLessEqual(likely, 54)
+
+    def test_second_look_confirmed_high_fp_in_queue(self):
         from backend.ai.fp_explain import build_triage_queue
 
         q = build_triage_queue(
@@ -122,6 +233,121 @@ class TestFpExplain(unittest.TestCase):
         self.assertIn("p1", ids)
         self.assertNotIn("x1", ids)
         self.assertTrue(q[0].get("second_look"))
+
+    def test_auto_confirm_normalizes_severity(self):
+        from backend.executor.session_intel import patch_session_finding
+
+        saved = {}
+
+        def _save(_sid, data):
+            saved.clear()
+            saved.update(data)
+            return data
+
+        session = {
+            "session_id": "sess-sev-1",
+            "session_findings": [
+                {
+                    "id": "xss1",
+                    "title": "[high] Reflected XSS in search",
+                    "severity": "info",
+                    "status": "candidate",
+                    "evidence": "search=<script>alert(1)</script>",
+                }
+            ],
+        }
+        with (
+            patch("backend.executor.session_intel.load_session", return_value=session),
+            patch("backend.executor.session_intel.save_session", side_effect=_save),
+        ):
+            out = patch_session_finding(
+                "sess-sev-1",
+                "_session",
+                "xss1",
+                "confirmed",
+                evidence="triage-auto:confirmed",
+            )
+        self.assertIsNotNone(out)
+        self.assertEqual(out["status"], "confirmed")
+        self.assertEqual(out["severity"], "high")
+        self.assertEqual(saved["session_findings"][0]["severity"], "high")
+
+    def test_batch_preserve_evidence(self):
+        from backend.executor.session_intel import patch_session_findings_batch
+
+        saved = {}
+        session = {
+            "session_id": "sess-batch-1",
+            "session_findings": [
+                {
+                    "id": "r1",
+                    "title": "OK — nmap",
+                    "severity": "info",
+                    "status": "candidate",
+                    "evidence": "nmap -sV example.com\n80/tcp open",
+                    "source": "client_history",
+                }
+            ],
+        }
+
+        def _save(_sid, data):
+            saved.clear()
+            saved.update(data)
+            return data
+
+        with (
+            patch("backend.executor.session_intel.load_session", return_value=session),
+            patch("backend.executor.session_intel.save_session", side_effect=_save),
+        ):
+            n = patch_session_findings_batch(
+                "sess-batch-1",
+                [{"id": "r1", "status": "discarded", "surface_target": "_session"}],
+                preserve_evidence=True,
+            )
+        self.assertEqual(n, 1)
+        self.assertEqual(saved["session_findings"][0]["status"], "discarded")
+        self.assertIn("nmap -sV", saved["session_findings"][0]["evidence"])
+
+    def test_ingest_assistant_idor(self):
+        from backend.executor.session_intel import ingest_assistant_findings
+
+        saved = {}
+        session = {
+            "session_id": "sess-narr-1",
+            "session_findings": [],
+            "targets": [],
+            "label": "",
+        }
+
+        def _save(_sid, data):
+            saved.clear()
+            saved.update(data)
+            return data
+
+        chat = {
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": (
+                        "Isso confirma que o endpoint não está validando corretamente a autorização "
+                        "para acessar dados de outros usuários. Um atacante poderia facilmente "
+                        "iterar sobre os IDs para coletar informações sensíveis."
+                    ),
+                }
+            ]
+        }
+        with (
+            patch("backend.executor.session_intel.load_session", return_value=session),
+            patch("backend.executor.session_intel.save_session", side_effect=_save),
+            patch("backend.database.chat_store.get_chat_session", return_value=chat),
+        ):
+            added = ingest_assistant_findings("sess-narr-1")
+        self.assertEqual(added, 1)
+        row = saved["session_findings"][0]
+        self.assertEqual(row["source"], "assistant_narrative")
+        self.assertEqual(row["kind"], "idor")
+        self.assertEqual(row["severity"], "high")
+        self.assertIn("autorização", row["evidence"].lower())
 
 
 class TestReportSeverity(unittest.TestCase):
@@ -330,9 +556,9 @@ class TestSessionReportPack(unittest.TestCase):
         self.assertTrue(model["remediations"])
         self.assertEqual(model["remediations"][0].get("key"), "xss")
         self.assertIn("charts", html)
-        self.assertIn("Resumo executivo", html)
-        self.assertIn("Risco residual", html)
-        self.assertIn("Como corrigir", html)
+        self.assertTrue("Risco geral" in html or "Resumo executivo" in html)
+        self.assertTrue("O que encontramos" in html or "Risco residual" in html)
+        self.assertTrue("O que fazer agora" in html or "Como corrigir" in html)
         self.assertIn("script na página", html.lower())
         self.assertTrue(raw.startswith(b"%PDF"))
         self.assertGreater(len(raw), 2000)

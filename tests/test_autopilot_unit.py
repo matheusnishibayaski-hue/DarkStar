@@ -96,6 +96,46 @@ class TestAutopilotUnit(unittest.TestCase):
         self.assertEqual(result.stopped_reason, "objective_met")
         self.assertIn("Portas mapeadas", result.message)
 
+    def test_attachments_injected_into_system(self):
+        mission_id = "auto-attach-1"
+        tool_call = ToolCall(
+            id="tc1",
+            name="finish_mission",
+            arguments='{"summary":"ok","objective_met":true}',
+        )
+        provider = _provider_mock()
+        provider.complete.return_value = LLMCompletion(
+            message=LLMMessage(content="", tool_calls=[tool_call])
+        )
+        captured = {}
+
+        def capture_complete(**kwargs):
+            msgs = kwargs.get("messages") or []
+            captured["system"] = msgs[0]["content"] if msgs else ""
+            return LLMCompletion(message=LLMMessage(content="", tool_calls=[tool_call]))
+
+        provider.complete.side_effect = capture_complete
+
+        with (
+            patch("backend.ai.autopilot.get_llm_provider", return_value=provider),
+            patch("backend.ai.autopilot.build_recon_context", return_value=""),
+            patch("backend.ai.autopilot.generate_report", return_value="# r"),
+        ):
+            result = run_autonomous(
+                "scanme.nmap.org",
+                "mapear",
+                mission_id=mission_id,
+                attachments=[
+                    {
+                        "name": "package.json",
+                        "content": '{"dependencies":{"express":"1.0.0"}}',
+                    }
+                ],
+            )
+        self.assertTrue(result.objective_met)
+        self.assertIn("[PROJECT INTEL", captured.get("system", ""))
+        self.assertIn("[Anexos]", captured.get("system", ""))
+
 
 if __name__ == "__main__":
     unittest.main()

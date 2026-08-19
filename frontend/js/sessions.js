@@ -1,7 +1,8 @@
-import { STORAGE_KEY, ARGUS_WELCOME_MESSAGE } from "./constants.js";
+import { STORAGE_KEY, ARGUS_WELCOME_MESSAGE, API_TOKEN_KEY } from "./constants.js";
 import { apiFetch } from "./api.js";
 import { escapeHtml } from "./exec.js";
 import { getActiveClientId } from "./client-workspace.js";
+import { isSessionBusy } from "./session-runs.js";
 
 /** @type {{ sessionsEl: HTMLElement, sessionTitleEl: HTMLElement, onChanged?: () => void }} */
 let ctx = {};
@@ -77,11 +78,25 @@ function loadLegacyLocalStore() {
 }
 
 function sessionPayload(session) {
+  const messages = (session.messages || []).filter((m) => m?.kind !== "pending-attachments");
+  const pending = Array.isArray(session.pendingAttachments) ? session.pendingAttachments : [];
+  if (pending.length) {
+    messages.push({
+      role: "system",
+      kind: "pending-attachments",
+      content: "",
+      attachments: pending.map((a) => ({
+        name: String(a?.name || "").slice(0, 256),
+        content: String(a?.content || "").slice(0, 200000),
+      })),
+      at: Date.now(),
+    });
+  }
   return {
     id: session.id,
     title: session.title || "novo chat",
     preferredTool: session.preferredTool || "auto",
-    messages: session.messages || [],
+    messages,
     createdAt: session.createdAt || Date.now(),
     updatedAt: session.updatedAt || Date.now(),
     client_id: session.client_id || currentClientId() || "default",
@@ -144,7 +159,7 @@ export function saveStore() {
   }, 350);
 }
 
-/** Flush imediato (create/rename/delete). */
+/** Flush imediato (create/rename/delete / F5). */
 export async function saveStoreNow(session = getActiveSession()) {
   writeActiveId(store.activeId);
   if (!session) return;
@@ -156,8 +171,53 @@ export async function saveStoreNow(session = getActiveSession()) {
   await apiUpsert(session);
 }
 
+/** Flush síncrono no unload (keepalive) — evita perder última mensagem no F5. */
+export function flushStoreOnUnload() {
+  writeActiveId(store.activeId);
+  const session = getActiveSession();
+  if (!session) return;
+  if (saveTimer) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+  session.updatedAt = Date.now();
+  try {
+    const body = JSON.stringify(sessionPayload(session));
+    const headers = { "Content-Type": "application/json" };
+    try {
+      const token = localStorage.getItem(API_TOKEN_KEY);
+      if (token) headers["X-Chat-Token"] = token;
+    } catch { /* ignore */ }
+    void fetch(`/api/chat-sessions/${encodeURIComponent(session.id)}`, {
+      method: "PUT",
+      headers,
+      body,
+      credentials: "include",
+      keepalive: true,
+    });
+  } catch (err) {
+    console.warn("chat_unload_flush_failed", err);
+  }
+}
+
+let unloadHooked = false;
+export function hookSessionUnloadFlush() {
+  if (unloadHooked || typeof window === "undefined") return;
+  unloadHooked = true;
+  const flush = () => flushStoreOnUnload();
+  window.addEventListener("pagehide", flush);
+  window.addEventListener("beforeunload", flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") flush();
+  });
+}
+
 export function getActiveSession() {
   return store.sessions.find((s) => s.id === store.activeId) || null;
+}
+
+export function getSessionById(id) {
+  return store.sessions.find((s) => s.id === id) || null;
 }
 
 export function createSession() {
@@ -168,6 +228,7 @@ export function createSession() {
     updatedAt: Date.now(),
     preferredTool: "auto",
     client_id: currentClientId() || "default",
+    pendingAttachments: [],
     messages: [
       {
         role: "assistant",
@@ -189,14 +250,19 @@ export function ensureSession() {
 }
 
 function mapSessionRow(s) {
+  const raw = Array.isArray(s.messages) ? s.messages : [];
+  const pendingMsg = raw.find((m) => m?.kind === "pending-attachments");
+  const messages = raw.filter((m) => m?.kind !== "pending-attachments");
+  const pending = Array.isArray(pendingMsg?.attachments) ? pendingMsg.attachments : [];
   return {
     id: s.id,
     title: s.title || "novo chat",
     preferredTool: s.preferredTool || "auto",
-    messages: Array.isArray(s.messages) ? s.messages : [],
+    messages,
     createdAt: s.createdAt || Date.now(),
     updatedAt: s.updatedAt || Date.now(),
     client_id: s.client_id || "default",
+    pendingAttachments: pending,
   };
 }
 
@@ -213,11 +279,16 @@ export function applyLoadedSessions(sessions, clientId = currentClientId()) {
 }
 
 export async function reloadSessionsForClient(clientId = currentClientId()) {
-  const sessions = await apiList(clientId);
-  applyLoadedSessions(sessions, clientId);
-  renderSessions();
-  updateSessionTitle();
-  ctx.afterSwitchSession?.(store.activeId);
+  try {
+    const sessions = await apiList(clientId);
+    applyLoadedSessions(sessions, clientId);
+    renderSessions();
+    updateSessionTitle();
+    ctx.afterSwitchSession?.(store.activeId);
+  } catch (err) {
+    console.warn("chat_reload_client_failed", err);
+    ctx.onReloadError?.(err);
+  }
 }
 
 /**
@@ -327,7 +398,9 @@ export function collectSessionExecutionsDetailed(session) {
 }
 
 export function collectSessionHistory(session) {
-  return (session?.messages || []).map((m) => ({ role: m.role, content: m.content }));
+  return (session?.messages || [])
+    .filter((m) => m && m.kind !== "folder-ingest" && m.kind !== "pending-attachments" && m.role !== "system")
+    .map((m) => ({ role: m.role, content: m.content }));
 }
 
 export function updateSessionTitle() {
@@ -405,6 +478,8 @@ export function deleteSession(id, e) {
   e?.stopPropagation?.();
   if (!id) return;
   const session = store.sessions.find((s) => s.id === id);
+  const label = session ? sessionTitle(session) : id.slice(0, 8);
+  if (!window.confirm(`Excluir a conversa "${label}"?`)) return;
   const logIds = session ? collectSessionLogIds(session) : [];
   try {
     ctx.beforeDeleteSession?.(id, logIds);
@@ -426,6 +501,7 @@ export function deleteSession(id, e) {
 }
 
 export function switchSession(id) {
+  ctx.beforeSwitchSession?.(store.activeId, id);
   store.activeId = id;
   writeActiveId(id);
   renderSessions();
@@ -439,7 +515,11 @@ export function renderSessions() {
 
   sessionsEl.innerHTML = "";
   if (store.sessions.length === 0) {
-    sessionsEl.innerHTML = '<p class="history-empty">// nenhuma conversa</p>';
+    sessionsEl.innerHTML = `
+      <div class="history-empty">
+        <span class="history-empty-title">Sem conversas</span>
+        <span>Crie uma com Nova conversa.</span>
+      </div>`;
     return;
   }
 
@@ -451,11 +531,17 @@ export function renderSessions() {
     btn.className = `history-item${s.id === store.activeId ? " active" : ""}`;
     btn.title = title;
     const execCount = collectSessionExecutions(s).length;
+    const running = isSessionBusy(s.id);
+    const metaParts = [formatRelativeTime(s.updatedAt)];
+    if (execCount) metaParts.push(`${execCount} exec`);
     btn.innerHTML = `
       <span class="history-item-icon" aria-hidden="true">${escapeHtml(sessionInitial(s))}</span>
       <span class="history-item-body">
         <span class="history-item-title">${escapeHtml(title)}</span>
-        <span class="history-item-meta">${formatRelativeTime(s.updatedAt)}${execCount ? ` · ${execCount} exec` : ""}</span>
+        <span class="history-item-meta">
+          <span class="history-item-meta-text">${escapeHtml(metaParts.join(" · "))}</span>
+          ${running ? '<span class="history-item-chip">em execução</span>' : ""}
+        </span>
       </span>
       <span class="history-item-actions">
         <span class="history-item-rename" title="Renomear" aria-label="Renomear conversa">✎</span>

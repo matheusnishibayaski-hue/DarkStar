@@ -180,6 +180,29 @@ class TestMissionConcurrency(unittest.TestCase):
         reg.cleanup("m-a")
         reg.cleanup("m-b")
 
+    def test_chat_mode_and_attachments(self):
+        from backend.ai.agent import _apply_attachments, _apply_chat_mode
+
+        self.assertEqual(_apply_chat_mode("hi", "agent"), "hi")
+        self.assertIn("Modo Plan", _apply_chat_mode("hi", "plan"))
+        self.assertIn("Modo Ask", _apply_chat_mode("hi", "ask"))
+        self.assertIn("Modo Review", _apply_chat_mode("hi", "review"))
+        self.assertEqual(_apply_attachments("hi", None), "hi")
+        self.assertEqual(_apply_attachments("hi", [{"name": "a", "content": ""}]), "hi")
+        attached = _apply_attachments("hi", [{"name": "a.txt", "content": "hello"}])
+        self.assertIn("[Anexos]", attached)
+        self.assertIn("a.txt", attached)
+
+        provider = _provider_mock(configured=False)
+        with patch("backend.ai.agent.get_llm_provider", return_value=provider):
+            result = chat(
+                [],
+                "scan",
+                chat_mode="plan",
+                attachments=[{"name": "n.txt", "content": "body"}],
+            )
+        self.assertIn("OPENROUTER", result.message.upper())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -29,6 +29,8 @@ def api_chat_stream(req: ChatRequest):
                 fallback_model=req.fallback_model or None,
                 mission_id=req.mission_id or None,
                 chat_session_id=req.chat_session_id or None,
+                chat_mode=req.chat_mode or "agent",
+                attachments=[a.model_dump() for a in req.attachments],
             )
         except Exception as e:
             yield f'event: error\ndata: {{"detail": {json.dumps(str(e))}}}\n\n'
@@ -56,6 +58,8 @@ def api_chat(req: ChatRequest):
             fallback_model=req.fallback_model or None,
             mission_id=req.mission_id or None,
             chat_session_id=req.chat_session_id or None,
+            chat_mode=req.chat_mode or "agent",
+            attachments=[a.model_dump() for a in req.attachments],
         )
         return ChatResponseModel(
             message=result.message,

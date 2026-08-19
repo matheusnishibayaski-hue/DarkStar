@@ -4,6 +4,7 @@ import { apiFetch } from "./api.js";
 import { isOffensiveModeEnabled } from "./offensive-mode.js";
 import {
   getActiveSession,
+  getSessionById,
   ensureSession,
   saveStore,
   renderSessions,
@@ -24,6 +25,7 @@ import {
   endMission,
   createMissionId,
   isMissionAborted,
+  syncMissionButton,
 } from "./mission.js";
 import {
   renderChat,
@@ -33,7 +35,10 @@ import {
   hideTyping,
   scrollChatToBottom,
 } from "./chat-view.js";
+import { toast, showToastError, closeOverlay } from "./ui.js";
 import { getActiveClientId } from "./client-workspace.js";
+import { startRun, isSessionBusy } from "./session-runs.js";
+import { getAttachments } from "./composer-extras.js";
 
 let ctx = {};
 /** @type {"basic"|"intermediate"|"full"|"custom"} */
@@ -255,11 +260,16 @@ function scanProfileLabel(id) {
   return scanProfileMeta.find((p) => p.id === id)?.label || id;
 }
 
-function setBusy(busy) {
-  setLoading(busy);
-  if (ctx.input) ctx.input.disabled = busy;
-  if (ctx.autopilotStart) ctx.autopilotStart.disabled = busy;
-  if (ctx.btnAutopilot) ctx.btnAutopilot.disabled = busy;
+function isViewing(sessionId) {
+  return getActiveSession()?.id === sessionId;
+}
+
+function setBusy(sessionId) {
+  const viewing = isViewing(sessionId);
+  if (ctx.input) ctx.input.disabled = viewing && isSessionBusy(sessionId);
+  if (ctx.autopilotStart) ctx.autopilotStart.disabled = isSessionBusy(sessionId);
+  if (ctx.btnAutopilot) ctx.btnAutopilot.disabled = isSessionBusy(sessionId);
+  syncMissionButton();
   ctx.updateStatusBar?.();
 }
 
@@ -281,10 +291,11 @@ export async function startAutopilot() {
     return;
   }
 
-  if (getLoading()) return;
+  if (isSessionBusy(getActiveSession()?.id)) return;
 
   ensureSession();
   const session = getActiveSession();
+  const sessionId = session.id;
   const repeatOn = Boolean(document.getElementById("autopilot-repeat")?.checked);
   let intervalDays = 30;
   if (repeatOn) {
@@ -299,8 +310,9 @@ export async function startAutopilot() {
   }]\nAlvo: ${target}\nObjetivo: ${objective}`;
   const missionId = createMissionId();
   const abortController = new AbortController();
-  beginMission(missionId, abortController);
-  setBusy(true);
+  startRun(sessionId, { missionId, abort: abortController, kind: "pilot" });
+  beginMission(missionId, abortController, sessionId);
+  setBusy(sessionId);
 
   const isFirst = session.messages.length === 0;
   session.messages.push({ role: "user", content: userMsg });
@@ -326,6 +338,10 @@ export async function startAutopilot() {
 
   try {
     let finalData = null;
+    const attachments = getAttachments() || [];
+    if (attachments.length) {
+      toast("Piloto com contexto da pasta/anexos", "info");
+    }
 
     const res = await apiFetch("/api/autonomous/stream", {
       method: "POST",
@@ -338,6 +354,7 @@ export async function startAutopilot() {
         scan_profile: scanProfile,
         custom_tools: customTools,
         risk_profile: isOffensiveModeEnabled() ? "full" : "safe-active",
+        attachments,
         ...getModelPayload(),
       }),
       signal: abortController.signal,
@@ -363,6 +380,7 @@ export async function startAutopilot() {
           showTyping: showAutopilotProgress,
           hideTyping,
           scrollChatToBottom,
+          sessionId,
         }),
         done(data) {
           finalData = data;
@@ -374,10 +392,10 @@ export async function startAutopilot() {
       { signal: abortController.signal }
     );
 
-    hideTyping();
+    if (isViewing(sessionId)) hideTyping();
     closeAllLiveStreams();
 
-    if (isMissionAborted()) {
+    if (isMissionAborted(sessionId)) {
       throw new DOMException("Missão cancelada.", "AbortError");
     }
 
@@ -386,7 +404,8 @@ export async function startAutopilot() {
     }
 
     const data = finalData;
-    session.messages.push({
+    const sess = getSessionById(sessionId) || session;
+    sess.messages.push({
       role: "assistant",
       content: data.message,
       toolExecutions: data.tool_executions || [],
@@ -397,57 +416,66 @@ export async function startAutopilot() {
         tools_executed: data.tools_executed,
       },
     });
-    session.updatedAt = Date.now();
+    sess.updatedAt = Date.now();
     saveStore();
     renderSessions();
     window.dispatchEvent(new CustomEvent("darkstar:session-updated"));
 
-    appendAssistantLine(data.message);
-    for (const exec of data.tool_executions || []) {
-      finalizeLiveExecBlock(ctx.chatEl, exec);
+    if (isViewing(sessionId)) {
+      appendAssistantLine(data.message);
+      for (const exec of data.tool_executions || []) {
+        finalizeLiveExecBlock(ctx.chatEl, exec);
+      }
+      scrollChatToBottom();
     }
-    scrollChatToBottom();
 
     if (data.stopped_reason !== "cancelled" && (data.tool_executions || []).length > 0) {
-      appendLine(
-        "info",
-        `Missão concluída · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
-          data.objective_met ? "objetivo atingido" : data.stopped_reason
-        } · gerando PDF…`
-      );
+      if (isViewing(sessionId)) {
+        appendLine(
+          "info",
+          `Missão concluída · ${data.tools_executed} cmd(s) · ${data.rounds} rodada(s) · ${
+            data.objective_met ? "objetivo atingido" : data.stopped_reason
+          } · gerando PDF…`
+        );
+      }
       try {
-        await downloadSessionPdf(session, { silent: true });
-        appendLine("info", "Relatório PDF gerado e salvo em Relatórios (Alt+F).");
+        await downloadSessionPdf(sess, { silent: true });
+        if (isViewing(sessionId)) {
+          appendLine("info", "Relatório PDF gerado e salvo em Relatórios (Alt+F).");
+        }
         toast(`Missão concluída · PDF do relatório pronto`, "success");
-        openSessionReportModal();
+        if (isViewing(sessionId)) openSessionReportModal();
       } catch (pdfErr) {
-        appendLine("warn", `PDF automático: ${pdfErr.message}`);
+        if (isViewing(sessionId)) appendLine("warn", `PDF automático: ${pdfErr.message}`);
         toast(`Missão ok, mas PDF falhou: ${pdfErr.message}`, "warn");
       }
     } else if (data.stopped_reason === "cancelled") {
       toast("Missão cancelada", "warn");
     }
   } catch (e) {
-    hideTyping();
+    if (isViewing(sessionId)) hideTyping();
     closeAllLiveStreams();
+    const sess = getSessionById(sessionId) || session;
     if (e.name === "AbortError") {
       const errMsg = "Missão cancelada pelo usuário.";
-      session.messages.push({ role: "assistant", content: errMsg });
+      sess.messages.push({ role: "assistant", content: errMsg });
       saveStore();
-      appendLine("info", errMsg);
+      if (isViewing(sessionId)) appendLine("info", errMsg);
       toast("Missão cancelada", "warn");
     } else {
       const errMsg = `Erro de conexão no piloto: ${e.message}`;
-      session.messages.push({ role: "assistant", content: errMsg });
+      sess.messages.push({ role: "assistant", content: errMsg });
       saveStore();
-      appendLine("error", errMsg);
-      showToastError(errMsg);
+      if (isViewing(sessionId)) {
+        appendLine("error", errMsg);
+        showToastError(errMsg);
+      }
     }
   } finally {
-    endMission();
-    setBusy(false);
+    endMission(sessionId);
+    setBusy(sessionId);
     rebuildInputHistory(ctx.inputHistory);
-    ctx.input?.focus();
+    if (isViewing(sessionId)) ctx.input?.focus();
   }
 }
 

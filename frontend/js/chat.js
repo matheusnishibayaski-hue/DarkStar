@@ -4,9 +4,11 @@ import { HISTORY_LIMIT } from "./constants.js";
 import { apiFetch } from "./api.js";
 import {
   getActiveSession,
+  getSessionById,
   ensureSession,
   sessionTitle,
   saveStore,
+  saveStoreNow,
   renderSessions,
   updateSessionTitle,
   rebuildInputHistory,
@@ -23,6 +25,7 @@ import {
   endMission,
   createMissionId,
   isMissionAborted,
+  syncMissionButton,
 } from "./mission.js";
 import {
   renderChat,
@@ -33,56 +36,145 @@ import {
   hideTyping,
   scrollChatToBottom,
 } from "./chat-view.js";
-import { toast, showToastError, setLoading, getLoading } from "./ui.js";
+import { toast, showToastError } from "./ui.js";
 import { playSound } from "./audio.js";
+import { startRun, isSessionBusy } from "./session-runs.js";
+import { getChatMode, getAttachments, clearAttachments } from "./composer-extras.js";
 
 let ctx = {};
+
+/** Prompt fixo: pasta/repo anexado → relatório de achados. */
+export function buildFolderPentestPrompt(folderName) {
+  const name = (folderName || "projeto anexado").trim() || "projeto anexado";
+  return (
+    `[Pentest white-box automático]\n` +
+    `Projeto: ${name}\n\n` +
+    `Analise o mapa e os arquivos em [Anexos]/[PROJECT INTEL] ANTES de qualquer resposta ao usuário.\n` +
+    `Missão: pentest white-box do repositório. Entregue SOMENTE o relatório final com achados.\n\n` +
+    `Formato obrigatório:\n` +
+    `## Resumo\n` +
+    `## Achados (crítico → baixo, com path/evidência)\n` +
+    `## Superfície / alvos derivados do código\n` +
+    `## Recomendações priorizadas\n\n` +
+    `Regras:\n` +
+    `- Não cumprimente, não peça confirmação, não diga que vai analisar.\n` +
+    `- Cite paths do código como evidência.\n` +
+    `- Se o intel tiver host/URL do próprio app (não dependências npm/pypi), use ferramentas Kali e incorpore no relatório.\n` +
+    `- Sem alvo de rede: foque em achados estáticos (secrets, auth, injeção, misconfig, exposição).`
+  );
+}
+
+/**
+ * Dispara pentest assim que a pasta/repo fica pronta.
+ * @param {{ folderName?: string, error?: string }} [summary]
+ */
+export async function startFolderPentest(summary = {}) {
+  if (summary?.error) return;
+  ensureSession();
+  const session = getActiveSession();
+  if (!session) return;
+  if (isSessionBusy(session.id)) {
+    toast("Pasta anexada — o pentest automático começa quando a missão atual terminar", "warn");
+    return;
+  }
+  if (!getAttachments().length) {
+    toast("Pasta anexada sem conteúdo legível para pentest", "warn");
+    return;
+  }
+  toast("Pentest automático do projeto…", "info");
+  await sendMessage(buildFolderPentestPrompt(summary.folderName), {
+    typingLabel: "analisando projeto…",
+    folderName: summary.folderName,
+  });
+}
 
 export function initChat(context) {
   ctx = context;
 }
 
-function setBusy(busy) {
-  setLoading(busy);
-  if (ctx.input) ctx.input.disabled = busy;
+function isViewing(sessionId) {
+  return getActiveSession()?.id === sessionId;
+}
+
+function persistSession(session) {
+  if (!session) return;
+  session.updatedAt = Date.now();
+  saveStoreNow(session).catch((err) => console.warn("chat_persist_failed", err));
+}
+
+function setViewBusy(sessionId) {
+  const viewing = isViewing(sessionId);
+  if (ctx.input) ctx.input.disabled = viewing && isSessionBusy(sessionId);
+  syncMissionButton();
   ctx.updateStatusBar?.();
 }
 
-export async function sendMessage(text) {
-  if (!text.trim() || getLoading()) return;
-
+export async function sendMessage(text, opts = {}) {
   ensureSession();
   const session = getActiveSession();
+  if (!session || !text.trim() || isSessionBusy(session.id)) return;
+
+  const sessionId = session.id;
   session.preferredTool = preferredTool;
   saveStore();
 
   const history = session.messages
+    .filter((m) => m && m.kind !== "folder-ingest" && m.kind !== "pending-attachments" && m.role !== "system")
     .slice(-HISTORY_LIMIT)
     .map((m) => ({ role: m.role, content: m.content }));
 
   const missionId = createMissionId();
   const abortController = new AbortController();
-  beginMission(missionId, abortController);
-  setBusy(true);
+  startRun(sessionId, { missionId, abort: abortController, kind: "chat" });
+  beginMission(missionId, abortController, sessionId);
+  setViewBusy(sessionId);
   playSound("send");
+
+  const attachments = getAttachments();
+  clearAttachments({ persist: true });
 
   if (ctx.input) {
     ctx.input.value = "";
     ctx.inputHistory.idx = ctx.inputHistory.list.length;
   }
 
+  const isAutoPentest = text.includes("[Pentest white-box automático]");
+  const displayText = isAutoPentest
+    ? `Pentest automático · ${String(opts.folderName || "projeto").trim() || "projeto"}`
+    : text;
+
   const isFirst = session.messages.length === 0;
   const now = Date.now();
-  session.messages.push({ role: "user", content: text, at: now });
-  session.updatedAt = now;
-  if (isFirst || session.title === "novo chat") session.title = sessionTitle(session);
+  session.messages.push({
+    role: "user",
+    content: text,
+    display: isAutoPentest ? displayText : undefined,
+    at: now,
+  });
+  persistSession(session);
+  if (isFirst || session.title === "novo chat") {
+    if (isAutoPentest) {
+      const label = String(opts.folderName || "projeto").trim().slice(0, 40) || "projeto";
+      session.title = `pentest: ${label}`;
+    } else {
+      session.title = sessionTitle(session);
+    }
+  }
   saveStore();
   renderSessions();
   updateSessionTitle();
 
-  if (isFirst) renderChat();
-  else appendUserLine(text);
-  showTyping();
+  const typingLabel = opts.typingLabel || "processando";
+
+  if (isViewing(sessionId)) {
+    if (isFirst) renderChat();
+    else appendUserLine(displayText);
+    showTyping(typingLabel);
+  }
+
+  const target = () => getSessionById(sessionId) || session;
+
+  const chatMode = isAutoPentest ? "agent" : getChatMode();
 
   try {
     const res = await apiFetch("/api/chat/stream", {
@@ -93,21 +185,25 @@ export async function sendMessage(text) {
         history,
         preferred_tool: preferredTool,
         mission_id: missionId,
-        chat_session_id: session.id,
+        chat_session_id: sessionId,
+        chat_mode: chatMode,
+        attachments,
         ...getModelPayload(),
       }),
       signal: abortController.signal,
     });
 
-    hideTyping();
+    if (isViewing(sessionId)) hideTyping();
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const errMsg = `erro: ${err.detail || res.statusText}`;
-      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
-      saveStore();
-      appendLine("error", errMsg);
-      showToastError(errMsg);
+      target().messages.push({ role: "assistant", content: errMsg, at: Date.now() });
+      persistSession(target());
+      if (isViewing(sessionId)) {
+        appendLine("error", errMsg);
+        showToastError(errMsg);
+      }
       return;
     }
 
@@ -119,6 +215,7 @@ export async function sendMessage(text) {
         showTyping,
         hideTyping,
         scrollChatToBottom,
+        sessionId,
       }),
       done(data) {
         finalData = data;
@@ -128,10 +225,10 @@ export async function sendMessage(text) {
       },
     }, { signal: abortController.signal });
 
-    hideTyping();
+    if (isViewing(sessionId)) hideTyping();
     closeAllLiveStreams();
 
-    if (isMissionAborted()) {
+    if (isMissionAborted(sessionId)) {
       throw new DOMException("Operação cancelada.", "AbortError");
     }
 
@@ -139,54 +236,61 @@ export async function sendMessage(text) {
       throw new Error("Resposta incompleta do servidor");
     }
 
+    const sess = target();
     if (finalData.stopped_reason === "cancelled") {
-      session.messages.push({ role: "assistant", content: finalData.message, at: Date.now() });
-      saveStore();
-      appendAssistantLine(finalData.message);
-      toast("operação cancelada", "warn");
+      sess.messages.push({ role: "assistant", content: finalData.message, at: Date.now() });
+      persistSession(sess);
+      if (isViewing(sessionId)) {
+        appendAssistantLine(finalData.message);
+        toast("operação cancelada", "warn");
+      }
       return;
     }
 
-    session.messages.push({
+    sess.messages.push({
       role: "assistant",
       content: finalData.message,
       toolExecutions: finalData.tool_executions || [],
       at: Date.now(),
     });
-    session.updatedAt = Date.now();
-    saveStore();
+    persistSession(sess);
     renderSessions();
     window.dispatchEvent(new CustomEvent("darkstar:session-updated"));
 
-    appendAssistantLine(finalData.message);
-    for (const exec of finalData.tool_executions || []) {
-      finalizeLiveExecBlock(ctx.chatEl, exec);
+    if (isViewing(sessionId)) {
+      appendAssistantLine(finalData.message);
+      for (const exec of finalData.tool_executions || []) {
+        finalizeLiveExecBlock(ctx.chatEl, exec);
+      }
+      if ((finalData.tool_executions || []).length === 0) playSound("success");
+      scrollChatToBottom();
     }
-    if ((finalData.tool_executions || []).length === 0) {
-      playSound("success");
-    }
-    scrollChatToBottom();
   } catch (e) {
-    hideTyping();
+    if (isViewing(sessionId)) hideTyping();
     closeAllLiveStreams();
+    const sess = target();
     if (e.name === "AbortError") {
       const errMsg = "Operação cancelada pelo usuário.";
-      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
-      saveStore();
-      appendLine("info", errMsg);
-      toast("cancelado", "warn");
+      sess.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
+      persistSession(sess);
+      if (isViewing(sessionId)) {
+        appendLine("info", errMsg);
+        toast("cancelado", "warn");
+      }
     } else {
       const errMsg = `erro de conexão: ${e.message}`;
-      session.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
-      saveStore();
-      appendLine("error", errMsg);
-      showToastError(errMsg);
+      sess.messages.push({ role: "assistant", content: errMsg, at: Date.now() });
+      persistSession(sess);
+      if (isViewing(sessionId)) {
+        appendLine("error", errMsg);
+        showToastError(errMsg);
+      }
     }
   } finally {
-    endMission();
-    setBusy(false);
+    endMission(sessionId);
+    setViewBusy(sessionId);
     rebuildInputHistory(ctx.inputHistory);
-    ctx.input?.focus();
+    if (isViewing(sessionId)) ctx.input?.focus();
   }
 }
 

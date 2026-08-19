@@ -158,6 +158,9 @@ export function closeAllOverlays(closeToolsPanelMenus) {
     document.getElementById("overlay-remediation"),
     document.getElementById("overlay-onboarding"),
     document.getElementById("overlay-triage-gate"),
+    document.getElementById("overlay-report-preview"),
+    document.getElementById("overlay-github-tree"),
+    document.getElementById("overlay-client-new"),
   ]) {
     if (ov) {
       ov.classList.remove("overlay-visible");
@@ -240,7 +243,7 @@ function updateScopeBanner() {
     banner.className = "health-banner health-banner--warn scope-banner";
     banner.innerHTML = `
       <div class="health-banner-body">
-        <strong class="health-banner-title">// AVISO: escopo aberto</strong>
+        <strong class="health-banner-title">Escopo aberto</strong>
         <p class="health-banner-text">Defina alvos no cliente ativo (sidebar) ou <code>ALLOWED_TARGETS</code> no <code>.env</code>. Sem lista, qualquer alvo pode ser usado — apenas em lab com permissão.</p>
       </div>
     `;
@@ -322,12 +325,12 @@ export function renderWelcome() {
 
   const ready = document.createElement("p");
   ready.className = "boot-ready";
-  ready.innerHTML = `<span class="boot-msg">Canal aberto com Argus. Nomeie o alvo — ou dispare o piloto.</span>`;
+  ready.innerHTML = `<span class="boot-msg">Digite o alvo autorizado ou abra o piloto.</span>`;
   wrap.appendChild(ready);
 
   const hint = document.createElement("p");
   hint.className = "boot-hint";
-  hint.textContent = "coluna negra = sistema · papel branco = conversa";
+  hint.textContent = "Trilho à esquerda · chat no centro · seta à direita abre o workspace";
   wrap.appendChild(hint);
 
   return wrap;

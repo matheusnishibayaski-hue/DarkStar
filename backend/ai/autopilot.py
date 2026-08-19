@@ -28,6 +28,7 @@ from backend.ai.providers.base import BaseLLMProvider
 from backend.ai.providers.tool_heal import assistant_dict_from_message, resolve_tool_arguments
 from backend.ai.scan_profiles import (
     max_tool_budget,
+    pending_scan_tools,
     resolve_scan_tools,
     scan_profile_prompt_block,
 )
@@ -290,6 +291,7 @@ def run_autonomous(
     chat_session_id: str | None = None,
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
+    attachments: list | None = None,
 ) -> AutonomousResponse:
     registry = get_mission_registry()
     if mission_id:
@@ -307,6 +309,7 @@ def run_autonomous(
             chat_session_id=chat_session_id,
             scan_profile=scan_profile,
             custom_tools=custom_tools,
+            attachments=attachments,
         )
     finally:
         if mission_id:
@@ -324,6 +327,7 @@ def _run_autonomous_body(
     chat_session_id: str | None = None,
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
+    attachments: list | None = None,
 ) -> AutonomousResponse:
     provider = get_llm_provider()
     if not provider.is_configured():
@@ -352,7 +356,16 @@ def _run_autonomous_body(
         scan_prof,
         custom_tools,
         include_all_allowed=(profile == "full" and scan_prof == "full"),
+        available_only=True,
     )
+    if not scan_tools:
+        # Fallback sem filtro se probe falhou / container down
+        scan_tools = resolve_scan_tools(
+            scan_prof,
+            custom_tools,
+            include_all_allowed=(profile == "full" and scan_prof == "full"),
+            available_only=False,
+        )
     if scan_prof == "custom" and not scan_tools:
         return AutonomousResponse(
             message="Perfil personalizado: selecione ao menos uma ferramenta.",
@@ -382,6 +395,27 @@ def _run_autonomous_body(
     scan_block = scan_profile_prompt_block(scan_prof, scan_tools, target=target)
     if scan_block:
         system = f"{system}\n\n{scan_block}"
+
+    # White-box: mapa/arquivos da Pasta/GitHub (mesmo pipeline do chat)
+    if attachments:
+        from backend.ai.agent import _apply_attachments
+        from backend.ai.project_intel import attachments_as_dicts, extract_project_intel
+
+        items = attachments_as_dicts(attachments)
+        intel = extract_project_intel(items)
+        if intel:
+            # Preferir pendentes do perfil ∩ fase, não trio fixo
+            system = (
+                f"{system}\n\n[Cobertura sugerida] Use PROJECT INTEL + ferramentas "
+                "ainda pendentes do perfil nesta fase (varie — não repita só httpx/nuclei/nikto)."
+            )
+        attach_blob = _apply_attachments("", items)
+        if attach_blob.strip():
+            clipped = attach_blob.strip()
+            if len(clipped) > 120000:
+                clipped = clipped[:120000] + "\n… [anexos truncados]"
+            system = f"{system}\n\n{clipped}"
+
     messages: list[dict] = [{"role": "system", "content": system}]
 
     executions: list[ToolExecution] = []
@@ -390,9 +424,10 @@ def _run_autonomous_body(
     objective_met = False
     stopped_reason = "max_rounds"
     rounds_completed = 0
-    remaining_tools = (
+    mission_budget = (
         max_tool_budget(scan_prof, len(scan_tools)) if scan_tools else MAX_AUTONOMOUS_TOOLS
     )
+    remaining_tools = mission_budget
     max_rounds = MAX_AUTONOMOUS_ROUNDS
     if scan_prof == "full":
         max_rounds = max(MAX_AUTONOMOUS_ROUNDS, 50 if len(scan_tools) > 100 else 40)
@@ -429,6 +464,14 @@ def _run_autonomous_body(
         summary = surface_summary(surface)
         per_round = min(MAX_TOOL_ITERATIONS, remaining_tools)
 
+        used = list(surface.get("tools_run") or [])
+        pending = pending_scan_tools(scan_tools, used)
+        # Preferidos da fase ∩ pendentes
+        from backend.ai.phases import PHASE_PREFERRED_TOOLS
+
+        phase_pref = PHASE_PREFERRED_TOOLS.get(current_phase, frozenset())
+        pending_phase = [t for t in pending if t in phase_pref] or pending[:8]
+
         kickoff = kickoff_for_phase(
             phase=current_phase,
             target=target,
@@ -438,6 +481,13 @@ def _run_autonomous_body(
             tools_executed=len(executions),
             surface_summary_data=summary,
         )
+        if pending_phase and current_phase != "report":
+            sample = ", ".join(pending_phase[:8])
+            kickoff = (
+                f"{kickoff}\n\n[Pendentes do perfil — rode UMA agora]: {sample}"
+                f"{'…' if len(pending) > 8 else ''} "
+                f"({len(pending)} restantes). Varie as ferramentas; não repita as já usadas."
+            )
         messages.append({"role": "user", "content": kickoff})
 
         if emit:
@@ -477,49 +527,79 @@ def _run_autonomous_body(
             )
 
         rounds_completed = round_idx + 1
-        remaining_tools = MAX_AUTONOMOUS_TOOLS - len(executions)
+        remaining_tools = max(0, mission_budget - len(executions))
+
+        # Marcar tools ausentes (exit 127 / not found)
+        from backend.executor.tool_presence import looks_like_missing_binary, mark_tool_unavailable
+
+        for ex in executions[-per_round:]:
+            if looks_like_missing_binary(ex.exit_code, ex.stderr or "", ex.stdout or ""):
+                bin_name = (ex.tool or "").strip().lower()
+                if not bin_name and ex.command:
+                    bin_name = ex.command.strip().split()[0].split("/")[-1].lower()
+                if bin_name:
+                    mark_tool_unavailable(bin_name)
 
         # Avanço de fase após a rodada
         surface = load_surface(recon_target) or surface
         prev_phase = surface.get("phase") or "recon"
         surface, decision = advance_surface_phase(surface)
         save_surface(recon_target, surface)
-        if decision.advanced and emit:
-            emit(
-                "phase_change",
-                {
-                    "from": prev_phase,
-                    "to": decision.phase,
-                    "reason": decision.reason,
-                    "can_finish": decision.can_finish,
-                    "surface": surface_summary(surface),
-                },
-            )
+        if decision.advanced:
+            if emit:
+                emit(
+                    "phase_change",
+                    {
+                        "from": prev_phase,
+                        "to": decision.phase,
+                        "reason": decision.reason,
+                        "can_finish": decision.can_finish,
+                        "surface": surface_summary(surface),
+                    },
+                )
+            pend_after = pending_scan_tools(scan_tools, surface.get("tools_run") or [])
             messages.append(
                 {
                     "role": "user",
                     "content": (
                         f"[METODOLOGIA] Fase avançou: {prev_phase} → {decision.phase}. "
                         f"{decision.reason}\n"
-                        f"{phase_prompt_block(decision.phase, surface_summary(surface))}"
+                        f"{phase_prompt_block(decision.phase, surface_summary(surface), pending_tools=pend_after)}"
                     ),
                 }
             )
 
         if finished:
-            final_message = text
-            objective_met = met
-            if get_mission_registry().is_cancelled(mission_id):
-                stopped_reason = "cancelled"
-            elif met:
-                stopped_reason = "objective_met"
+            # Soft-block: ainda há pendentes e budget — peça mais uma tool
+            pend_now = pending_scan_tools(scan_tools, (load_surface(recon_target) or {}).get("tools_run") or [])
+            if pend_now and remaining_tools > 0 and len(pend_now) > 3 and current_phase != "report":
+                sample = ", ".join(pend_now[:8])
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            f"[Cobertura] Ainda faltam {len(pend_now)} ferramentas do perfil "
+                            f"e há orçamento ({remaining_tools}). "
+                            f"Não finalize ainda — rode UMA de: {sample}. "
+                            "Só chame finish_mission depois ou na fase report."
+                        ),
+                    }
+                )
+                finished = False
+                objective_met = False
             else:
-                stopped_reason = "finished_early"
-            # Marca fase report ao encerrar
-            surface = load_surface(recon_target) or surface
-            surface["phase"] = "report"
-            save_surface(recon_target, surface)
-            break
+                final_message = text
+                objective_met = met
+                if get_mission_registry().is_cancelled(mission_id):
+                    stopped_reason = "cancelled"
+                elif met:
+                    stopped_reason = "objective_met"
+                else:
+                    stopped_reason = "finished_early"
+                surface = load_surface(recon_target) or surface
+                surface["phase"] = "report"
+                save_surface(recon_target, surface)
+                break
 
         if text:
             final_message = text
@@ -674,6 +754,7 @@ def run_autonomous_stream(
     chat_session_id: str | None = None,
     scan_profile: str | None = None,
     custom_tools: list[str] | None = None,
+    attachments: list | None = None,
 ) -> Generator[str, None, None]:
     event_queue: Queue[str | None] = Queue()
 
@@ -693,6 +774,7 @@ def run_autonomous_stream(
                 chat_session_id=chat_session_id,
                 scan_profile=scan_profile,
                 custom_tools=custom_tools,
+                attachments=attachments,
             )
             event_queue.put(
                 format_sse(

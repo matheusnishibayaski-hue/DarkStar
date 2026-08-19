@@ -1,10 +1,13 @@
 import { MODEL_STORAGE_KEY } from "./constants.js";
 import { apiFetch } from "./api.js";
+import { updateKaliTools } from "./api/routes.js";
 import { escapeHtml } from "./exec.js";
 import { getActiveSession, saveStore } from "./sessions.js";
+import { isElevated, openMasterKeyModal } from "./master-key.js";
 
 /** @type {Record<string, unknown>} */
 let ctx = {};
+let toolsUpdateInFlight = false;
 
 export let preferredTool = "auto";
 export let toolCategories = [];
@@ -61,6 +64,57 @@ export function selectDefaultModelFromCatalog() {
 
 export function initToolsPanel(context) {
   ctx = context;
+  const btn = document.getElementById("btn-tools-update");
+  btn?.addEventListener("click", () => {
+    void runToolsUpdate();
+  });
+}
+
+async function runToolsUpdate() {
+  const btn = document.getElementById("btn-tools-update");
+  if (toolsUpdateInFlight) return;
+
+  if (!isElevated()) {
+    ctx.toast?.("Desbloqueie com a master key para atualizar as tools", "warn");
+    openMasterKeyModal();
+    return;
+  }
+
+  toolsUpdateInFlight = true;
+  const prevLabel = btn?.textContent || "Atualizar tools";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Atualizando…";
+  }
+  ctx.toast?.("Atualizando pacotes do Kali (apt-get)…", "info");
+
+  try {
+    const res = await updateKaliTools({ upgrade: true });
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 403) {
+      ctx.toast?.(data.detail || "Master key necessária", "warn");
+      openMasterKeyModal();
+      return;
+    }
+    if (!res.ok || !data.ok) {
+      const detail = data.detail || data.error || `HTTP ${res.status}`;
+      ctx.toast?.(`Falha ao atualizar: ${detail}`, "error");
+      return;
+    }
+    const steps = Array.isArray(data.steps) ? data.steps.map((s) => s.name).join(" + ") : "update";
+    ctx.toast?.(
+      `Tools atualizadas (${steps}) em ${data.duration_sec ?? "?"}s`,
+      "success",
+    );
+  } catch (err) {
+    ctx.toast?.(`Falha ao atualizar: ${err?.message || err}`, "error");
+  } finally {
+    toolsUpdateInFlight = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = prevLabel;
+    }
+  }
 }
 
 export function getPreferredTool() {
@@ -311,6 +365,7 @@ export function renderToolList(filter = "") {
   autoCard.className = `tool-card tool-card-wide${preferredTool === "auto" ? " active" : ""}`;
   autoCard.innerHTML = `
     <div class="tool-card-main">
+      <span class="tool-item-cat">recomendado</span>
       <span class="tool-item-name">auto</span>
       <span class="tool-item-desc">A IA escolhe a ferramenta ideal para cada pedido — recomendado na maioria dos casos</span>
     </div>
@@ -332,16 +387,18 @@ export function renderToolList(filter = "") {
       const id = tool.id || tool;
       const summary = tool.summary || "";
       const example = tool.example || "";
+      const missing = tool.available === false;
 
       const card = document.createElement("div");
-      card.className = `tool-card${preferredTool === id ? " active" : ""}`;
+      card.className = `tool-card${preferredTool === id ? " active" : ""}${missing ? " tool-card-missing" : ""}`;
+      if (missing) card.title = "Binário não encontrado no Kali agora";
 
       const main = document.createElement("div");
       main.className = "tool-card-main";
       main.innerHTML = `
         <span class="tool-item-cat">${escapeHtml(cat.name)}</span>
         <span class="tool-item-name">${escapeHtml(id)}</span>
-        <span class="tool-item-desc">${escapeHtml(summary)}</span>
+        ${summary ? `<span class="tool-item-desc">${escapeHtml(summary)}</span>` : ""}
         ${example ? `<code class="tool-item-example">${escapeHtml(example)}</code>` : ""}
       `;
       main.addEventListener("click", () => selectTool(id));
@@ -386,7 +443,7 @@ export function selectTool(tool, exampleText = null) {
 
 export async function loadTools() {
   try {
-    const res = await apiFetch("/api/tools");
+    const res = await apiFetch("/api/tools?probe=1");
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.categories) && data.categories.length > 0) {

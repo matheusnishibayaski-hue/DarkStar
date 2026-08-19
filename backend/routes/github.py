@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from backend.integrations.github import GitHubClient
+from backend.integrations.github import GitHubClient, parse_repo_nwo
 
 router = APIRouter(prefix="/api/github", tags=["github"])
 
@@ -97,6 +97,51 @@ def update_commit_status(req: UpdateStatusRequest):
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to update status")
     return {"status": "updated", "state": req.state, "description": req.description}
+
+
+@router.get("/tree")
+def github_tree(repo: str = "", path: str = ""):
+    nwo = parse_repo_nwo(repo)
+    if not nwo:
+        raise HTTPException(status_code=400, detail="repo inválido (use owner/repo)")
+    client = GitHubClient.for_browse()
+    if not client.is_available():
+        raise HTTPException(status_code=501, detail="GitHub client unavailable")
+    items = client.list_tree(nwo, path)
+    if items is None:
+        raise HTTPException(status_code=404, detail="repositório ou caminho não encontrado")
+    return {"repo": nwo, "path": path, "items": items}
+
+
+@router.get("/file")
+def github_file(repo: str = "", path: str = ""):
+    nwo = parse_repo_nwo(repo)
+    if not nwo:
+        raise HTTPException(status_code=400, detail="repo inválido (use owner/repo)")
+    if not (path or "").strip():
+        raise HTTPException(status_code=400, detail="path obrigatório")
+    client = GitHubClient.for_browse()
+    if not client.is_available():
+        raise HTTPException(status_code=501, detail="GitHub client unavailable")
+    data = client.read_file(nwo, path)
+    if data is None:
+        raise HTTPException(status_code=404, detail="arquivo não encontrado")
+    return {"repo": nwo, **data}
+
+
+@router.get("/project")
+def github_project(repo: str = ""):
+    """Inventário + amostra priorizada (mesmas regras da Pasta local)."""
+    nwo = parse_repo_nwo(repo)
+    if not nwo:
+        raise HTTPException(status_code=400, detail="repo inválido (use owner/repo)")
+    client = GitHubClient.for_browse()
+    if not client.is_available():
+        raise HTTPException(status_code=501, detail="GitHub client unavailable")
+    data = client.ingest_project(nwo)
+    if data is None:
+        raise HTTPException(status_code=404, detail="repositório não encontrado")
+    return data
 
 
 @router.get("/status")

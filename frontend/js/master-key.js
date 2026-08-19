@@ -101,27 +101,14 @@ function updatePrivilegeUi() {
   }
   if (btn) {
     const label = btn.querySelector("[data-key-label]");
-    const text = elevated ? "06 master key · full" : "06 master key";
+    const text = elevated ? "master key · full" : "master key";
     if (label) label.textContent = text;
-    else btn.textContent = text;
     btn.title = elevated
       ? "Master key ativa — clique para gerenciar"
       : "Master key — desbloquear perfil full";
     btn.classList.toggle("term-btn--active", elevated);
   }
-  const offensive = document.getElementById("offensive-mode-toggle");
-  const offensiveWrap = document.getElementById("offensive-mode-control");
-  if (offensive && !elevated) {
-    offensive.checked = false;
-    offensive.dispatchEvent(new Event("change", { bubbles: true }));
-  }
-  if (offensiveWrap) {
-    offensiveWrap.classList.toggle("is-locked", !elevated);
-    offensiveWrap.title = elevated
-      ? "Modo ofensivo — libera ferramentas agressivas no Piloto"
-      : "Bloqueado no perfil B — desbloqueie com a master key";
-  }
-  if (offensive) offensive.disabled = !elevated;
+  document.documentElement.classList.toggle("mode-elevated", elevated);
 }
 
 async function submitMasterKey() {

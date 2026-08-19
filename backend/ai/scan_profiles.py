@@ -83,6 +83,7 @@ def resolve_scan_tools(
     custom_tools: list[str] | None = None,
     *,
     include_all_allowed: bool = False,
+    available_only: bool = False,
 ) -> list[str]:
     p = normalize_profile(profile)
     if p == "basic":
@@ -91,7 +92,13 @@ def resolve_scan_tools(
         base = INTERMEDIATE_TOOLS
     elif p == "full":
         if include_all_allowed:
-            return all_allowed_tool_ids()
+            ordered = all_allowed_tool_ids()
+            if available_only:
+                from backend.executor.tool_presence import filter_available
+
+                ok, _ = filter_available(ordered)
+                return ok
+            return ordered
         base = FULL_TOOLS
     else:
         base = [t.strip().lower() for t in (custom_tools or []) if t and t.strip()]
@@ -102,6 +109,11 @@ def resolve_scan_tools(
                 continue
             seen.add(t)
             out.append(t)
+        if available_only:
+            from backend.executor.tool_presence import filter_available
+
+            ok, _ = filter_available(out)
+            return ok
         return out
 
     seen: set[str] = set()
@@ -110,7 +122,26 @@ def resolve_scan_tools(
         if t not in seen and t in TOOL_CATALOG:
             seen.add(t)
             ordered.append(t)
+    if available_only:
+        from backend.executor.tool_presence import filter_available
+
+        ok, _ = filter_available(ordered)
+        return ok
     return ordered
+
+
+def pending_scan_tools(scan_tools: list[str], tools_run: list[str] | None) -> list[str]:
+    """Ferramentas do perfil ainda não executadas (ordem do perfil)."""
+    used = {str(t).strip().lower() for t in (tools_run or []) if t}
+    out: list[str] = []
+    seen: set[str] = set()
+    for t in scan_tools or []:
+        key = str(t).strip().lower()
+        if not key or key in used or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
 
 
 def max_tool_budget(profile: str, tool_count: int) -> int:

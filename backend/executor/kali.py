@@ -445,6 +445,16 @@ def execute_kali_command_stream(
             log_file_id=log_id,
             tool=binary,
         )
+        try:
+            from backend.executor.tool_presence import (
+                looks_like_missing_binary,
+                mark_tool_unavailable,
+            )
+
+            if looks_like_missing_binary(exit_code, stderr or "", stdout or ""):
+                mark_tool_unavailable(binary)
+        except Exception:
+            pass
         yield _finalize_stream_result(
             result=result,
             args=args,

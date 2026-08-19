@@ -65,29 +65,29 @@ function renderStep() {
     {
       title: "1/3 — Ambiente",
       html: renderHealthStep(),
-      next: "continuar",
+      next: "Continuar",
     },
     {
       title: "2/3 — Escopo de alvos",
       html: `
         <p>Restrinja scans no <strong>cliente ativo</strong> (alvos do ROE) ou em <code>ALLOWED_TARGETS</code> no <code>.env</code>.</p>
         <pre class="onboarding-code">ALLOWED_TARGETS=scanme.nmap.org,10.0.0.5</pre>
-        <p class="onboarding-note">Lista do cliente prevalece se preenchida. Ambos vazios = sem restrição (aviso no health).</p>
+        <p class="onboarding-note">A lista do cliente prevalece se estiver preenchida. Ambos vazios = sem restrição (aviso no health).</p>
       `,
-      next: "continuar",
+      next: "Continuar",
     },
     {
-      title: "3/3 — Primeira vitória",
+      title: "3/3 — Primeiro scan",
       html: `
-        <p>Fluxo lab recomendado (alvo público autorizado):</p>
+        <p>Fluxo de lab (alvo público autorizado):</p>
         <ol class="onboarding-steps">
-          <li>Peça: <code>nmap -sV scanme.nmap.org</code> (ou abra o <strong>pilot</strong>)</li>
+          <li>Peça <code>nmap -sV scanme.nmap.org</code> ou abra o <strong>Piloto</strong></li>
           <li>Aguarde <code>[ok]</code> e o dashboard</li>
-          <li>Abra <strong>Relatórios</strong> (<kbd>Alt+R</kbd>) → <strong>Baixar PDF</strong> (a triagem abre se precisar)</li>
+          <li>Abra <strong>Relatórios</strong> (<kbd>Alt+R</kbd>) → <strong>Baixar PDF</strong></li>
         </ol>
-        <p class="onboarding-note">Se aparecer <code>[blocked]</code>: confira whitelist e o escopo do cliente / <code>ALLOWED_TARGETS</code>.</p>
+        <p class="onboarding-note">Se aparecer <code>[blocked]</code>, confira a whitelist e o escopo do cliente / <code>ALLOWED_TARGETS</code>.</p>
       `,
-      next: "começar",
+      next: "Começar",
     },
   ];
 
@@ -96,22 +96,22 @@ function renderStep() {
   onboardingBody.innerHTML = current.html;
   if (onboardingNext) onboardingNext.textContent = current.next;
   if (onboardingSkip) {
-    onboardingSkip.textContent = step === 1 ? "continuar sem escopo" : "pular";
+    onboardingSkip.textContent = step === 1 ? "Continuar sem escopo" : "Pular";
   }
 }
 
 function renderHealthStep() {
   if (!healthData) {
-    return '<p class="onboarding-loading">verificando docker e kali…</p>';
+    return '<p class="onboarding-loading">Verificando Docker e Kali…</p>';
   }
   const docker = healthData.docker ? "ok" : "off";
   const kali = healthData.kali_container ? "ok" : "warn";
   const version = healthData.version || "—";
   return `
     <ul class="onboarding-checklist">
-      <li>versão <strong>${escapeHtml(version)}</strong></li>
-      <li>docker: <strong class="onboarding-${docker}">${docker}</strong></li>
-      <li>kali: <strong class="onboarding-${kali}">${kali}</strong></li>
+      <li>Versão <strong>${escapeHtml(version)}</strong></li>
+      <li>Docker: <strong class="onboarding-${docker}">${docker}</strong></li>
+      <li>Kali: <strong class="onboarding-${kali}">${kali}</strong></li>
     </ul>
     ${!healthData.docker || !healthData.kali_container
       ? `<p class="onboarding-warn">${escapeHtml(healthData.kali_error || "Inicie Docker e rode start.bat repair")}</p>`

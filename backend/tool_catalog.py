@@ -330,19 +330,20 @@ def get_tool_info(tool_id: str) -> dict[str, str]:
     }
 
 
-def enrich_categories(categories: list[dict]) -> list[dict]:
+def enrich_categories(categories: list[dict], *, presence: dict[str, bool] | None = None) -> list[dict]:
     enriched = []
     for cat in categories:
         tools = []
         for tool_id in cat.get("tools", []):
             meta = get_tool_info(tool_id)
-            tools.append(
-                {
-                    "id": tool_id,
-                    "summary": meta["summary"],
-                    "example": meta["example"],
-                }
-            )
+            row = {
+                "id": tool_id,
+                "summary": meta["summary"],
+                "example": meta["example"],
+            }
+            if presence is not None:
+                row["available"] = bool(presence.get(str(tool_id).lower(), False))
+            tools.append(row)
         enriched.append(
             {
                 "id": cat["id"],

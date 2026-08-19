@@ -99,16 +99,11 @@ export async function setOfflineMode(on, { silent = false, persistServer = true 
 }
 
 /**
- * @param {HTMLInputElement | null} input
+ * @param {HTMLInputElement | null} [input]
  */
-export function initOfflineMode(input) {
-  toggleEl = input;
-  if (!input) {
-    applyOfflineTheme(loadOfflinePreference());
-    return;
-  }
+export function initOfflineMode(input = null) {
+  toggleEl = input || null;
 
-  // Preferência local → sincroniza no servidor; se não houver, lê o servidor
   void (async () => {
     const localPref = loadOfflinePreference();
     try {
@@ -116,7 +111,6 @@ export function initOfflineMode(input) {
       if (res.ok) {
         const data = await res.json();
         const serverOffline = Boolean(data.offline || data.provider === "ollama");
-        // localStorage vence na 1ª pintura da sessão do browser
         const wantOffline = localPref || serverOffline;
         await setOfflineMode(wantOffline, { silent: true, persistServer: true });
         return;
@@ -127,6 +121,7 @@ export function initOfflineMode(input) {
     await setOfflineMode(localPref, { silent: true, persistServer: true });
   })();
 
+  if (!input) return;
   input.addEventListener("change", () => {
     void setOfflineMode(input.checked);
   });

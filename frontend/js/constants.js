@@ -32,7 +32,8 @@ export const HELP_HTML = `
     <li><kbd>M</kbd> ou <kbd>☰</kbd> — recolher/expandir barra lateral</li>
     <li>Sidebar — alternar entre conversas salvas</li>
     <li><kbd>Esc</kbd> — fechar painéis</li>
-    <li><kbd>05 som</kbd> na sidebar — ligar/desligar efeitos sonoros CRT</li>
+    <li><kbd>03 som</kbd> na sidebar — ligar/desligar efeitos sonoros</li>
+    <li>Canto superior do chat — anjo (perfil B), diabo (ofensivo), agente (offline)</li>
   </ul>
 </section>
 <section class="help-section">
@@ -46,11 +47,11 @@ export const HELP_HTML = `
   <h3>Atalhos principais</h3>
   <p class="help-note" style="margin-bottom:0.5rem">Use <kbd>Alt</kbd> + tecla — evita conflito com o navegador (Ctrl+T abre aba, Ctrl+R recarrega, etc.)</p>
   <ul class="help-list">
-    <li><kbd>Alt</kbd>+<kbd>T</kbd> — workspace · ferramentas</li>
+    <li><kbd>Alt</kbd>+<kbd>T</kbd> — abrir workspace (seta à direita)</li>
     <li><kbd>Alt</kbd>+<kbd>P</kbd> — piloto automático</li>
     <li><kbd>Alt</kbd>+<kbd>F</kbd> ou <kbd>Alt</kbd>+<kbd>R</kbd> — relatórios (prévia, carteira e PDF)</li>
     <li><kbd>Alt</kbd>+<kbd>L</kbd> — logs da conversa</li>
-    <li><kbd>Alt</kbd>+<kbd>C</kbd> — mapa mundial de ameaças</li>
+    <li><kbd>Alt</kbd>+<kbd>C</kbd> — dashboard (métricas da conversa)</li>
     <li><kbd>Alt</kbd>+<kbd>N</kbd> — novo chat</li>
     <li><kbd>Alt</kbd>+<kbd>H</kbd> ou <kbd>F1</kbd> — tour guiado (ajuda interativa)</li>
     <li><kbd>Alt</kbd>+<kbd>K</kbd> ou <kbd>Ctrl</kbd>+<kbd>K</kbd> — focar prompt</li>
@@ -84,11 +85,10 @@ export const HELP_HTML = `
   <h3>Modos</h3>
   <ul class="help-list">
     <li><strong>Chat</strong> — a Argus executa ferramentas Kali via linguagem natural</li>
-    <li><strong>01 workspace</strong> — ferramentas · logs · relatórios · mapa · dashboard</li>
+    <li><strong>Workspace</strong> — seta na borda direita (Alt+T); ferramentas · logs · relatórios · dashboard</li>
     <li><strong>pilot</strong> — alvo + tipo de scan (básico → completo); PDF ao fim da missão</li>
-    <li><strong>03 offensive</strong> — requer master key (perfil full)</li>
-    <li><strong>04 offline</strong> — Argus via Ollama local (sem OpenRouter)</li>
-    <li><strong>05 som</strong> — bipes CRT · <strong>06 ajuda</strong> — tour (F1)</li>
+    <li><strong>Modos (canto do chat)</strong> — anjo = perfil B · diabo = ofensivo (master key) · agente = offline</li>
+    <li><strong>03 som</strong> — bipes · <strong>04 ajuda</strong> — tour (F1)</li>
   </ul>
 </section>
 <p class="help-note">Use apenas em alvos autorizados.</p>

@@ -66,6 +66,141 @@ class GitHubClient:
     def is_available(self) -> bool:
         return self._client is not None
 
+    @classmethod
+    def for_browse(cls) -> GitHubClient:
+        inst = cls()
+        if inst._client is not None:
+            return inst
+        try:
+            from github import Github
+
+            inst._client = Github()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("github_browse_init_failed: %s", exc)
+        return inst
+
+    def list_tree(self, repo_url: str, path: str = "") -> list[dict[str, Any]] | None:
+        repo = self.get_repo(repo_url)
+        if not repo:
+            return None
+        try:
+            contents = repo.get_contents(path or "")
+            if not isinstance(contents, list):
+                contents = [contents]
+            items: list[dict[str, Any]] = []
+            for item in contents:
+                kind = "dir" if getattr(item, "type", "") == "dir" else "file"
+                items.append(
+                    {
+                        "name": str(getattr(item, "name", "") or ""),
+                        "path": str(getattr(item, "path", "") or ""),
+                        "type": kind,
+                        "size": int(getattr(item, "size", 0) or 0),
+                    }
+                )
+            return items
+        except Exception as exc:  # noqa: BLE001
+            logger.error("github_list_tree_failed: %s", exc)
+            return None
+
+    def list_recursive_tree(self, repo_url: str) -> list[dict[str, Any]] | None:
+        """Lista arquivos do repo via Git Trees API (recursive=1)."""
+        repo = self.get_repo(repo_url)
+        if not repo:
+            return None
+        try:
+            branch = repo.get_branch(repo.default_branch)
+            sha = branch.commit.sha
+            tree = repo.get_git_tree(sha, recursive=True)
+            items: list[dict[str, Any]] = []
+            for entry in getattr(tree, "tree", []) or []:
+                if getattr(entry, "type", "") != "blob":
+                    continue
+                items.append(
+                    {
+                        "name": str(getattr(entry, "path", "") or "").rsplit("/", 1)[-1],
+                        "path": str(getattr(entry, "path", "") or ""),
+                        "type": "file",
+                        "size": int(getattr(entry, "size", 0) or 0),
+                    }
+                )
+            return items
+        except Exception as exc:  # noqa: BLE001
+            logger.error("github_list_recursive_tree_failed: %s", exc)
+            return None
+
+    def ingest_project(self, repo_url: str) -> dict[str, Any] | None:
+        """Mapa + amostra priorizada (mesmas regras da Pasta local)."""
+        from backend.integrations.project_ingest import (
+            MAX_CONTENT_CHARS,
+            MAX_FILE_BYTES,
+            PROJECT_MAP_NAME,
+            build_project_map,
+            pick_content_paths,
+        )
+
+        entries = self.list_recursive_tree(repo_url)
+        if entries is None:
+            return None
+        proj_map = build_project_map(entries)
+        picks = pick_content_paths(entries)
+        files_out: list[dict[str, Any]] = []
+        for pick in picks:
+            path = pick["path"]
+            size = int(pick.get("size") or 0)
+            if size > MAX_FILE_BYTES:
+                continue
+            data = self.read_file(repo_url, path, max_bytes=MAX_FILE_BYTES)
+            if not data or not data.get("content"):
+                continue
+            content = str(data["content"])[:MAX_CONTENT_CHARS]
+            files_out.append(
+                {
+                    "path": data.get("path") or path,
+                    "content": content,
+                    "truncated": bool(data.get("truncated")),
+                }
+            )
+        return {
+            "repo": parse_repo_nwo(repo_url) or repo_url,
+            "map_name": PROJECT_MAP_NAME,
+            "map_text": proj_map.text[:MAX_CONTENT_CHARS],
+            "files": files_out,
+            "stats": {
+                "total_seen": proj_map.total_seen,
+                "kept": proj_map.kept_count,
+                "ignored": proj_map.ignored_count,
+                "attached": len(files_out),
+            },
+        }
+
+    def read_file(self, repo_url: str, path: str, max_bytes: int = 200000) -> dict[str, Any] | None:
+        repo = self.get_repo(repo_url)
+        if not repo or not (path or "").strip():
+            return None
+        try:
+            content = repo.get_contents(path)
+            if isinstance(content, list):
+                return None
+            if getattr(content, "type", "") == "dir":
+                return None
+            raw = content.decoded_content or b""
+            truncated = len(raw) > max_bytes
+            if truncated:
+                raw = raw[:max_bytes]
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                text = raw.decode("utf-8", errors="replace")
+            return {
+                "path": str(getattr(content, "path", path) or path),
+                "content": text,
+                "truncated": truncated,
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.error("github_read_file_failed: %s", exc)
+            return None
+
     def get_repo(self, repo_url: str):
         if not self._client:
             return None

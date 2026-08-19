@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+import io
 from pathlib import Path
 from unittest.mock import patch
 
@@ -78,6 +79,15 @@ class TestDashboardStore(unittest.TestCase):
         self.assertTrue(any(t["title"] for t in tops))
         trend = db_mod.vulnerability_trend(days=30, session_id=sid)
         self.assertTrue(isinstance(trend, list))
+        bundle = db_mod.dashboard_bundle(days=30, session_id=sid)
+        self.assertEqual(bundle["metrics"]["total_scans"], metrics["total_scans"])
+        self.assertIn("trend", bundle)
+        self.assertIn("history", bundle)
+        # Outra conversa sem scans não herda opens globais
+        empty_m = db_mod.compute_metrics(days=30, session_id="empty-other-sess")
+        self.assertEqual(empty_m["total_scans"], 0)
+        self.assertEqual(empty_m["open_vulnerabilities"], 0)
+        self.assertEqual(db_mod.get_top_issues(limit=5, session_id="empty-other-sess"), [])
 
 
 class TestDashboardRoutes(unittest.TestCase):
@@ -119,8 +129,30 @@ class TestDashboardRoutes(unittest.TestCase):
                 self.assertEqual(r.json()["status"], "ok")
                 r2 = client.get(f"/api/dashboard/scan-history?{q}")
                 self.assertEqual(r2.status_code, 200)
+                bundle = client.get(f"/api/dashboard/bundle?{q}")
+                self.assertEqual(bundle.status_code, 200)
+                body = bundle.json()
+                self.assertEqual(body["status"], "ok")
+                self.assertIn("metrics", body)
+                self.assertIn("trend", body)
+                self.assertIn("top_issues", body)
+                self.assertIn("history", body)
                 r3 = client.get(f"/api/dashboard/export?format=json&{q}")
                 self.assertEqual(r3.status_code, 200)
+                xlsx = client.get(f"/api/dashboard/export?format=xlsx&{q}")
+                self.assertEqual(xlsx.status_code, 200)
+                self.assertIn(
+                    "spreadsheetml",
+                    xlsx.headers.get("content-type", ""),
+                )
+                self.assertTrue(xlsx.content[:2] == b"PK")
+                from openpyxl import load_workbook
+
+                wb = load_workbook(filename=io.BytesIO(xlsx.content))
+                self.assertEqual(
+                    set(wb.sheetnames),
+                    {"Resumo", "Tendência", "Principais problemas", "Histórico de scans"},
+                )
             db_mod.reset_engine_for_tests()
 
 

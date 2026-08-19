@@ -206,6 +206,14 @@ def generate_live_report_html(
   .finding.medio {{ border-color:#d97706; }}
   .finding.baixo {{ border-color:#2563eb; }}
   .finding.info {{ border-color:#6b7280; }}
+  .finding .impact {{ margin:4px 0 0; font-size:13px; }}
+  .finding details.tech {{ margin-top:8px; font-size:12px; color:var(--muted); }}
+  .finding details.tech summary {{ cursor:pointer; color:var(--accent); }}
+  .simple-box {{ border:1px solid var(--line); padding:14px 16px; margin:12px 0 18px; background:#f8fafc; }}
+  .simple-box h2 {{ margin:0 0 8px; font-size:13px; letter-spacing:.06em; text-transform:uppercase;
+                    border:none; padding:0; color:var(--muted); }}
+  .simple-box .lead {{ margin:0 0 10px; }}
+  .simple-box .now {{ margin:0; font-weight:600; }}
   .tag {{ display:inline-block; font-size:10px; padding:2px 6px; border:1px solid var(--line); margin-right:6px; }}
   .empty {{ padding:40px 16px; text-align:center; color:var(--muted); }}
   .foot {{ margin-top:36px; font-size:11px; color:var(--muted); border-top:1px solid var(--line); padding-top:10px; }}
@@ -222,6 +230,7 @@ def generate_live_report_html(
   <h1>{_esc(model["title"])}</h1>
   <div class="meta">CONFIDENCIAL · {model["now"]} · Alvo(s): {alvos}</div>
   {empty_banner}
+  {_simple_summary_html(model)}
   <div class="kpis">
     <div class="kpi"><b>{len(executions)}</b><span>testes</span></div>
     <div class="kpi"><b>{len(findings)}</b><span>achados</span></div>
@@ -229,45 +238,93 @@ def generate_live_report_html(
     <div class="kpi"><b>{len(fps)}</b><span>falsos +</span></div>
     {risk_html}
   </div>
-  {charts_html}
 
-  <h2>1. Resumo executivo</h2>
-  <p class="lead">{_esc(model.get("executive") or "")}</p>
-
-  <h2>2. Escopo</h2>
-  <p>{_esc(model["scope"])}</p>
-  <p>Engajamento assistido (reconhecimento → enumeração → varredura → verificação). 
-  Testes em container Kali isolado. Sem credenciais autenticadas, salvo se declaradas no chat.</p>
-
-  <h2>3. Testes realizados</h2>
-  <p>{model["ok_exec"]} execução(ões) com sucesso · {model["fail_exec"]} falha(s)/bloqueio(s).</p>
-  {tests_html}
-
-  <h2>4. O que foi encontrado</h2>
+  <h2>1. O que encontramos</h2>
   {findings_html}
 
-  <h2>5. Como corrigir</h2>
+  <h2>2. O que fazer agora</h2>
   {rem_html}
 
-  <h2>6. Notas da conversa</h2>
-  {chat_html}
+  <h2>3. Escopo do trabalho</h2>
+  <p>{_esc(model["scope"])}</p>
+  <p>Testes em ambiente isolado (reconhecimento → enumeração → varredura → verificação).
+  Sem login autenticado, salvo se você informou credenciais no chat.</p>
 
-  <h2>7. Conformidade indicativa ISO 27001 / SOC 2</h2>
-  {iso_html}
-
-  <h2>8. Metodologia e limitações</h2>
-  <ul>
-    <li>Reconhecimento, enumeração, varredura e verificação PoC não destrutiva.</li>
-    <li>WAF/CDN podem gerar falsos negativos; ausência de achado não garante segurança.</li>
-    <li>CVSS sem NVD é estimado. Gravidade no relatório usa o tipo do achado e a tag do scanner, não só o campo “info” dos logs.</li>
-    <li>ISO/SOC 2 aqui é mapeamento por palavras-chave — não substitui auditoria nem certificação.</li>
-    <li>Revise pendentes antes da entrega ao cliente. O PDF segue este mesmo modelo.</li>
-  </ul>
-  <div class="foot">Documento gerado automaticamente a partir desta conversa. Atualiza em tempo real conforme novos testes. DarkStar · Argus v{_esc(APP_VERSION)}.</div>
+  <details>
+    <summary>Detalhes técnicos (gráficos, testes, conformidade)</summary>
+    {charts_html}
+    <h2>Testes realizados</h2>
+    <p>{model["ok_exec"]} com sucesso · {model["fail_exec"]} falha(s)/bloqueio(s).</p>
+    {tests_html}
+    <h2>Notas da conversa</h2>
+    {chat_html}
+    <h2>Conformidade indicativa ISO 27001 / SOC 2</h2>
+    {iso_html}
+    <h2>Metodologia e limitações</h2>
+    <ul>
+      <li>Reconhecimento, enumeração, varredura e verificação não destrutiva.</li>
+      <li>Proteções de borda (WAF/CDN) podem esconder problemas; ausência de achado não garante segurança.</li>
+      <li>Pontuação de risco e gravidade são estimativas com base nos testes desta conversa.</li>
+      <li>ISO/SOC 2 aqui é mapeamento indicativo — não substitui auditoria nem certificação.</li>
+      <li>Revise itens pendentes antes de enviar ao cliente. O PDF completo traz o detalhe técnico.</li>
+    </ul>
+  </details>
+  <div class="foot">Prévia gerada automaticamente a partir desta conversa. Atualiza conforme novos testes. DarkStar · Argus v{_esc(APP_VERSION)}.</div>
 </div>
 </body>
 </html>
 """
+
+
+def _simple_summary_html(model: dict[str, Any]) -> str:
+    risk = model.get("risk") or {}
+    score = int(risk.get("score") or 0)
+    label = str(risk.get("label") or "não calculado")
+    confirmed = model.get("confirmed") or []
+    pending = model.get("pending") or []
+    findings = model.get("findings") or []
+    remediations = model.get("remediations") or []
+    if model.get("empty"):
+        found = "Ainda não rodamos testes nesta conversa."
+        now = "Peça à Argus um reconhecimento ou inicie o piloto automático."
+    else:
+        n = len(findings)
+        n_c = len(confirmed)
+        n_p = len(pending)
+        if n == 0:
+            found = "Os testes rodaram, mas ainda não há achados estruturados para listar."
+        elif n_c:
+            found = (
+                f"Encontramos {n} problema(s); {n_c} já confirmado(s) como real(is)"
+                + (f" e {n_p} ainda pendente(s) de triagem." if n_p else ".")
+            )
+        else:
+            found = (
+                f"Listamos {n} possível(is) problema(s)"
+                + (f" — {n_p} aguardando triagem." if n_p else ".")
+            )
+        if remediations:
+            top = remediations[0]
+            title = top.get("remediation_title") or top.get("finding_title") or "correção prioritária"
+            now = f"Comece por: {title}."
+            if len(remediations) > 1:
+                now += f" Há mais {len(remediations) - 1} correção(ões) na lista abaixo."
+        elif pending:
+            now = "Triagem: confirme ou descarte os pendentes antes de entregar o relatório."
+        else:
+            now = "Revise os achados abaixo e priorize os de maior gravidade."
+    exec_txt = str(model.get("executive") or "").strip()
+    exec_block = f"<p class='lead'>{_esc(exec_txt)}</p>" if exec_txt else ""
+    return f"""
+  <div class="simple-box">
+    <h2>Risco geral</h2>
+    <p class="now">{score}/100 — {_esc(label)}</p>
+    <h2>O que encontramos</h2>
+    <p class="lead">{_esc(found)}</p>
+    {exec_block}
+    <h2>O que fazer agora</h2>
+    <p class="now">{_esc(now)}</p>
+  </div>"""
 
 
 def _render_iso_soc2(
@@ -360,7 +417,7 @@ def _sev_class(sev: Any) -> str:
 
 def _render_findings(findings: list[dict[str, Any]]) -> str:
     if not findings:
-        return "<p>Nenhum achado estruturado ainda. Quando nuclei/nmap/nikto (ou a triagem) gerarem itens, eles aparecem aqui.</p>"
+        return "<p>Nenhum problema listado ainda. Quando os testes gerarem itens, eles aparecem aqui.</p>"
     parts: list[str] = []
     for i, f in enumerate(findings[:120], 1):
         status = _STATUS.get(
@@ -370,49 +427,54 @@ def _render_findings(findings: list[dict[str, Any]]) -> str:
         host = f.get("surface_target") or f.get("host") or "—"
         evidence = str(f.get("evidence") or "")[:1600]
         cmd = str(f.get("command") or "")[:500]
-        headline = f.get("plain_title") or f.get("title") or "Achado"
+        headline = f.get("plain_title") or f.get("title") or "Problema"
         tech = str(f.get("title") or "")
-        tech_line = (
-            f"<p class='note'>Nome técnico: {_esc(tech)}</p>" if tech and tech != headline else ""
-        )
         what = str(f.get("what_it_is") or "")
         everyday = str(f.get("everyday") or "")
         why = str(f.get("why_it_matters") or "")
+        impact = why or everyday or what or "Impacto ainda não descrito — revise a evidência."
         happen = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("could_happen") or [])[:4])
         decide = "".join(f"<li>{_esc(x)}</li>" for x in (f.get("how_to_decide") or [])[:4])
         kind = _esc(f.get("kind_label") or "")
-        kind_html = f"<span class='tag'>{kind}</span>" if kind else ""
         cwe = _esc(f.get("cwe") or "")
         owasp = _esc(f.get("owasp") or "")
-        refs_html = ""
+        tech_bits: list[str] = []
+        if tech and tech != headline:
+            tech_bits.append(f"<p>Nome técnico: {_esc(tech)}</p>")
+        if what:
+            tech_bits.append(f"<p>{_esc(what)}</p>")
+        if everyday and everyday != impact:
+            tech_bits.append(f"<p><i>{_esc(everyday)}</i></p>")
+        if happen:
+            tech_bits.append(f"<p>Se for verdade, pode acontecer:</p><ul>{happen}</ul>")
+        if decide:
+            tech_bits.append(f"<p>Como decidir:</p><ul>{decide}</ul>")
+        if cmd:
+            tech_bits.append(f"<p>Comando: <code>{_esc(cmd)}</code></p>")
+        if evidence:
+            tech_bits.append(f"<p>Evidência: {_esc(evidence)}</p>")
+        refs = ""
+        if kind:
+            refs += f"<span class='tag'>{kind}</span>"
         if cwe:
-            refs_html += f"<span class='tag'>{cwe}</span>"
+            refs += f"<span class='tag'>{cwe}</span>"
         if owasp:
-            refs_html += f"<span class='tag'>{owasp}</span>"
-        what_html = f"<p>{_esc(what)}</p>" if what else ""
-        everyday_html = f"<p><i>{_esc(everyday)}</i></p>" if everyday else ""
-        why_html = f"<p><b>Por que importa:</b> {_esc(why)}</p>" if why else ""
-        happen_html = (
-            f"<p><b>Se for verdade, pode acontecer:</b></p><ul>{happen}</ul>" if happen else ""
+            refs += f"<span class='tag'>{owasp}</span>"
+        if refs:
+            tech_bits.append(f"<p>{refs}</p>")
+        tech_html = (
+            f"<details class='tech'><summary>Detalhe técnico</summary>{''.join(tech_bits)}</details>"
+            if tech_bits
+            else ""
         )
-        decide_html = f"<p><b>Como decidir:</b></p><ul>{decide}</ul>" if decide else ""
-        cmd_html = f"<p><b>Comando:</b> <code>{_esc(cmd)}</code></p>" if cmd else ""
-        evidence_html = f"<p><b>Evidência:</b> {_esc(evidence)}</p>" if evidence else ""
         parts.append(
             f"<div class='finding {_sev_class(f.get('severity'))}'>"
             f"<p><b>{i}. {_esc(headline)}</b></p>"
-            f"{tech_line}"
-            f"<p><span class='tag'>{_esc(sev_label)}</span><span class='tag'>{_esc(status)}</span>"
-            f"{kind_html}{refs_html}"
-            f"<span class='tag'>{_esc(f.get('tool') or '—')}</span>"
+            f"<p><span class='tag'>{_esc(sev_label)}</span>"
+            f"<span class='tag'>{_esc(status)}</span>"
             f"<span class='tag'>{_esc(host)}</span></p>"
-            f"{what_html}"
-            f"{everyday_html}"
-            f"{why_html}"
-            f"{happen_html}"
-            f"{decide_html}"
-            f"{cmd_html}"
-            f"{evidence_html}"
+            f"<p class='impact'><b>Impacto:</b> {_esc(impact)}</p>"
+            f"{tech_html}"
             f"</div>"
         )
     return "".join(parts)

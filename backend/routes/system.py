@@ -127,7 +127,29 @@ def health():
         "ai_provider": _active_provider(),
         "ai_offline": _active_provider() == "ollama",
         "llm": _llm_health(),
+        **_tools_presence_health(kali_ok),
     }
+
+
+def _tools_presence_health(kali_ok: bool) -> dict:
+    if not kali_ok:
+        return {
+            "tools_probed": 0,
+            "tools_available": 0,
+            "tools_missing_count": 0,
+        }
+    try:
+        from backend.ai.scan_profiles import BASIC_TOOLS
+        from backend.executor.tool_presence import presence_summary
+
+        # Probe leve: só o perfil básico no health (rápido)
+        return presence_summary(list(BASIC_TOOLS))
+    except Exception:
+        return {
+            "tools_probed": 0,
+            "tools_available": 0,
+            "tools_missing_count": 0,
+        }
 
 
 def _active_provider() -> str:
@@ -159,7 +181,13 @@ def api_metrics():
 
 
 @router.get("/tools")
-def api_tools(offensive: bool = False):
+def api_tools(offensive: bool = False, probe: bool = False):
+    presence = None
+    if probe:
+        from backend.executor.tool_presence import probe_tools
+
+        presence = probe_tools()
+
     if offensive:
         from backend.config_tools import ALLOWED_TOOLS
         from backend.tool_catalog import get_tool_info
@@ -167,15 +195,41 @@ def api_tools(offensive: bool = False):
         tools = []
         for tid in sorted(ALLOWED_TOOLS):
             meta = get_tool_info(tid)
-            tools.append(
-                {
-                    "id": tid,
-                    "summary": meta["summary"],
-                    "example": meta["example"],
-                }
-            )
+            row = {
+                "id": tid,
+                "summary": meta["summary"],
+                "example": meta["example"],
+            }
+            if presence is not None:
+                row["available"] = bool(presence.get(tid, False))
+            tools.append(row)
         return {"categories": [{"id": "all", "name": "Permitidas no servidor", "tools": tools}]}
-    return {"categories": enrich_categories(TOOL_CATEGORIES)}
+    return {"categories": enrich_categories(TOOL_CATEGORIES, presence=presence)}
+
+
+@router.post("/system/tools/update")
+def api_tools_update(upgrade: bool = True):
+    """Atualiza pacotes do container Kali (apt-get update [+ upgrade -y]).
+
+    Requer master key (perfil full). Não aceita comandos livres — argv fixo no servidor.
+    """
+    from backend.security.privileges import is_elevated
+    from backend.executor.pkg_update import update_kali_packages
+
+    if not is_elevated():
+        raise HTTPException(
+            status_code=403,
+            detail="Desbloqueie com a master key para atualizar as ferramentas do Kali.",
+        )
+
+    result = update_kali_packages(do_upgrade=upgrade)
+    try:
+        from backend.executor.tool_presence import invalidate_tool_presence_cache
+
+        invalidate_tool_presence_cache()
+    except Exception:
+        pass
+    return result
 
 
 @router.get("/scan-profiles")

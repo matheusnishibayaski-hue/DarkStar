@@ -376,6 +376,39 @@ def get_scan_history(
         return []
 
 
+def _session_finding_keys(
+    db, *, session_id: str, cutoff
+) -> tuple[int, set[str], list[tuple[str, dict[str, Any]]]]:
+    """Retorna (total_scans, vuln_keys, findings_list) só dos scans desta conversa no período."""
+    from backend.database.models_dashboard import ScanHistory
+
+    rows = (
+        db.query(ScanHistory)
+        .filter(
+            ScanHistory.timestamp >= cutoff,
+            ScanHistory.chat_session_id == session_id,
+        )
+        .all()
+    )
+    keys: set[str] = set()
+    findings_flat: list[tuple[str, dict[str, Any]]] = []
+    for s in rows:
+        target = str(s.target or "")
+        try:
+            items = json.loads(s.findings_json or "[]")
+        except json.JSONDecodeError:
+            items = []
+        if not isinstance(items, list):
+            continue
+        for f in items:
+            if not isinstance(f, dict):
+                continue
+            key = _vuln_key(target, f)
+            keys.add(key)
+            findings_flat.append((target, f))
+    return len(rows), keys, findings_flat
+
+
 def compute_metrics(days: int = 30, session_id: str | None = None) -> dict[str, Any]:
     from backend.database.models_dashboard import ScanHistory, VulnerabilityTracking
 
@@ -395,46 +428,33 @@ def compute_metrics(days: int = 30, session_id: str | None = None) -> dict[str, 
     try:
         ensure_dashboard_db()
         cutoff = _utcnow() - timedelta(days=max(1, days))
-        targets = _session_targets(sid)
         with session_scope() as db:
             base = [
                 ScanHistory.timestamp >= cutoff,
                 ScanHistory.chat_session_id == sid,
             ]
             total_scans = db.query(func.count(ScanHistory.id)).filter(*base).scalar() or 0
+            if int(total_scans) == 0:
+                return {**empty, "session_id": sid, "period_days": days}
+
             avg_critical = db.query(func.avg(ScanHistory.critical)).filter(*base).scalar() or 0
             avg_high = db.query(func.avg(ScanHistory.high)).filter(*base).scalar() or 0
             total_vulns = (
                 db.query(func.sum(ScanHistory.vulnerability_count)).filter(*base).scalar() or 0
             )
-            open_q = db.query(func.count(VulnerabilityTracking.id)).filter(
-                VulnerabilityTracking.status == "open"
-            )
-            if targets:
-                open_q = open_q.filter(VulnerabilityTracking.target.in_(targets))
+            _, finding_keys, _ = _session_finding_keys(db, session_id=sid, cutoff=cutoff)
+            if not finding_keys:
+                open_vulns = 0
             else:
-                # Sem alvos na sessão: conta só vulns de targets que aparecem nos scans da sessão
-                scan_targets = [
-                    t[0]
-                    for t in db.query(ScanHistory.target)
-                    .filter(ScanHistory.chat_session_id == sid)
-                    .distinct()
-                    .all()
-                    if t[0]
-                ]
-                if scan_targets:
-                    open_q = open_q.filter(VulnerabilityTracking.target.in_(scan_targets))
-                else:
-                    open_vulns = 0
-                    return {
-                        **empty,
-                        "total_scans": int(total_scans),
-                        "avg_critical": float(avg_critical),
-                        "avg_high": float(avg_high),
-                        "total_vulnerabilities": int(total_vulns),
-                        "open_vulnerabilities": 0,
-                    }
-            open_vulns = open_q.scalar() or 0
+                open_vulns = (
+                    db.query(func.count(VulnerabilityTracking.id))
+                    .filter(
+                        VulnerabilityTracking.status == "open",
+                        VulnerabilityTracking.vuln_key.in_(finding_keys),
+                    )
+                    .scalar()
+                    or 0
+                )
             return {
                 "total_scans": int(total_scans),
                 "avg_critical": float(avg_critical),
@@ -450,32 +470,31 @@ def compute_metrics(days: int = 30, session_id: str | None = None) -> dict[str, 
 
 
 def get_top_issues(limit: int = 10, session_id: str | None = None) -> list[dict[str, Any]]:
-    from backend.database.models_dashboard import ScanHistory, VulnerabilityTracking
+    """Top issues abertos só dos findings dos scans desta conversa."""
+    return get_top_issues_for_period(limit, days=3650, session_id=session_id)
+
+
+def get_top_issues_for_period(
+    limit: int = 10, *, days: int = 30, session_id: str | None = None
+) -> list[dict[str, Any]]:
+    """Top issues abertos só dos findings dos scans da conversa no período."""
+    from backend.database.models_dashboard import VulnerabilityTracking
 
     sid = str(session_id or "").strip()
     if not sid:
         return []
-
     try:
         ensure_dashboard_db()
-        targets = _session_targets(sid)
+        cutoff = _utcnow() - timedelta(days=max(1, days))
         with session_scope() as db:
-            if not targets:
-                targets = [
-                    t[0]
-                    for t in db.query(ScanHistory.target)
-                    .filter(ScanHistory.chat_session_id == sid)
-                    .distinct()
-                    .all()
-                    if t[0]
-                ]
-            if not targets:
+            total, keys, _ = _session_finding_keys(db, session_id=sid, cutoff=cutoff)
+            if total == 0 or not keys:
                 return []
             rows = (
                 db.query(VulnerabilityTracking)
                 .filter(
                     VulnerabilityTracking.status == "open",
-                    VulnerabilityTracking.target.in_(targets),
+                    VulnerabilityTracking.vuln_key.in_(keys),
                 )
                 .order_by(VulnerabilityTracking.seen_count.desc())
                 .limit(max(1, min(limit, 50)))
@@ -491,9 +510,21 @@ def get_top_issues(limit: int = 10, session_id: str | None = None) -> list[dict[
                 for r in rows
             ]
     except Exception as exc:  # noqa: BLE001
-        logger.warning("get_top_issues_failed: %s", exc)
+        logger.warning("get_top_issues_for_period_failed: %s", exc)
         return []
 
+
+def dashboard_bundle(
+    *, days: int = 30, session_id: str | None = None, history_limit: int = 20, top_limit: int = 10
+) -> dict[str, Any]:
+    """Um payload com metrics + trend + top_issues + history (menos round-trips)."""
+    sid = str(session_id or "").strip()
+    return {
+        "metrics": compute_metrics(days=days, session_id=sid),
+        "trend": vulnerability_trend(days=days, session_id=sid),
+        "top_issues": get_top_issues_for_period(top_limit, days=days, session_id=sid),
+        "history": get_scan_history(days=days, limit=history_limit, session_id=sid),
+    }
 
 def vulnerability_trend(days: int = 30, session_id: str | None = None) -> list[dict[str, Any]]:
     """Série diária a partir de ScanHistory da conversa."""

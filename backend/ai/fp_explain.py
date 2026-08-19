@@ -37,7 +37,7 @@ _PAYLOAD_HINTS = (
     "' or '1'='1",
     '" or "1"="1',
 )
-_WEB_VULN_KINDS = frozenset({"xss", "sqli", "rce", "lfi", "ssti"})
+_WEB_VULN_KINDS = frozenset({"xss", "sqli", "rce", "lfi", "ssti", "idor"})
 _SCAN_TITLE_PREFIXES = (
     "ok —",
     "ok -",
@@ -45,6 +45,47 @@ _SCAN_TITLE_PREFIXES = (
     "falha -",
     "resultado —",
     "resultado -",
+)
+_RECEIPT_SOURCES = frozenset({"execution_log", "client_history"})
+_SERIOUS_SEV = frozenset({"medium", "high", "critical", "medio", "média", "alto"})
+_IDOR_HINTS = (
+    "idor",
+    "bola",
+    "broken access",
+    "broken object",
+    "insecure direct object",
+    "falha de autoriza",
+    "sem valida",
+    "não está validando",
+    "nao esta validando",
+    "dados de outros usu",
+    "outro usuário",
+    "outro usuario",
+    "outros usuários",
+    "outros usuarios",
+    "iterar sobre os id",
+    "iterar sobre id",
+    "horizontal privilege",
+    "escalonamento de privil",
+    "acesso a dados de",
+    "authorization bypass",
+    "access control",
+)
+_VULN_NARRATIVE_HINTS = _IDOR_HINTS + (
+    "xss",
+    "cross-site",
+    "sql injection",
+    "sqli",
+    "remote code",
+    "command injection",
+    "path traversal",
+    "local file inclusion",
+    "ssti",
+    "template inject",
+    "cve-",
+    "vulnerabilidade",
+    "exploit",
+    "payload",
 )
 
 
@@ -395,6 +436,31 @@ _LAY: dict[str, dict[str, Any]] = {
             "Se já estiver atualizado, a ferramenta pode ter lido um arquivo velho (alarme falso).",
         ],
     },
+    "idor": {
+        "plain_title": "Dá para ver dados de outra pessoa só mudando o ID",
+        "what_it_is": (
+            "A API ou a página entrega informação de um usuário quando se troca o número/ID na URL "
+            "ou no pedido, sem checar se quem pediu tem permissão. Isso é IDOR / falha de controle de acesso."
+        ),
+        "everyday": (
+            "É como pedir a chave do armário 12 e o atendente entregar a do armário 13 sem perguntar "
+            "se o armário é seu."
+        ),
+        "why_it_matters": (
+            "Um atacante pode varrer IDs e coletar e-mails, telefones, nomes ou dados internos "
+            "de todos os usuários — base para fraude e engenharia social."
+        ),
+        "could_happen": [
+            "Vazamento em massa de dados pessoais (e-mail, telefone, nome).",
+            "Acesso a contas ou funções de outros perfis.",
+            "Escalonamento se o ID exposto for de admin ou de recurso privilegiado.",
+        ],
+        "how_to_decide": [
+            "Com a mesma sessão, trocar o ID devolveu dados de outro usuário?",
+            "Se sim → vulnerabilidade real. Se a API negou (403/404) → pode ser alarme falso.",
+            "Confirme se o ambiente é o autorizado e se o dado realmente é de outra conta.",
+        ],
+    },
     "scan_summary": {
         "plain_title": "Isto é o resultado de um teste — não é, por si, uma falha",
         "what_it_is": (
@@ -456,12 +522,43 @@ def has_exploit_payload(blob: str) -> bool:
     return any(h in text for h in _PAYLOAD_HINTS)
 
 
+def has_vuln_narrative_signals(blob: str) -> bool:
+    text = (blob or "").lower()
+    return any(h in text for h in _VULN_NARRATIVE_HINTS)
+
+
+def looks_like_idor(blob: str) -> bool:
+    text = (blob or "").lower()
+    return any(h in text for h in _IDOR_HINTS)
+
+
+def is_scan_receipt_title(title: str) -> bool:
+    t = (title or "").strip().lower()
+    return any(t.startswith(p) for p in _SCAN_TITLE_PREFIXES)
+
+
+def is_execution_receipt(finding: dict[str, Any]) -> bool:
+    """Recibo de ferramenta (nmap/httpx/…), não uma falha descrita."""
+    source = str(finding.get("source") or "")
+    if source in _RECEIPT_SOURCES:
+        return True
+    return is_scan_receipt_title(str(finding.get("title") or ""))
+
+
+def is_pure_scan_receipt(finding: dict[str, Any]) -> bool:
+    """Recibo sem narrativa de vulnerabilidade no blob — deve ser descartado, não FP."""
+    if not is_execution_receipt(finding):
+        return False
+    return not has_vuln_narrative_signals(_blob(finding))
+
+
 def apply_fp_hard_rules(
     *,
     kind: str,
     blob: str,
     likely_fp: int,
     verdict: str,
+    severity: str = "",
 ) -> tuple[int, str, bool, str]:
     """Mesma escala: likely_fp = chance de alarme falso (0–100)."""
     likely = max(0, min(100, int(likely_fp)))
@@ -469,8 +566,9 @@ def apply_fp_hard_rules(
     adjusted = False
     reason = ""
     incomplete = is_incomplete_evidence(blob)
+    sev = str(severity or "").lower()
 
-    if kind == "scan_summary":
+    if kind == "scan_summary" and not has_vuln_narrative_signals(blob):
         if v != "false_positive" or likely < 88:
             adjusted = True
             reason = "Isto é log de teste, não uma falha. Ajustado para alarme falso."
@@ -485,33 +583,45 @@ def apply_fp_hard_rules(
             v = "unsure"
         if likely <= 25:
             likely = 40
-    elif kind in _WEB_VULN_KINDS and has_exploit_payload(blob):
+    elif kind in _WEB_VULN_KINDS and (
+        has_exploit_payload(blob) or (kind == "idor" and looks_like_idor(blob))
+    ):
         if v == "false_positive" or likely >= 55:
             adjusted = True
-            reason = "Há payload/evidência clássica; chance de alarme falso reduzida."
+            reason = "Há evidência de falha clássica; chance de alarme falso reduzida."
             if v == "false_positive":
                 v = "unsure"
         likely = min(likely, 22)
         if v != "unsure":
             v = "confirmed"
 
+    # Nunca auto-FP em medium/high/critical
+    if sev in _SERIOUS_SEV and v == "false_positive":
+        adjusted = True
+        reason = "Severidade média/alta: não auto-classificar como alarme falso."
+        v = "unsure"
+        likely = min(likely, 54)
+
     return likely, v, adjusted, reason
 
 
 def _detect_kind(finding: dict[str, Any], blob: str) -> str:
     title = str(finding.get("title") or "").strip().lower()
-    if any(title.startswith(p) for p in _SCAN_TITLE_PREFIXES):
-        return "scan_summary"
+    # IDOR/authz antes de scan_summary — mesmo em títulos "OK — …"
+    if looks_like_idor(blob):
+        return "idor"
     if "xss" in blob or "cross-site" in blob:
         return "xss"
-    if "sql" in blob:
+    if "sql" in blob or "sqli" in blob:
         return "sqli"
     if any(k in blob for k in ("rce", "remote code", "command injection", "os command")):
         return "rce"
-    if any(k in blob for k in ("lfi", "rfi", "path traversal", "local file")):
+    if re.search(r"\b(lfi|rfi)\b", blob) or "path traversal" in blob or "local file" in blob:
         return "lfi"
     if "ssti" in blob or "template inject" in blob:
         return "ssti"
+    if is_scan_receipt_title(title) and not has_vuln_narrative_signals(blob):
+        return "scan_summary"
     if "hsts" in blob or "strict-transport" in blob:
         return "hsts"
     if "x-frame" in blob or "clickjack" in blob:
@@ -530,6 +640,8 @@ def _detect_kind(finding: dict[str, Any], blob: str) -> str:
         return "port"
     if any(k in blob for k in ("admin", "phpinfo", "exposed", "dashboard", "painel")):
         return "exposure"
+    if is_scan_receipt_title(title):
+        return "scan_summary"
     return "generic"
 
 
@@ -605,10 +717,16 @@ def explain_false_positive(
         why_vuln.append(
             "Há um CVE citado: se o software for mesmo essa versão, o risco é concreto."
         )
-    if any(k in blob for k in ("sql", "xss", "rce", "ssti", "lfi", "rfi")):
+    if any(k in blob for k in ("sql", "xss", "rce", "ssti", "lfi", "rfi", "idor", "bola")):
         score -= 12
         why_vuln.append(
             "O nome sugere uma falha clássica de aplicação — se a evidência mostrar payload, trate como vulnerabilidade."
+        )
+
+    if kind == "idor":
+        score -= 18
+        why_vuln.append(
+            "Falha de autorização (IDOR): se trocar o ID devolve dados de outra conta, é vulnerabilidade real."
         )
 
     if any(k in blob for k in ("missing header", "hsts", "x-frame", "csp", "x-content-type")):
@@ -689,14 +807,19 @@ def explain_false_positive(
         )
 
     score = max(0, min(100, score))
-    if score >= 55:
+    fp_threshold = 70 if kind in _WEB_VULN_KINDS else 55
+    if score >= fp_threshold:
         suggestion = "false_positive"
     elif score <= 25:
         suggestion = "confirmed"
     else:
         suggestion = "unsure"
     score, suggestion, _adj, _why = apply_fp_hard_rules(
-        kind=kind, blob=blob, likely_fp=score, verdict=suggestion
+        kind=kind,
+        blob=blob,
+        likely_fp=score,
+        verdict=suggestion,
+        severity=sev,
     )
     if suggestion == "false_positive":
         suggestion_label = "A ferramenta pode ter se enganado"
@@ -769,29 +892,73 @@ def _what_to_check(finding: dict[str, Any], blob: str) -> str:
     )
 
 
-def build_triage_queue(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Pendentes + confirmados suspeitos de FP (score ≥ 55)."""
+def build_triage_buckets(findings: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    """
+    Separa achados em:
+    - queue: só incerteza (suggestion=unsure) — o humano decide no modal
+    - auto_confirmed / auto_false_positive: heurística segura — classificar sem modal
+    - auto_discarded: recibos de ferramenta (não são falhas; fora do PDF de vulns)
+    """
     items = [f for f in findings if isinstance(f, dict)]
     queue: list[dict[str, Any]] = []
+    auto_confirmed: list[dict[str, Any]] = []
+    auto_false_positive: list[dict[str, Any]] = []
+    auto_discarded: list[dict[str, Any]] = []
     seen: set[str] = set()
     for f in items:
         st = str(f.get("status") or "candidate")
-        if st in {"discarded", "false_positive"}:
+        if st in {"discarded"}:
             continue
         fid = str(f.get("id") or "")
         key = fid or f"{f.get('title')}|{f.get('surface_target')}"
         if key in seen:
             continue
         seen.add(key)
+
+        # Recibos puros → discarded (não inflam contagem de FP no PDF)
+        if is_pure_scan_receipt(f) and st in {
+            "candidate",
+            "inconclusive",
+            "",
+            "false_positive",
+            "confirmed",
+        }:
+            expl = explain_false_positive(f, siblings=items)
+            auto_discarded.append({**f, "triage": expl, "second_look": False})
+            continue
+
+        if st in {"false_positive"}:
+            continue
+
         expl = explain_false_positive(f, siblings=items)
+        suggestion = str(expl.get("suggestion") or "unsure")
         likely = int(expl.get("likely_fp") or 0)
         pending = st in {"candidate", "inconclusive", ""}
+        # Confirmado humano mas agora parece FP claro → reabre como incerteza
         second_look = st == "confirmed" and likely >= 55
         if not pending and not second_look:
             continue
-        queue.append({**f, "triage": expl, "second_look": second_look})
+        row = {**f, "triage": expl, "second_look": second_look}
+        if second_look or suggestion == "unsure":
+            queue.append(row)
+        elif suggestion == "confirmed" and pending:
+            auto_confirmed.append(row)
+        elif suggestion == "false_positive" and pending:
+            auto_false_positive.append(row)
+        else:
+            queue.append(row)
     queue.sort(key=lambda x: int((x.get("triage") or {}).get("likely_fp") or 0), reverse=True)
-    return queue
+    return {
+        "queue": queue,
+        "auto_confirmed": auto_confirmed,
+        "auto_false_positive": auto_false_positive,
+        "auto_discarded": auto_discarded,
+    }
+
+
+def build_triage_queue(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Fila do modal: apenas itens duvidosos (compatível com callers antigos)."""
+    return build_triage_buckets(findings)["queue"]
 
 
 def residual_risk_score(findings: list[dict[str, Any]]) -> dict[str, Any]:

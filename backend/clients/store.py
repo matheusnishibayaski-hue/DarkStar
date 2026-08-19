@@ -286,26 +286,42 @@ def list_clients() -> list[dict[str, Any]]:
     from backend.database.models_store import ClientRecord
 
     ensure_default_client()
-    _migrate_all_client_files()
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
 
-    ids: list[str] = []
+    def add_meta(meta: dict[str, Any] | None) -> None:
+        if not meta:
+            return
+        cid = str(meta.get("client_id") or "")
+        if not cid or cid in seen:
+            return
+        seen.add(cid)
+        sdir = client_dir(cid) / "surface"
+        file_n = sum(1 for _ in sdir.glob("*.json")) if sdir.is_dir() else 0
+        allowed_n = len(meta.get("allowed_targets") or [])
+        items.append({**meta, "targets_count": max(file_n, allowed_n), "targets": []})
+
     try:
         ensure_dashboard_db()
         with session_scope() as db:
-            ids = [r.client_id for r in db.query(ClientRecord.client_id).all()]
+            snapshots = [(row.client_id, row.payload_json) for row in db.query(ClientRecord).all()]
+        for cid, payload in snapshots:
+            try:
+                data = json.loads(payload or "{}")
+            except json.JSONDecodeError:
+                data = {}
+            if isinstance(data, dict):
+                add_meta(_with_client_defaults({**data, "client_id": cid}))
     except Exception as exc:  # noqa: BLE001
         logger.warning("client_list_db_failed: %s", exc)
 
-    if not ids and CLIENTS_DIR.is_dir():
-        ids = [p.name for p in CLIENTS_DIR.iterdir() if p.is_dir()]
+    if CLIENTS_DIR.is_dir():
+        for path in CLIENTS_DIR.iterdir():
+            if not _is_client_workspace_dir(path) or path.name in seen:
+                continue
+            add_meta(get_client(path.name))
 
-    items: list[dict[str, Any]] = []
-    for cid in sorted(set(ids)):
-        meta = get_client(cid)
-        if not meta:
-            continue
-        targets = list_client_targets(meta["client_id"])
-        items.append({**meta, "targets_count": len(targets), "targets": targets})
+    items.sort(key=lambda x: str(x.get("client_id") or ""))
     return items
 
 

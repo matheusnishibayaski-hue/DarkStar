@@ -36,6 +36,7 @@ def api_autonomous_stream(req: AutonomousRequest):
                 chat_session_id=req.chat_session_id or None,
                 scan_profile=req.scan_profile or None,
                 custom_tools=req.custom_tools or None,
+                attachments=[a.model_dump() for a in (req.attachments or [])] or None,
             )
         except Exception as e:
             yield format_sse("error", {"detail": str(e)})
@@ -65,6 +66,7 @@ def api_autonomous(req: AutonomousRequest):
             chat_session_id=req.chat_session_id or None,
             scan_profile=req.scan_profile or None,
             custom_tools=req.custom_tools or None,
+            attachments=[a.model_dump() for a in (req.attachments or [])] or None,
         )
         return AutonomousResponseModel(
             message=result.message,

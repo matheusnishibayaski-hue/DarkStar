@@ -414,6 +414,139 @@ def ingest_extracted_findings(
     return added
 
 
+_ASSISTANT_FINDING_RULES: list[tuple[str, str, str, tuple[str, ...]]] = [
+    (
+        "idor",
+        "IDOR / falha de autorização (acesso a dados de outros usuários)",
+        "high",
+        (
+            "idor",
+            "bola",
+            "broken access",
+            "broken object",
+            "insecure direct object",
+            "dados de outros usu",
+            "outro usuário",
+            "outro usuario",
+            "outros usuários",
+            "outros usuarios",
+            "iterar sobre os id",
+            "iterar sobre id",
+            "não está validando corretamente a autoriza",
+            "nao esta validando corretamente a autoriza",
+            "falha de autoriza",
+            "authorization bypass",
+            "sem checar se quem pediu",
+            "escalonamento de privil",
+        ),
+    ),
+    (
+        "xss",
+        "XSS (script refletido ou armazenado)",
+        "high",
+        ("reflected xss", "stored xss", "cross-site scripting", "<script>alert"),
+    ),
+    (
+        "sqli",
+        "SQL Injection",
+        "high",
+        ("sql injection", "injeção de sql", "injecao de sql", "union select"),
+    ),
+]
+
+
+def _excerpt_around(text: str, needle: str, *, radius: int = 450) -> str:
+    low = text.lower()
+    idx = low.find(needle.lower())
+    if idx < 0:
+        return text[:2000]
+    start = max(0, idx - radius // 3)
+    end = min(len(text), idx + len(needle) + radius)
+    chunk = text[start:end].strip()
+    if start > 0:
+        chunk = "…" + chunk
+    if end < len(text):
+        chunk = chunk + "…"
+    return chunk[:2000]
+
+
+def ingest_assistant_findings(session_id: str) -> int:
+    """Cria candidatos a partir da narrativa do assistente (IDOR, XSS, SQLi, …) sem LLM."""
+    import hashlib
+
+    try:
+        from backend.database.chat_store import get_chat_session
+    except Exception:  # noqa: BLE001
+        return 0
+
+    chat = get_chat_session(session_id) or {}
+    messages = chat.get("messages") or []
+    if not messages:
+        return 0
+
+    data = load_session(session_id) or {
+        "session_id": session_id,
+        "label": "",
+        "targets": [],
+        "session_findings": [],
+        "created_at": _now(),
+    }
+    session_findings: list[dict[str, Any]] = list(data.get("session_findings") or [])
+    by_id = {str(f.get("id")): f for f in session_findings if f.get("id")}
+    added = 0
+
+    for mi, msg in enumerate(messages):
+        if not isinstance(msg, dict) or msg.get("role") != "assistant":
+            continue
+        content = str(msg.get("content") or "").strip()
+        if len(content) < 40:
+            continue
+        low = content.lower()
+        for kind, title, sev, needles in _ASSISTANT_FINDING_RULES:
+            hit = next((n for n in needles if n in low), None)
+            if not hit:
+                continue
+            digest = hashlib.sha256(
+                f"{session_id}:{kind}:{hit}:{mi}".encode(), usedforsecurity=False
+            ).hexdigest()[:12]
+            fid = f"narr-{kind}-{digest}"
+            if fid in by_id:
+                break
+            # Evita duplicar título parecido já presente
+            title_key = title.lower()[:60]
+            if any(
+                title_key in str(f.get("title") or "").lower()
+                and str(f.get("source") or "") == "assistant_narrative"
+                for f in session_findings
+            ):
+                break
+            evidence = _excerpt_around(content, hit)
+            row = {
+                "id": fid,
+                "title": title,
+                "severity": sev,
+                "status": "candidate",
+                "evidence": evidence,
+                "tool": "assistant",
+                "command": "",
+                "host": "",
+                "surface_target": "_session",
+                "chat_session_id": session_id,
+                "source": "assistant_narrative",
+                "kind": kind,
+            }
+            session_findings.append(row)
+            by_id[fid] = row
+            added += 1
+            break  # um achado por mensagem (o primeiro tipo que casar)
+
+    if not added:
+        return 0
+    data["session_findings"] = session_findings[-200:]
+    save_session(session_id, data)
+    return added
+
+
 def session_summary(session_id: str) -> dict[str, Any]:
     meta = load_session(session_id)
     findings = aggregate_session_findings(session_id)
@@ -461,6 +594,7 @@ def patch_session_finding(
     status: str,
     *,
     evidence: str = "",
+    preserve_evidence: bool = False,
 ) -> dict[str, Any] | None:
     data = load_session(session_id) or {}
     updated: dict[str, Any] | None = None
@@ -468,8 +602,9 @@ def patch_session_finding(
         if str(f.get("id")) != finding_id:
             continue
         f["status"] = status
-        if evidence:
+        if evidence and not preserve_evidence:
             f["evidence"] = evidence[:2000]
+        _apply_normalized_severity(f)
         updated = dict(f)
         break
     if updated:
@@ -486,9 +621,15 @@ def patch_session_finding(
             "surface_target": updated.get("surface_target") or surface_target or "_session",
         }
 
-    finding = mark_finding_status(surface_target, finding_id, status, evidence=evidence)
+    finding = mark_finding_status(
+        surface_target,
+        finding_id,
+        status,
+        evidence="" if preserve_evidence else evidence,
+    )
     if not finding:
         return None
+    _apply_normalized_severity(finding)
     if status == "false_positive":
         try:
             from backend.ai.fp_learn import remember_false_positive
@@ -498,6 +639,84 @@ def patch_session_finding(
             pass
     touch_session(session_id, surface_target)
     return {**finding, "surface_target": surface_target}
+
+
+def patch_session_findings_batch(
+    session_id: str,
+    rows: list[dict[str, Any]],
+    *,
+    preserve_evidence: bool = True,
+) -> int:
+    """Aplica vários status numa só gravação (triagem automática)."""
+    if not rows:
+        return 0
+    data = load_session(session_id) or {}
+    findings = list(data.get("session_findings") or [])
+    by_id = {str(f.get("id")): f for f in findings if f.get("id")}
+    applied = 0
+    surface_patches: list[tuple[str, str, str]] = []
+
+    for row in rows:
+        fid = str(row.get("id") or "")
+        status = str(row.get("status") or "")
+        if not fid or not status:
+            continue
+        target = str(row.get("surface_target") or row.get("host") or "_session")
+        f = by_id.get(fid)
+        if f is not None:
+            f["status"] = status
+            if not preserve_evidence:
+                ev = str(row.get("evidence") or "")
+                if ev:
+                    f["evidence"] = ev[:2000]
+            _apply_normalized_severity(f)
+            applied += 1
+            if status == "false_positive":
+                try:
+                    from backend.ai.fp_learn import remember_false_positive
+
+                    remember_false_positive(f, target=target)
+                except Exception:  # noqa: BLE001
+                    pass
+        else:
+            surface_patches.append((target, fid, status))
+
+    if applied:
+        data["session_findings"] = findings
+        save_session(session_id, data)
+
+    for target, fid, status in surface_patches:
+        try:
+            finding = mark_finding_status(target, fid, status, evidence="")
+            if finding:
+                _apply_normalized_severity(finding)
+                applied += 1
+                touch_session(session_id, target)
+        except Exception:  # noqa: BLE001
+            pass
+    return applied
+
+
+def _apply_normalized_severity(finding: dict[str, Any]) -> None:
+    """Garante gravidade coerente com tipo/título (ex.: [high] XSS não fica como info)."""
+    try:
+        from backend.ai.report_model import enrich_finding
+
+        enriched = enrich_finding(finding)
+        for key in (
+            "severity",
+            "severity_label",
+            "kind",
+            "kind_label",
+            "plain_title",
+            "cwe",
+            "owasp",
+        ):
+            if enriched.get(key) not in (None, ""):
+                finding[key] = enriched[key]
+    except Exception:  # noqa: BLE001
+        pass
+
 
 
 def merge_session_finding_fields(

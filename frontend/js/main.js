@@ -10,6 +10,8 @@ import {
   ensureSession,
   renderSessions,
   updateSessionTitle,
+  getActiveSession,
+  hookSessionUnloadFlush,
 } from "./sessions.js";
 import { bootSessionsFromDb } from "./sessions-boot.js";
 import {
@@ -25,7 +27,6 @@ import {
   initUi,
   toast,
   toggleSidebar,
-  openSidebar,
   closeSidebar,
   dismissSidebarDrawer,
   initSidebarState,
@@ -34,7 +35,6 @@ import {
   closeAllOverlays as closeAllUiOverlays,
   refreshHealth,
   updateStatusBar,
-  getLoading,
 } from "./ui.js";
 import {
   initChatView,
@@ -47,18 +47,20 @@ import { initSessionLogsModal } from "./session-logs-modal.js";
 import { initSessionReportModal } from "./session-report-modal.js";
 import { initTriageGate } from "./triage-gate.js";
 import { initAutopilot, onPilotOffensiveModeChanged } from "./autopilot.js";
-import { initOffensiveMode, onOffensiveModeChange } from "./offensive-mode.js";
+import { initOffensiveMode, onOffensiveModeChange, setOffensiveMode } from "./offensive-mode.js";
 import { initOfflineMode, onOfflineModeChange } from "./offline-mode.js";
-import { initMissionControl, cancelActiveMission } from "./mission.js";
+import { initModeSwitcher, refreshModeSwitcher } from "./mode-switcher.js";
+import { initMissionControl, cancelActiveMission, syncMissionButton } from "./mission.js";
+import { setRunsOnChange, isSessionBusy } from "./session-runs.js";
+import { initComposerExtras, restoreAttachmentsFromSession, persistPendingAttachments } from "./composer-extras.js";
 import { initShortcuts, handleGlobalKeydown } from "./shortcuts.js";
 import { initFilesPanel } from "./files.js";
-import { initThreatIntel } from "./threatmap.js";
 import { initAudio, bindSoundButton } from "./audio.js";
 import { initOnboarding, maybeShowOnboarding } from "./onboarding.js";
 import { initGuidedTour, startGuidedTour, stopGuidedTour, isGuidedTourActive } from "./guided-tour.js";
 import { deleteSessionLogs, deleteIntelSession } from "./data-admin.js";
 import { initMasterKey, isElevated } from "./master-key.js";
-import { initClientWorkspace } from "./client-workspace.js";
+import { initClientWorkspace, readyClientWorkspace } from "./client-workspace.js";
 import { initPortfolio } from "./portfolio.js";
 import { initDashboard } from "./dashboard.js";
 import { initRemediationWizard } from "./remediation-wizard.js";
@@ -66,6 +68,7 @@ import {
   initWorkspace,
   openWorkspace,
   closeWorkspace,
+  isWorkspaceOpen,
   refreshWorkspaceIfOpen,
 } from "./workspace.js";
 import { purgeDashboardSession } from "./api/routes.js";
@@ -103,7 +106,7 @@ void btnToolbarMore; // stub legado (tour / HTML)
 const inputHistory = { list: [], idx: -1 };
 
 function refreshStatusBar() {
-  updateStatusBar({ loading: getLoading() });
+  updateStatusBar({ loading: isSessionBusy(getActiveSession()?.id) });
 }
 
 function closeAllOverlays() {
@@ -111,7 +114,9 @@ function closeAllOverlays() {
 }
 
 function newChat() {
+  persistPendingAttachments();
   createSession();
+  restoreAttachmentsFromSession();
   syncToolFromSession();
   renderSessions();
   renderChat();
@@ -154,10 +159,13 @@ initShortcuts({
     closeWorkspace();
     dismissSidebarDrawer();
   },
-  openTools: () => openWorkspace("tools"),
+  openTools: () => {
+    if (isWorkspaceOpen()) closeWorkspace();
+    else openWorkspace("tools");
+  },
   openPilot: () => openOverlay(overlayAutopilot),
   openHelp: () => startGuidedTour(),
-  openThreats: () => openWorkspace("mapa"),
+  openThreats: () => openWorkspace("dashboard"),
   openFiles: () => openWorkspace("report"),
   downloadReport: () => openWorkspace("report"),
   openSessionLogs: () => openWorkspace("logs"),
@@ -221,12 +229,14 @@ initAutopilot({
   updateStatusBar: refreshStatusBar,
 });
 
-initOffensiveMode(document.getElementById("offensive-mode-toggle"));
+initOffensiveMode();
 onOffensiveModeChange(() => {
   void onPilotOffensiveModeChanged();
+  refreshModeSwitcher();
 });
 
-initOfflineMode(document.getElementById("offline-mode-toggle"));
+initOfflineMode();
+initModeSwitcher();
 initClientWorkspace();
 initPortfolio();
 initDashboard();
@@ -234,15 +244,23 @@ initRemediationWizard();
 initWorkspace();
 onOfflineModeChange(() => {
   refreshStatusBar();
+  refreshModeSwitcher();
 });
 
 initMasterKey({
   onChange: () => {
+    if (!isElevated()) setOffensiveMode(false, { silent: true });
+    refreshModeSwitcher();
     refreshStatusBar();
   },
 });
 
 initMissionControl(btnCancelMission);
+setRunsOnChange(() => {
+  renderSessions();
+  syncMissionButton();
+});
+initComposerExtras();
 
 initFilesPanel({
   filesListEl: document.getElementById("files-list"),
@@ -252,19 +270,24 @@ initFilesPanel({
   toast,
 });
 
-initThreatIntel({});
-
 initSessions({
   sessionsEl,
   sessionTitleEl,
+  beforeSwitchSession: () => {
+    persistPendingAttachments();
+  },
   afterSwitchSession: () => {
+    restoreAttachmentsFromSession();
     renderChat();
     syncToolFromSession();
     refreshWorkspaceIfOpen();
     dismissSidebarDrawer();
+    syncMissionButton();
+    if (input) input.disabled = isSessionBusy(getActiveSession()?.id);
     input?.focus();
   },
   afterDeleteSession: () => {
+    restoreAttachmentsFromSession();
     renderChat();
     syncToolFromSession();
     refreshWorkspaceIfOpen();
@@ -312,7 +335,7 @@ try {
     input,
     openToolsPanel: () => openWorkspace("tools"),
     openFilesPanel: () => openWorkspace("report"),
-    openThreatsPanel: () => openWorkspace("mapa"),
+    openThreatsPanel: () => openWorkspace("dashboard"),
     closeAllOverlays,
   });
 } catch (err) {
@@ -349,7 +372,7 @@ document.addEventListener("click", (e) => {
 btnAutopilot?.addEventListener("click", () => openOverlay(overlayAutopilot));
 btnCancelMission?.addEventListener("click", () => cancelActiveMission(toast));
 btnHelp?.addEventListener("click", () => startGuidedTour());
-btnScrollBottom?.addEventListener("click", () => scrollChatToBottom());
+btnScrollBottom?.addEventListener("click", () => scrollChatToBottom(true, true));
 
 toolSearch?.addEventListener("input", () => renderToolList(toolSearch.value));
 input?.addEventListener("keydown", handleInputKeydown);
@@ -364,6 +387,8 @@ document.querySelectorAll(".panel-close").forEach((btn) => {
 for (const [overlay, id] of [
   [overlayAutopilot, "overlay-autopilot"],
   [overlayHelp, "overlay-help"],
+  [document.getElementById("overlay-report-preview"), "overlay-report-preview"],
+  [document.getElementById("overlay-github-tree"), "overlay-github-tree"],
 ]) {
   overlay?.addEventListener("click", (e) => {
     if (e.target === overlay) closeOverlay(document.getElementById(id));
@@ -401,10 +426,14 @@ input?.addEventListener("focus", () => document.getElementById("cmd-cursor")?.cl
 input?.addEventListener("blur", () => document.getElementById("cmd-cursor")?.classList.remove("hidden"));
 
 initSidebarState();
+hookSessionUnloadFlush();
 
-bootSessionsFromDb()
+readyClientWorkspace()
+  .catch((err) => console.warn("client_workspace_boot_failed", err))
+  .then(() => bootSessionsFromDb())
   .then(() => {
     ensureSession();
+    restoreAttachmentsFromSession();
     renderSessions();
     renderChat();
     updateSessionTitle();
@@ -417,6 +446,7 @@ bootSessionsFromDb()
   .catch((err) => {
     console.error("boot_sessions_failed", err);
     ensureSession();
+    restoreAttachmentsFromSession();
     renderSessions();
     renderChat();
     updateSessionTitle();

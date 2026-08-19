@@ -23,6 +23,7 @@ _KIND_SEV = {
     "rce": "critical",
     "lfi": "high",
     "ssti": "high",
+    "idor": "high",
     "cve": "high",
     "ssl": "medium",
     "hsts": "medium",
@@ -85,6 +86,7 @@ _KIND_REFS = {
     "rce": ("CWE-94", "A03:2021 Injection"),
     "lfi": ("CWE-22", "A01:2021 Broken Access Control"),
     "ssti": ("CWE-1336", "A03:2021 Injection"),
+    "idor": ("CWE-639", "A01:2021 Broken Access Control"),
     "cve": ("CWE-1395", "A06:2021 Vulnerable Components"),
     "hsts": ("CWE-319", "A02:2021 Cryptographic Failures"),
     "clickjack": ("CWE-1021", "A05:2021 Security Misconfiguration"),
@@ -104,6 +106,7 @@ _KIND_LABEL = {
     "rce": "Execução remota",
     "lfi": "Leitura de arquivo",
     "ssti": "Injeção em template",
+    "idor": "IDOR / controle de acesso",
     "cve": "Falha conhecida (CVE)",
     "hsts": "HSTS / HTTPS",
     "clickjack": "Clickjacking",
@@ -261,7 +264,11 @@ def assemble_session_report(
         target = (url.group(1) if url else host.group(1) if host else "").lower()
 
     confirmed = [f for f in findings if f.get("status") == "confirmed"]
-    fps = [f for f in findings if f.get("status") == "false_positive"]
+    fps = [
+        f
+        for f in findings
+        if f.get("status") == "false_positive" and f.get("kind") not in {"scan_summary"}
+    ]
     pending = [
         f
         for f in findings

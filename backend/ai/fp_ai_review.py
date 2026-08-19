@@ -116,7 +116,11 @@ def calibrate_review(finding: dict[str, Any], review: dict[str, Any]) -> dict[st
     except (TypeError, ValueError):
         likely = 50
     likely, verdict, adjusted, reason = apply_fp_hard_rules(
-        kind=kind, blob=blob, likely_fp=likely, verdict=verdict
+        kind=kind,
+        blob=blob,
+        likely_fp=likely,
+        verdict=verdict,
+        severity=str(finding.get("severity") or ""),
     )
     out["verdict"] = verdict
     out["likely_fp"] = likely
