@@ -305,7 +305,7 @@ class TestAutopilotGaps(unittest.TestCase):
                 LLMCompletion(message=LLMMessage(content="waiting")),
             ],
         ):
-            out, finished, met, model = ap._run_autonomous_cycle(
+            out, finished, met, model, _ = ap._run_autonomous_cycle(
                 MagicMock(), [{"role": "system", "content": "s"}], [], "m1", "m2", 3
             )
         self.assertEqual(out, "waiting")
@@ -318,7 +318,7 @@ class TestAutopilotGaps(unittest.TestCase):
         mid = "apcancel1"
         get_mission_registry().register(mid)
         get_mission_registry().cancel(mid)
-        text, finished, met, _ = ap._run_autonomous_cycle(
+        text, finished, met, _, _ = ap._run_autonomous_cycle(
             MagicMock(), [], [], "m1", "m2", 2, mission_id=mid
         )
         self.assertTrue(finished)
@@ -343,7 +343,7 @@ class TestAutopilotGaps(unittest.TestCase):
                 return_value=(None, "args inválidos"),
             ),
         ):
-            text, finished, met, model = ap._run_autonomous_cycle(
+            text, finished, met, model, _ = ap._run_autonomous_cycle(
                 provider, [{"role": "system", "content": "s"}], [], "m1", "m2", 2
             )
         self.assertTrue(finished)
@@ -370,7 +370,7 @@ class TestAutopilotGaps(unittest.TestCase):
             patch("backend.ai.autopilot.should_attempt_healing", return_value=True),
             patch("backend.ai.autopilot.healing_prompt", return_value="heal"),
         ):
-            text, finished, met, _ = ap._run_autonomous_cycle(
+            text, finished, met, _, _ = ap._run_autonomous_cycle(
                 MagicMock(), [{"role": "system", "content": "s"}], [], "m1", "m2", 1
             )
         self.assertFalse(finished)
@@ -393,7 +393,7 @@ class TestAutopilotGaps(unittest.TestCase):
             patch("backend.ai.autopilot.MAX_AUTONOMOUS_ROUNDS", 2),
             patch(
                 "backend.ai.autopilot._run_autonomous_cycle",
-                return_value=("done", True, True, "m1"),
+                return_value=("done", True, True, "m1", False),
             ),
             patch("backend.ai.autopilot.generate_report", return_value="# r"),
         ):
@@ -713,7 +713,7 @@ class TestFinalCoveragePush(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 ap._run_autonomous_cycle(provider, [], [], "m1", "m1", 2)
 
-        text, finished, met, _ = ap._run_autonomous_cycle(provider, [], [], "m1", "m2", 0)
+        text, finished, met, _, _ = ap._run_autonomous_cycle(provider, [], [], "m1", "m2", 0)
         self.assertEqual(text, "")
         self.assertFalse(finished)
 
@@ -736,8 +736,8 @@ class TestFinalCoveragePush(unittest.TestCase):
                         success=True,
                     )
                 )
-                return "", False, False, "m1"
-            return "early", True, False, "m1"
+                return "", False, False, "m1", False
+            return "early", True, False, "m1", False
 
         events = []
         with (
@@ -771,7 +771,7 @@ class TestFinalCoveragePush(unittest.TestCase):
                     success=True,
                 )
             )
-            return "partial text", False, False, "m1"
+            return "partial text", False, False, "m1", False
 
         with (
             patch(
@@ -793,7 +793,7 @@ class TestFinalCoveragePush(unittest.TestCase):
 
         def cycle3(*_a, **_k):
             get_mission_registry().cancel(mid)
-            return "bye", True, True, "m1"
+            return "bye", True, True, "m1", False
 
         with (
             patch(
@@ -820,7 +820,7 @@ class TestFinalCoveragePush(unittest.TestCase):
                     success=True,
                 )
             )
-            return "", False, False, "m1"
+            return "", False, False, "m1", False
 
         with (
             patch(

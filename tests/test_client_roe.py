@@ -406,8 +406,8 @@ class TestFindingRefsAndPdf(_DbCase):
                 }
             ]
         )
-        self.assertIn("CWE-79", html)
-        self.assertIn("A03:2021 Injection", html)
+        self.assertIn("Script na página", html)
+        self.assertIn("Impacto", html)
 
     def test_commercial_pdf_has_roe(self):
         from backend.ai import pdf_report as pdf

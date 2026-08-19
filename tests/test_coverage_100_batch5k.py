@@ -335,8 +335,8 @@ class TestAutopilotAgentCov(unittest.TestCase):
                         tool="",
                     )
                 )
-                return "", False, False, "m"
-            return "done", True, True, "m"
+                return "", False, False, "m", False
+            return "done", True, True, "m", False
 
         with (
             patch("backend.ai.autopilot.get_llm_provider", return_value=provider),

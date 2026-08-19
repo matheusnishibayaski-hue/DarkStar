@@ -315,5 +315,32 @@ class TestPilotModesIntegration(unittest.TestCase):
         self.assertEqual(res.stopped_reason, "error")
 
 
+class TestAutonomousCycleContract(unittest.TestCase):
+    def test_cycle_returns_five_values(self):
+        from backend.ai import autopilot as ap
+
+        mid = "cycle-contract-cancel"
+        from backend.security.missions import get_mission_registry
+
+        get_mission_registry().register(mid)
+        get_mission_registry().cancel(mid)
+        result = ap._run_autonomous_cycle(
+            MagicMock(),
+            [{"role": "system", "content": "s"}],
+            [],
+            "m1",
+            "m2",
+            1,
+            mission_id=mid,
+        )
+        self.assertEqual(len(result), 5)
+        text, finished, met, model, waived = result
+        self.assertTrue(finished)
+        self.assertFalse(met)
+        self.assertFalse(waived)
+        self.assertEqual(model, "m1")
+        self.assertIn("cancel", text.lower())
+
+
 if __name__ == "__main__":
     unittest.main()

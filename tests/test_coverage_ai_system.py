@@ -216,7 +216,7 @@ class TestAutopilotStream(unittest.TestCase):
                 ],
             ),
         ):
-            text, finished, met, model = ap._run_autonomous_cycle(
+            text, finished, met, model, _ = ap._run_autonomous_cycle(
                 MagicMock(),
                 [{"role": "system", "content": "s"}],
                 executions,

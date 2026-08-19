@@ -692,7 +692,7 @@ class TestAutopilotRemaining(unittest.TestCase):
         provider = _provider()
         provider.complete.return_value = MagicMock(message=inner)
         with patch.object(ap, "resolve_tool_arguments", return_value=(None, "heal-fail")):
-            text, finished, met, _ = ap._run_autonomous_cycle(
+            text, finished, met, _, _ = ap._run_autonomous_cycle(
                 provider,
                 [{"role": "system", "content": "s"}],
                 [],
@@ -714,7 +714,7 @@ class TestAutopilotRemaining(unittest.TestCase):
         inner2.tool_calls = [tc_nmap]
         provider2 = _provider()
         provider2.complete.return_value = MagicMock(message=inner2)
-        text, finished, met, _ = ap._run_autonomous_cycle(
+        text, finished, met, _, _ = ap._run_autonomous_cycle(
             provider2,
             [{"role": "system", "content": "s"}],
             [],
@@ -734,7 +734,7 @@ class TestAutopilotRemaining(unittest.TestCase):
             decision = PhaseDecision("enumerate", True, "ok", False)
 
             def _cycle(*_a, **_k):
-                return "done-early", True, False, "m1"
+                return "done-early", True, False, "m1", False
 
             with (
                 patch.object(sm, "SURFACE_DIR", surf),
@@ -761,7 +761,11 @@ class TestAutopilotRemaining(unittest.TestCase):
                         "candidates": [],
                     },
                 ),
-                patch("backend.ai.autopilot.advance_surface_phase", return_value=({}, decision)),
+                patch(
+                    "backend.ai.autopilot.advance_surface_phase",
+                    return_value=(sm.empty_surface("auto5g.test"), decision),
+                ),
+                patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
                 patch(
                     "backend.database.db.record_scan_from_target", side_effect=RuntimeError("db")
                 ),
@@ -780,10 +784,11 @@ class TestAutopilotRemaining(unittest.TestCase):
                 patch("backend.ai.autopilot.get_llm_provider", return_value=fake_p),
                 patch(
                     "backend.ai.autopilot._run_autonomous_cycle",
-                    return_value=("x", True, True, "m"),
+                    return_value=("x", True, True, "m", False),
                 ),
                 patch("backend.ai.autopilot.generate_report", return_value="# r"),
                 patch("backend.ai.autopilot.run_verification_pipeline", return_value=None),
+                patch("backend.ai.pilot_helpers.preflight_commands", return_value=[]),
                 patch(
                     "backend.ai.autopilot.findings_for_report",
                     return_value={
@@ -979,6 +984,7 @@ class TestReportModelRemaining(unittest.TestCase):
             n_confirmed=1,
             n_fp=0,
             n_pending=0,
+            n_discarded=0,
             risk={"score": 80, "label": "Alto"},
             top_fixes=["HSTS"],
             sev_conf={"critical": 1, "high": 1},
