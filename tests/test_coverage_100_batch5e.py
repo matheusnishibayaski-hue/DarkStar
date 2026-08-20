@@ -856,6 +856,9 @@ class TestRouteCoverage5e(_DbCase):
             self.assertEqual(port._host("_session"), "")
             self.assertTrue(port._host("shop.test"))
             self.assertEqual(port._host("env.production"), "")
+            self.assertEqual(port._host("error.lab.test"), "")
+            with patch.object(port, "is_recon_target", return_value=True):
+                self.assertEqual(port._host("unknown"), "")
             counts = port._status_counts(
                 [
                     {"status": "confirmed"},

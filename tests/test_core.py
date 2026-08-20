@@ -82,6 +82,9 @@ class TestReconDb(unittest.TestCase):
         self.assertTrue(is_recon_target("scanme.nmap.org"))
         self.assertFalse(is_recon_target("example.com"))
         self.assertFalse(is_recon_target("localhost"))
+        # Prefix runtime (parts[0]), not only junk TLD like *.production / *.cwd
+        self.assertFalse(is_recon_target("error.lab.test"))
+        self.assertFalse(is_recon_target("promise.shop.test"))
 
 
 class TestHealing(unittest.TestCase):
