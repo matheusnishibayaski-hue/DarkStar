@@ -854,7 +854,8 @@ class TestRouteCoverage5e(_DbCase):
 
             self.assertEqual(port._host(""), "")
             self.assertEqual(port._host("_session"), "")
-            self.assertTrue(port._host("a.test"))
+            self.assertTrue(port._host("shop.test"))
+            self.assertEqual(port._host("env.production"), "")
             counts = port._status_counts(
                 [
                     {"status": "confirmed"},
@@ -865,14 +866,17 @@ class TestRouteCoverage5e(_DbCase):
             )
             self.assertEqual(counts["pending"], 1)
             hosts = port._collect_hosts(
-                {"targets": ["a.test"]},
-                [{"surface_target": "b.test"}, {"host": "c.test"}],
+                {"targets": ["shop.test", "env.production"]},
+                [{"surface_target": "lab.test"}, {"host": "process.cwd"}],
             )
-            self.assertIn("a.test", hosts)
+            self.assertIn("shop.test", hosts)
+            self.assertIn("lab.test", hosts)
+            self.assertNotIn("env.production", hosts)
+            self.assertNotIn("process.cwd", hosts)
             with patch.object(port, "compute_delta", side_effect=RuntimeError("d")):
-                self.assertFalse(port._delta_payload("a.test")["has_baseline"])
+                self.assertFalse(port._delta_payload("shop.test")["has_baseline"])
             with patch.object(port, "risk_score_for_target", side_effect=RuntimeError("r")):
-                risk = port._risk_payload("a.test", [{"status": "confirmed", "severity": "high"}])
+                risk = port._risk_payload("shop.test", [{"status": "confirmed", "severity": "high"}])
                 self.assertIn("score", risk)
             port_sid = "p5e" + uuid.uuid4().hex[:10]
             with (
